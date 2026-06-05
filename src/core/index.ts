@@ -1,6 +1,7 @@
 export * from './types';
 export * from './factory';
 export * from './lifecycle';
+export * from './commands/registry';
 export * from './managers/mdocs';
 export * from './managers/initiative';
 export * from './managers/wiki';

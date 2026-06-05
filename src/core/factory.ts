@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { AuditLog } from './audit';
+import { MdocsCommandRegistry } from './commands/registry';
 import { MdocsLifecycleOptions, MdocsLifecycleService } from './lifecycle';
 import { InitiativeManager } from './managers/initiative';
 import { MdocsManager } from './managers/mdocs';
@@ -30,6 +31,7 @@ export interface MdocsCore {
     dispatch: SubagentAssembler;
   };
   lifecycle: MdocsLifecycleService;
+  commands: MdocsCommandRegistry;
 }
 
 export function createMdocsCore(projectDir: string, options: MdocsCoreOptions = {}): MdocsCore {
@@ -45,11 +47,23 @@ export function createMdocsCore(projectDir: string, options: MdocsCoreOptions = 
   const linter = new MdocsLinter(mdocsRoot);
   const dispatch = new SubagentAssembler();
   const lifecycle = new MdocsLifecycleService(mdocs, initiatives, options.bootstrap);
+  const commands = new MdocsCommandRegistry({
+    mdocsRoot,
+    mdocs,
+    initiatives,
+    wiki,
+    workflow,
+    search,
+    audit,
+    linter,
+    dispatch
+  });
 
   return {
     projectDir,
     mdocsRoot,
     managers: { mdocs, initiatives, wiki, workflow, search, audit, linter, dispatch },
-    lifecycle
+    lifecycle,
+    commands
   };
 }
