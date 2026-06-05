@@ -1,0 +1,20 @@
+{
+  "name": "harness-mdocs-local",
+  "plugins": [
+    {
+      "name": "mdocs",
+      "source": {
+        "source": "local",
+        "path": "./src/surfaces/codex/plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "interface": {
+        "displayName": "Mdocs"
+      }
+    }
+  ]
+}
