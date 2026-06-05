@@ -1,0 +1,25 @@
+{
+  "name": "mdocs",
+  "version": "0.1.0",
+  "description": "Durable initiative and wiki memory for AI-assisted development.",
+  "author": {
+    "name": "bbaaxx"
+  },
+  "license": "MIT",
+  "keywords": ["codex", "mdocs", "memory", "workflow", "wiki", "initiatives"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Mdocs",
+    "shortDescription": "Shared initiative and wiki memory for coding agents.",
+    "longDescription": "Mdocs gives Codex a durable project memory system built from initiatives, wiki entries, workflow state, search, validation, and dispatch context.",
+    "developerName": "bbaaxx",
+    "category": "Productivity",
+    "capabilities": ["Write", "Interactive"],
+    "defaultPrompt": [
+      "Resume mdocs work",
+      "Create an mdocs initiative",
+      "Search project memory"
+    ],
+    "brandColor": "#2563EB"
+  }
+}
