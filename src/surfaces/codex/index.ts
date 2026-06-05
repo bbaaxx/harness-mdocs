@@ -1,8 +1,8 @@
 export const codexSurface = {
   surface: 'codex',
   capabilities: {
-    commandTools: false,
-    aggregateCommandTool: false,
+    commandTools: true,
+    aggregateCommandTool: true,
     skillPackaging: true,
     agentPackaging: false,
     configMutation: false,

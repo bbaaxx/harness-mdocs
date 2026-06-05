@@ -13,7 +13,7 @@ Workflow steps:
 
 1. `UNDERSTAND`: Clarify the request.
 2. `DISCOVER`: Check `./mdocs/initiatives/INDEX.md` or run `mdocs status`.
-3. `CONTEXT`: Read the initiative and related wiki entries, or run `mdocs command dispatch --json '{"initiativeId":"..."}'` when dispatch is available.
+3. `CONTEXT`: Read the initiative and related wiki entries, or run `mdocs dispatch <initiative-id>` when dispatch is available.
 4. `PLAN`: Write or update the initiative plan.
 5. `EXECUTE`: Do the implementation work.
 6. `VERIFY`: Run project checks and `mdocs validate`.

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { codexSurface } from '../../../src/surfaces/codex';
 
 const pluginRoot = path.resolve(__dirname, '../../../src/surfaces/codex/plugin');
 
@@ -32,5 +33,17 @@ describe('Codex plugin packaging', () => {
       expect(content).not.toContain('automatically audited');
       expect(content).not.toMatch(/\{\s*[A-Za-z0-9_]+\s*\}/);
     }
+  });
+
+  test('Codex v1 capabilities declare CLI command access and advisory hooks', () => {
+    expect(codexSurface.capabilities).toMatchObject({
+      commandTools: true,
+      aggregateCommandTool: true,
+      skillPackaging: true,
+      permissionHooks: false,
+      toolExecutionHooks: false,
+      eventHooks: false,
+      subagentDispatch: 'prompted'
+    });
   });
 });
