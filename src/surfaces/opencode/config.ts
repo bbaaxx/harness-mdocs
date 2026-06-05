@@ -33,7 +33,14 @@ export function applyOpencodeConfig(core: MdocsCore, cfg: any) {
       if (!cfg.skills) cfg.skills = {};
       if (!cfg.skills.paths) cfg.skills.paths = [];
       if (!Array.isArray(cfg.skills.paths)) cfg.skills.paths = [cfg.skills.paths];
-      const alreadyAdded = cfg.skills.paths.some((entry: string) => entry === skillsPath);
+      const alreadyAdded = cfg.skills.paths.some(
+        (entry: string) =>
+          entry === skillsPath ||
+          entry.includes('opencode-mdocs/skills') ||
+          entry.includes('opencode-mdocs\\skills') ||
+          entry.includes('harness-mdocs/skills') ||
+          entry.includes('harness-mdocs\\skills')
+      );
       if (!alreadyAdded) cfg.skills.paths.push(skillsPath);
     }
   } catch (error) {
