@@ -35,6 +35,42 @@ describe('mdocs CLI', () => {
     expect(JSON.parse(result.stdout)).toMatchObject({ success: true, id: 'cli-created' });
   });
 
+  test('command help documents payload shapes and examples', async () => {
+    const result = await runMdocsCli(['command', '--help'], tempProject());
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('Usage: mdocs command <name> --json');
+    expect(result.stdout).toContain('mdocs command initiative.create --json');
+    expect(result.stdout).toContain('mdocs command initiative.update --json');
+    expect(result.stdout).toContain('Metadata changes may be nested under updates');
+    expect(result.stdout).toContain('mdocs command wiki.create --json');
+    expect(result.stdout).toContain('mdocs command wiki.update --json');
+    expect(result.stdout).toContain('Changed fields go at the top level after category and id');
+    expect(result.stdout).toContain('Do not use an updates wrapper');
+  });
+
+  test('command-specific help documents wiki.update top-level fields', async () => {
+    const result = await runMdocsCli(['command', 'wiki.update', '--help'], tempProject());
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Usage: mdocs command wiki.update --json');
+    expect(result.stdout).toContain('Payload: { category, id, title?, content?');
+    expect(result.stdout).toContain('Do not use an updates wrapper');
+    expect(result.stdout).toContain('mdocs command wiki.update --json');
+  });
+
+  test('unsupported command names still return registry JSON', async () => {
+    const result = await runMdocsCli(['command', 'missing.command'], tempProject());
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: 'Unsupported mdocs command: missing.command',
+      supportedCommands: expect.arrayContaining(['initiative.create', 'wiki.create', 'index.sync'])
+    });
+  });
+
   test('convenience commands expose lookup, search, resume, dispatch, and index repair', async () => {
     const projectDir = tempProject();
     await runMdocsCli(['init'], projectDir);

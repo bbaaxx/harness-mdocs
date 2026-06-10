@@ -30,6 +30,67 @@ function fail(message: string): CliResult {
   return { exitCode: 1, stdout: '', stderr: message };
 }
 
+function text(value: string): CliResult {
+  return { exitCode: 0, stdout: value, stderr: '' };
+}
+
+function commandHelp(commandName?: string): string {
+  const examples = {
+    'initiative.create': [
+      'initiative.create',
+      '  Payload: { title, id?, owner?, tags?, objective?, plan?, relatedWiki?, phase?, nextAction? }',
+      '  Example:',
+      '    mdocs command initiative.create --json \'{"id":"add-auth","title":"Add Auth","objective":"Implement login","plan":["Inspect","Implement","Verify"]}\''
+    ],
+    'initiative.update': [
+      'initiative.update',
+      '  Payload: { id, updates?, progressNote? }',
+      '  Metadata changes may be nested under updates. progressNote stays top-level.',
+      '  Example:',
+      '    mdocs command initiative.update --json \'{"id":"add-auth","updates":{"phase":"implementation","nextAction":"Run tests"},"progressNote":"Implemented login form"}\''
+    ],
+    'wiki.create': [
+      'wiki.create',
+      '  Payload: { category, id, title, content?, tags?, relatedInitiatives?, lifecycle?, knowledgeType?, confidence?, sourceInitiatives?, supersedes?, relatedWiki? }',
+      '  Example:',
+      '    mdocs command wiki.create --json \'{"category":"testing","id":"cli-help","title":"CLI Help","content":"Payload examples.","relatedInitiatives":["add-auth"]}\''
+    ],
+    'wiki.update': [
+      'wiki.update',
+      '  Payload: { category, id, title?, content?, tags?, relatedInitiatives?, lifecycle?, knowledgeType?, confidence?, sourceInitiatives?, supersedes? }',
+      '  Changed fields go at the top level after category and id. Do not use an updates wrapper.',
+      '  Example:',
+      '    mdocs command wiki.update --json \'{"category":"testing","id":"cli-help","content":"Updated learning.","lifecycle":"stable","sourceInitiatives":["add-auth"]}\''
+    ]
+  };
+
+  if (commandName && commandName in examples) {
+    return [
+      `Usage: mdocs command ${commandName} --json '<payload-json>'`,
+      '',
+      ...examples[commandName as keyof typeof examples]
+    ].join('\n');
+  }
+
+  return [
+    'Usage: mdocs command <name> --json \'<payload-json>\'',
+    '',
+    'Runs an mdocs core command with a JSON payload.',
+    '',
+    'Payload examples:',
+    '',
+    ...examples['initiative.create'],
+    '',
+    ...examples['initiative.update'],
+    '',
+    ...examples['wiki.create'],
+    '',
+    ...examples['wiki.update'],
+    '',
+    'Other commands: initiative.done, initiative.delete, initiative.archive, wiki.stub, wiki.delete, wiki.list, wiki.link, wiki.xref, validate, index.sync'
+  ].join('\n');
+}
+
 export async function runMdocsCli(args: string[], projectDir = process.cwd()): Promise<CliResult> {
   try {
     const core = createMdocsCore(projectDir);
@@ -85,6 +146,14 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
       }
 
       return ok({ consistent, initiatives: initiativeResult, wiki: wikiResult, repaired: false });
+    }
+
+    if (command === 'command' && (subcommand === '--help' || subcommand === 'help' || !subcommand)) {
+      return text(commandHelp());
+    }
+
+    if (command === 'command' && subcommand && args.includes('--help')) {
+      return text(commandHelp(subcommand));
     }
 
     if (command === 'command' && subcommand) {

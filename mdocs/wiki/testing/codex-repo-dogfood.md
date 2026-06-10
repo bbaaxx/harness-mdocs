@@ -4,12 +4,12 @@ title: "Codex Repo Dogfood"
 category: "testing"
 created: "2026-06-10"
 updated: "2026-06-10"
-related_initiatives: ["codex-dogfood-end-to-end","fix-done-active-initiative-state"]
+related_initiatives: ["codex-dogfood-end-to-end","fix-done-active-initiative-state","fresh-codex-thread-plugin-smoke-test"]
 tags: ["codex","dogfood","plugin","fresh-thread","validated"]
 lifecycle: "stable"
 knowledge_type: "how-to"
 confidence: "high"
-source_initiatives: ["codex-dogfood-end-to-end"]
+source_initiatives: ["codex-dogfood-end-to-end","fresh-codex-thread-plugin-smoke-test"]
 ---
 
 Codex v1 dogfooding for harness-mdocs is usable when treated as a CLI-backed workflow: install the local plugin from the repo marketplace, start a fresh Codex thread for skills, and keep mdocs command access available through the repo-local .agents/bin/mdocs shim on PATH. Plugin installation does not expose skills to a thread that was already running before the install. In this run, marketplace add/install, mdocs init/status, initiative create/update, wiki create/update, lookup/search, dispatch/resume, mdocs validate, plugin validation, npm run test:codex, npm run build, and npm test -- --runInBand all passed.
@@ -20,3 +20,4 @@ Codex v1 dogfooding for harness-mdocs is usable when treated as a CLI-backed wor
 
 - codex-dogfood-end-to-end
 - fix-done-active-initiative-state
+- fresh-codex-thread-plugin-smoke-test

@@ -50,6 +50,10 @@ CLI examples:
 mdocs command initiative.create --json '{"title":"Add authentication","id":"add-authentication"}'
 mdocs command initiative.update --json '{"id":"add-authentication","progressNote":"Implemented login form"}'
 mdocs command wiki.stub --json '{"category":"architecture","id":"auth-flow","title":"Auth Flow"}'
+mdocs command wiki.create --json '{"category":"architecture","id":"auth-flow","title":"Auth Flow","content":"Token exchange and session lifecycle.","relatedInitiatives":["add-authentication"]}'
+mdocs command wiki.update --json '{"category":"architecture","id":"auth-flow","content":"Updated durable learning.","relatedInitiatives":["add-authentication"]}'
 ```
+
+`initiative.update` accepts an `updates` object for metadata changes. `wiki.update` accepts changed fields at the top level after `category` and `id`; do not wrap wiki fields in `updates`.
 
 When marking an initiative done, run verification first, update progress, and link durable wiki knowledge when the work created reusable project knowledge.
