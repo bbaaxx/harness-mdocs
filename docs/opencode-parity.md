@@ -10,3 +10,4 @@ The opencode surface preserves the current `opencode-mdocs` behavior:
 - tool execution hooks enforce workflow gates
 - permission hook returns allow or ask from core workflow decisions
 - event and tool hooks append audit events and progress log entries
+- event hook accepts direct events, OpenCode event envelopes, and malformed payloads without crashing

@@ -37,8 +37,9 @@ describe('Codex plugin packaging', () => {
 
   test('Codex v1 capabilities declare CLI command access and advisory hooks', () => {
     expect(codexSurface.capabilities).toMatchObject({
-      commandTools: true,
-      aggregateCommandTool: true,
+      commandAccess: 'cli',
+      commandTools: false,
+      aggregateCommandTool: false,
       skillPackaging: true,
       permissionHooks: false,
       toolExecutionHooks: false,

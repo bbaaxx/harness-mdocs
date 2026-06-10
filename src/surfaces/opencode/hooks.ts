@@ -39,7 +39,8 @@ export function createOpencodeHooks(core: MdocsCore) {
 
     event: (input: any) => {
       const significantEvents = ['workflow.advance', 'initiative.create', 'wiki.create'];
-      const eventType = input.type;
+      const eventType = input?.type || input?.event?.type || input?.eventType;
+      if (typeof eventType !== 'string') return;
       const activeInitiativeId = core.managers.workflow.status().activeInitiative;
 
       core.managers.audit.append({

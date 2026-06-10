@@ -38,6 +38,10 @@
       "types": "./dist/surfaces/opencode/index.d.ts",
       "default": "./dist/surfaces/opencode/index.js"
     },
+    "./plugin": {
+      "types": "./dist/surfaces/opencode/opencode.d.ts",
+      "default": "./dist/surfaces/opencode/opencode.js"
+    },
     "./codex": {
       "types": "./dist/surfaces/codex/index.d.ts",
       "default": "./dist/surfaces/codex/index.js"
@@ -50,6 +54,7 @@
     "test:core": "jest tests/core",
     "test:opencode": "jest tests/surfaces/opencode",
     "test:codex": "jest tests/surfaces/codex",
+    "prepare": "npm run build",
     "prepack": "npm run build"
   },
   "peerDependencies": {
@@ -77,6 +82,7 @@
     "prompts",
     "skills",
     "templates",
+    "docs/*.md",
     "src/surfaces/codex/plugin",
     "README.md",
     "LICENSE"

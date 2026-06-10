@@ -1,6 +1,6 @@
 # Codex V1
 
-Codex v1 packages mdocs as a Codex plugin with skills and CLI command access.
+Codex v1 packages mdocs as a Codex plugin with skills and CLI-backed command access.
 
 The v1 surface supports:
 
@@ -16,5 +16,6 @@ The v1 surface does not support:
 - destructive command blocking
 - automatic audit logging for every Codex tool call
 - permission hook integration
+- native Codex command tools or MCP command tools
 
 Use `mdocs validate` before claiming mdocs memory is clean.

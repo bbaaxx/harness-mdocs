@@ -1,8 +1,9 @@
 export const codexSurface = {
   surface: 'codex',
   capabilities: {
-    commandTools: true,
-    aggregateCommandTool: true,
+    commandAccess: 'cli' as const,
+    commandTools: false,
+    aggregateCommandTool: false,
     skillPackaging: true,
     agentPackaging: false,
     configMutation: false,

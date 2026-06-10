@@ -284,6 +284,13 @@ The active one
     expect(initiative?.progressLog.some(note => note.includes('Event: workflow.advance'))).toBe(true);
   });
 
+  test('event hook ignores opencode event envelopes without top-level type', () => {
+    const plugin = createPlugin(testDir) as any;
+
+    expect(() => plugin.event({ event: { type: 'session.created' } })).not.toThrow();
+    expect(() => plugin.event({})).not.toThrow();
+  });
+
   test('mdocs_dispatch returns error when no initiativeId and no active initiative', async () => {
     const plugin = createPlugin(testDir);
     (plugin as any).tool.mdocs_init.execute();
