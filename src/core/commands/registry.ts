@@ -212,6 +212,11 @@ export class MdocsCommandRegistry {
     if (args.content !== undefined) existing.content = args.content;
     if (Array.isArray(args.tags)) existing.tags = args.tags;
     if (Array.isArray(args.relatedInitiatives)) existing.relatedInitiatives = args.relatedInitiatives;
+    if (args.lifecycle !== undefined) existing.lifecycle = args.lifecycle;
+    if (args.knowledgeType !== undefined) existing.knowledgeType = args.knowledgeType;
+    if (args.confidence !== undefined) existing.confidence = args.confidence;
+    if (Array.isArray(args.sourceInitiatives)) existing.sourceInitiatives = args.sourceInitiatives;
+    if (Array.isArray(args.supersedes)) existing.supersedes = args.supersedes;
     const filePath = this.context.wiki.update(args.category, args.id, existing);
     return { success: true, filename: path.join(path.basename(path.dirname(filePath)), path.basename(filePath)), id: args.id };
   }
