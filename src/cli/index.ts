@@ -41,7 +41,7 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
     }
 
     if (command === 'status') {
-      return ok(core.managers.workflow.status());
+      return ok(workflowStatus(core));
     }
 
     if (command === 'validate') {
@@ -139,7 +139,7 @@ function lookupInitiative(core: ReturnType<typeof createMdocsCore>, query: strin
 }
 
 function resumeInitiative(core: ReturnType<typeof createMdocsCore>, initiativeId?: string) {
-  const id = initiativeId || core.managers.workflow.status().activeInitiative;
+  const id = initiativeId || workflowStatus(core).activeInitiative;
   if (!id) {
     return { resumable: core.managers.search.query('', { status: 'active' }).filter(result => result.type === 'initiative') };
   }
@@ -160,7 +160,7 @@ function resumeInitiative(core: ReturnType<typeof createMdocsCore>, initiativeId
 }
 
 function dispatchContext(core: ReturnType<typeof createMdocsCore>, initiativeId?: string) {
-  const id = initiativeId || core.managers.workflow.status().activeInitiative;
+  const id = initiativeId || workflowStatus(core).activeInitiative;
   if (!id) return { error: 'No initiativeId provided and no active initiative' };
 
   const initiative = core.managers.initiatives.findById(id);
@@ -186,6 +186,18 @@ function dispatchContext(core: ReturnType<typeof createMdocsCore>, initiativeId?
     step: currentStep,
     relatedWikiCount: wikiEntries.length
   };
+}
+
+function workflowStatus(core: ReturnType<typeof createMdocsCore>) {
+  const state = core.managers.workflow.status();
+  if (!state.activeInitiative) return state;
+
+  const fileName = findInitiativeFilename(core.mdocsRoot, core.managers.initiatives, state.activeInitiative);
+  const initiative = fileName ? core.managers.initiatives.read(fileName) : null;
+  if (initiative?.status === 'active') return state;
+
+  core.managers.workflow.setActiveInitiative(null);
+  return core.managers.workflow.status();
 }
 
 if (require.main === module) {

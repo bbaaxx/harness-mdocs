@@ -68,4 +68,62 @@ describe('mdocs CLI', () => {
     expect(repair.exitCode).toBe(0);
     expect(JSON.parse(repair.stdout)).toMatchObject({ repaired: expect.any(Boolean) });
   });
+
+  test('initiative.done clears a matching active workflow initiative', async () => {
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+    await runMdocsCli(
+      [
+        'command',
+        'initiative.create',
+        '--json',
+        '{"id":"finish-active","title":"Finish Active","objective":"Exercise active cleanup","tags":["cli"],"relatedWiki":[]}'
+      ],
+      projectDir
+    );
+
+    const resume = await runMdocsCli(['resume', 'finish-active'], projectDir);
+    expect(resume.exitCode).toBe(0);
+
+    const activeStatus = await runMdocsCli(['status'], projectDir);
+    expect(JSON.parse(activeStatus.stdout)).toMatchObject({ activeInitiative: 'finish-active' });
+
+    const done = await runMdocsCli(
+      ['command', 'initiative.done', '--json', '{"id":"finish-active"}'],
+      projectDir
+    );
+    expect(done.exitCode).toBe(0);
+
+    const status = await runMdocsCli(['status'], projectDir);
+    expect(status.exitCode).toBe(0);
+    expect(JSON.parse(status.stdout)).toMatchObject({ activeInitiative: null });
+  });
+
+  test('status clears a stale active workflow initiative when it is done', async () => {
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+    await runMdocsCli(
+      [
+        'command',
+        'initiative.create',
+        '--json',
+        '{"id":"stale-done","title":"Stale Done","objective":"Exercise stale cleanup","tags":["cli"],"relatedWiki":[]}'
+      ],
+      projectDir
+    );
+    await runMdocsCli(['command', 'initiative.done', '--json', '{"id":"stale-done"}'], projectDir);
+    fs.writeFileSync(
+      path.join(projectDir, 'mdocs', '.workflow-state.json'),
+      JSON.stringify({ currentStep: 'IDLE', activeInitiative: 'stale-done', stepHistory: [] }, null, 2),
+      'utf8'
+    );
+
+    const status = await runMdocsCli(['status'], projectDir);
+
+    expect(status.exitCode).toBe(0);
+    expect(JSON.parse(status.stdout)).toMatchObject({ activeInitiative: null });
+    expect(JSON.parse(fs.readFileSync(path.join(projectDir, 'mdocs', '.workflow-state.json'), 'utf8'))).toMatchObject({
+      activeInitiative: null
+    });
+  });
 });

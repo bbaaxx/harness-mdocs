@@ -160,6 +160,9 @@ export class MdocsCommandRegistry {
     initiative.updated = today();
     initiative.progressLog.push(`[${new Date().toISOString()}] Marked done via mdocs command`);
     const filePath = this.context.initiatives.update(fileName, initiative);
+    if (this.context.workflow.status().activeInitiative === initiative.id) {
+      this.context.workflow.setActiveInitiative(null);
+    }
     return { success: true, filename: path.basename(filePath), id: initiative.id };
   }
 
