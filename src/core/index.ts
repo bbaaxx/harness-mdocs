@@ -10,3 +10,4 @@ export * from './search';
 export * from './audit';
 export * from './validation/linter';
 export * from './subagent';
+export * from './operations';

@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-import * as fs from 'fs';
-import * as path from 'path';
 import { createMdocsCore } from '../core';
-import { findInitiativeFilename, slugify } from '../core/commands/utils';
+import { status, lookup, resume, dispatch, indexCheck } from '../core/operations';
 
 export interface CliResult {
   exitCode: number;
@@ -93,6 +91,27 @@ function commandHelp(commandName?: string): string {
 
 export async function runMdocsCli(args: string[], projectDir = process.cwd()): Promise<CliResult> {
   try {
+    // MCP server: stdio is the JSON-RPC channel, so this branch must run
+    // before any core construction and must NOT write to stdout.
+    if (args[0] === 'mcp') {
+      const { startMcpServer } = await import('../surfaces/claude-code/mcp-server');
+      await startMcpServer();
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+
+    // Claude Code hook entrypoints. These read stdin and manage their own exit
+    // codes (pre-tool-use may exit 2 to block); delegate and report exit 0 here.
+    if (args[0] === 'hooks' && args[1] === 'pre-tool-use') {
+      const { runPreToolUse } = await import('./hooks/pre-tool-use');
+      await runPreToolUse();
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (args[0] === 'hooks' && args[1] === 'post-tool-use') {
+      const { runPostToolUse } = await import('./hooks/post-tool-use');
+      await runPostToolUse();
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+
     const core = createMdocsCore(projectDir);
     const [command, subcommand] = args;
 
@@ -102,7 +121,7 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
     }
 
     if (command === 'status') {
-      return ok(workflowStatus(core));
+      return ok(status(core));
     }
 
     if (command === 'validate') {
@@ -110,7 +129,7 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
     }
 
     if (command === 'lookup' && subcommand) {
-      const result = lookupInitiative(core, subcommand);
+      const result = lookup(core, subcommand);
       return result.error ? fail(result.error) : ok(result);
     }
 
@@ -119,33 +138,16 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
     }
 
     if (command === 'resume') {
-      return ok(resumeInitiative(core, subcommand));
+      return ok(resume(core, subcommand));
     }
 
     if (command === 'dispatch') {
-      const result = dispatchContext(core, subcommand);
+      const result = dispatch(core, subcommand);
       return result.error ? fail(result.error) : ok(result);
     }
 
     if (command === 'index' && (subcommand === 'check' || subcommand === 'repair')) {
-      const initiativeResult = core.managers.initiatives.checkConsistency();
-      const wikiResult = core.managers.wiki.checkConsistency();
-      const consistent = initiativeResult.consistent && wikiResult.consistent;
-
-      if (subcommand === 'repair') {
-        if (!consistent) {
-          core.managers.initiatives.syncIndex();
-          core.managers.wiki.syncIndices();
-        }
-        return ok({
-          consistent: true,
-          initiatives: consistent ? initiativeResult : core.managers.initiatives.checkConsistency(),
-          wiki: consistent ? wikiResult : core.managers.wiki.checkConsistency(),
-          repaired: !consistent
-        });
-      }
-
-      return ok({ consistent, initiatives: initiativeResult, wiki: wikiResult, repaired: false });
+      return ok(indexCheck(core, subcommand === 'repair'));
     }
 
     if (command === 'command' && (subcommand === '--help' || subcommand === 'help' || !subcommand)) {
@@ -166,107 +168,6 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
   } catch (error: any) {
     return fail(error.message || String(error));
   }
-}
-
-function lookupInitiative(core: ReturnType<typeof createMdocsCore>, query: string) {
-  const normalizedQuery = query.toLowerCase();
-  const querySlug = slugify(query);
-  const initiativesDir = path.join(core.mdocsRoot, 'initiatives');
-  const files = fs.existsSync(initiativesDir) ? fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md') && file !== 'INDEX.md') : [];
-
-  for (const fileName of files) {
-    const initiative = core.managers.initiatives.read(fileName);
-    if (!initiative) continue;
-
-    const fileStem = fileName.replace(/\.md$/, '');
-    const fileSlug = slugify(fileStem.replace(/--\d{4}-\d{2}-\d{2}$/, ''));
-    const idSlug = slugify(initiative.id || '');
-    const titleSlug = slugify(initiative.title || '');
-    const title = initiative.title || '';
-    const matched =
-      initiative.id === query ||
-      idSlug === querySlug ||
-      title.toLowerCase().includes(normalizedQuery) ||
-      titleSlug === querySlug ||
-      fileName === query ||
-      fileStem === query ||
-      fileSlug === querySlug;
-
-    if (matched) {
-      return {
-        type: 'initiative',
-        id: initiative.id,
-        title: initiative.title,
-        status: initiative.status,
-        tags: initiative.tags,
-        filename: fileName
-      };
-    }
-  }
-
-  return { error: `No initiatives found for query: ${query}` };
-}
-
-function resumeInitiative(core: ReturnType<typeof createMdocsCore>, initiativeId?: string) {
-  const id = initiativeId || workflowStatus(core).activeInitiative;
-  if (!id) {
-    return { resumable: core.managers.search.query('', { status: 'active' }).filter(result => result.type === 'initiative') };
-  }
-
-  const fileName = findInitiativeFilename(core.mdocsRoot, core.managers.initiatives, id);
-  if (!fileName) return { error: `Initiative not found: ${id}` };
-  const initiative = core.managers.initiatives.read(fileName);
-  if (!initiative) return { error: `Initiative not found: ${id}` };
-  core.managers.workflow.setActiveInitiative(initiative.id);
-  return {
-    initiative: { id: initiative.id, title: initiative.title, status: initiative.status },
-    currentStep: core.managers.workflow.status().currentStep,
-    nextAction: initiative.nextAction || initiative.plan.find(item => item.status !== 'done')?.description || '',
-    blockers: initiative.blockers || [],
-    latestProgress: initiative.progressLog.at(-1) || '',
-    validation: core.commands.validationResult()
-  };
-}
-
-function dispatchContext(core: ReturnType<typeof createMdocsCore>, initiativeId?: string) {
-  const id = initiativeId || workflowStatus(core).activeInitiative;
-  if (!id) return { error: 'No initiativeId provided and no active initiative' };
-
-  const initiative = core.managers.initiatives.findById(id);
-  if (!initiative) return { error: 'Initiative not found' };
-
-  const wikiEntries = [];
-  for (const wikiRef of initiative.relatedWiki) {
-    const [category, entryId] = wikiRef.split('/');
-    if (category && entryId) {
-      const entry = core.managers.wiki.read(category, entryId);
-      if (entry) wikiEntries.push(entry);
-    }
-  }
-
-  const retrievedMemory = core.managers.search.query(`${initiative.title} ${initiative.objective} ${initiative.tags.join(' ')}`).slice(0, 5);
-  const recentEvents = core.managers.audit.query({ initiativeId: initiative.id, limit: 5 });
-  const currentStep = core.managers.workflow.getCurrentStep();
-  const context = core.managers.dispatch.assemble(initiative, wikiEntries, currentStep, { retrievedMemory, recentEvents });
-
-  return {
-    context,
-    initiativeId: initiative.id,
-    step: currentStep,
-    relatedWikiCount: wikiEntries.length
-  };
-}
-
-function workflowStatus(core: ReturnType<typeof createMdocsCore>) {
-  const state = core.managers.workflow.status();
-  if (!state.activeInitiative) return state;
-
-  const fileName = findInitiativeFilename(core.mdocsRoot, core.managers.initiatives, state.activeInitiative);
-  const initiative = fileName ? core.managers.initiatives.read(fileName) : null;
-  if (initiative?.status === 'active') return state;
-
-  core.managers.workflow.setActiveInitiative(null);
-  return core.managers.workflow.status();
 }
 
 if (require.main === module) {
