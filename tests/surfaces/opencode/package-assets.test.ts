@@ -15,6 +15,17 @@ test('package builds dist during git installs', () => {
   expect(packageJson.scripts.prepare).toBe('npm run build');
 });
 
+test('package exposes mdocs CLI bin and repo dogfood shim', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+
+  expect(packageJson.bin).toMatchObject({ mdocs: 'dist/cli/index.js' });
+  expect(packageJson.files).toEqual(expect.arrayContaining(['dist']));
+
+  const shim = fs.readFileSync(path.join(root, '.agents', 'bin', 'mdocs'), 'utf8');
+  expect(shim).toContain('dist/cli/index.js');
+  expect(shim).toContain('npm run build');
+});
+
 test('package exports OpenCode runtime entrypoints and compatibility alias', () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 

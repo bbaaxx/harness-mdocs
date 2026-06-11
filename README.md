@@ -33,6 +33,29 @@ npm install --save-dev harness-mdocs
 
 Node.js 18 or newer is required.
 
+The package publishes a `mdocs` binary. When installed as a project dependency,
+run it through the package manager unless `node_modules/.bin` is already on
+your shell `PATH`:
+
+```bash
+npm exec -- mdocs status
+./node_modules/.bin/mdocs status
+```
+
+For personal terminal use across projects, a global install also exposes
+`mdocs` on the shell `PATH`:
+
+```bash
+npm install -g harness-mdocs
+mdocs status
+```
+
+Installing `harness-mdocs` as an OpenCode plugin is separate from shell command
+installation. OpenCode can load plugin hooks and custom tools from its package
+cache without making `mdocs` available in your terminal or in another harness.
+Use a project dependency, global install, or a repo-local shim when a surface
+expects to run `mdocs` as a command.
+
 ## OpenCode Usage
 
 For OpenCode, load the package root from `opencode.json`:
@@ -75,7 +98,19 @@ mdocs validate
 mdocs command --help
 ```
 
-When dogfooding this repo from a fresh Codex thread, keep the repo-local shim on `PATH`:
+Codex plugin installation makes the skills available to Codex, but it does not
+install the `mdocs` shell command by itself. Start Codex from an environment
+where one of the supported CLI paths works:
+
+```bash
+npm exec -- mdocs status
+./node_modules/.bin/mdocs status
+mdocs status
+```
+
+When dogfooding this package repo from a fresh Codex thread, keep the
+repo-local shim on `PATH`. The shim lives in `harness-mdocs/.agents/bin/mdocs`,
+runs `node dist/cli/index.js`, and requires a fresh `npm run build`:
 
 ```bash
 PATH="$PWD/.agents/bin:$PATH" mdocs status
@@ -228,6 +263,16 @@ Stable wiki learning matters for completed initiatives. `mdocs validate` warns w
 ## CLI
 
 The `mdocs` CLI is the portable command surface. It is especially important for Codex v1 and other hosts that do not expose native mdocs tools.
+
+CLI availability depends on how the package is installed:
+
+- Project dependency: use `npm exec -- mdocs <command>` or
+  `./node_modules/.bin/mdocs <command>`.
+- Global install: use `mdocs <command>` directly.
+- Package repo dogfooding: from `harness-mdocs`, run `npm run build`, then use
+  `PATH="$PWD/.agents/bin:$PATH" mdocs <command>`.
+- OpenCode plugin install: use OpenCode custom tools inside OpenCode; install
+  the npm package separately if you also need a shell `mdocs` command.
 
 Common commands:
 

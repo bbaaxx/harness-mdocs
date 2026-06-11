@@ -13,7 +13,7 @@ Codex v1 remains advisory. The plugin skills guide workflow behavior; they do no
 
 - `opencode-mdocs` dogfooding uses `npm run setup:local` to symlink `.opencode/agents/mdocs-orchestrator.md` to `agents/mdocs-orchestrator.md`, because opencode discovers agents before plugin config hooks run.
 - Codex supports repo skills under `.agents/skills`, repo marketplace files under `.agents/plugins/marketplace.json`, local plugin marketplace entries, and symlinked skill folders.
-- Codex plugin installation makes bundled skills available, but command-line tools still need to be available in the project shell if skills tell Codex to run them.
+- Codex plugin installation makes bundled skills available, but command-line tools still need to be available in the project shell if skills tell Codex to run them. The Codex plugin install does not install `mdocs` on `PATH`.
 
 ## Repo Files
 
@@ -36,6 +36,9 @@ src/surfaces/codex/plugin/
 The marketplace entry points at `./src/surfaces/codex/plugin`.
 
 The `mdocs` shim runs `node dist/cli/index.js`, so it requires a fresh build.
+This shim is for dogfooding the source checkout. Published-package users should
+prefer `npm exec -- mdocs <command>`, `./node_modules/.bin/mdocs <command>`, or
+a global `mdocs` from `npm install -g harness-mdocs`.
 
 ## One-Time Local Setup
 
@@ -62,6 +65,8 @@ PATH="$PWD/.agents/bin:$PATH" mdocs status
 ```
 
 If `mdocs status` prints JSON workflow state, the CLI side of the dogfood setup is ready.
+If the same command fails outside the `harness-mdocs` repo root, that is expected
+unless another install path exposes `mdocs` on `PATH`.
 
 ## Install In Codex From The Repo Marketplace
 
@@ -184,6 +189,9 @@ Use this only to iterate on skill wording. Before release, remove or ignore the 
 - Rebuild: `npm run build`.
 - Confirm the shim works: `PATH="$PWD/.agents/bin:$PATH" mdocs status`.
 - Start Codex with the same `PATH="$PWD/.agents/bin:$PATH"` prefix.
+- If you are not dogfooding this source checkout, install the package as a
+  project dependency and use `npm exec -- mdocs status`, or install it globally
+  and use `mdocs status`.
 
 ### Plugin Installs But Old Skill Text Persists
 

@@ -14,6 +14,23 @@
 - `harness-mdocs/codex` — Codex v1 surface metadata and packaging.
 - `mdocs` — CLI command for surfaces without native tool hooks.
 
+## CLI availability
+
+The npm package declares `bin.mdocs = dist/cli/index.js`. A project install
+exposes that command through `npm exec -- mdocs <command>` and
+`./node_modules/.bin/mdocs <command>`. A global install exposes `mdocs` directly
+on the shell `PATH`.
+
+OpenCode plugin loading is separate from shell command installation. Loading
+`harness-mdocs` or `harness-mdocs/opencode` lets OpenCode use package hooks,
+agents, skills, and custom tools from its plugin cache, but it does not imply
+that a terminal, Codex session, or other harness can run `mdocs` by name. Those
+surfaces need a project install, a global install, or a local shim.
+
+The checked-in `harness-mdocs/.agents/bin/mdocs` shim is only for repo
+dogfooding. It runs the built `dist/cli/index.js`, so it requires `npm run
+build` before use.
+
 ## OpenCode migration path
 
 Replace the existing plugin entry in `.opencode/opencode.json`:
@@ -41,6 +58,7 @@ Before publish:
 2. Run `npm test -- --runInBand`.
 3. Run `npm --cache .npm-cache pack --dry-run`.
 4. Inspect the dry-run tarball contents for `dist`, `agents`, `skills`, `prompts`, `templates`, README, and LICENSE.
+5. Confirm the package metadata still includes `bin.mdocs`.
 
 After publish and replacement in a consuming folder:
 
