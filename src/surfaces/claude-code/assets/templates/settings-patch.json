@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "mdocs": {
+      "command": "npx",
+      "args": ["-y", "harness-mdocs", "mcp"],
+      "env": { "MDOCS_PROJECT_DIR": "${workspaceFolder}" }
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${workspaceFolder}/node_modules/harness-mdocs/dist/cli/hooks/pre-tool-use.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Bash|Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${workspaceFolder}/node_modules/harness-mdocs/dist/cli/hooks/post-tool-use.js"
+          }
+        ]
+      }
+    ]
+  }
+}

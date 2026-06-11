@@ -2,7 +2,13 @@
 
 Surface-neutral initiative and wiki memory for AI coding harnesses.
 
-`harness-mdocs` packages the shared mdocs core plus adapters for host tools such as OpenCode and Codex. The core owns durable initiative files, wiki entries, workflow state, validation, search, audit logging, and command behavior. Surfaces translate that core into the capabilities each host can actually provide.
+`harness-mdocs` packages the shared mdocs core plus adapters for host tools such as OpenCode, Codex, and Claude Code. The core owns durable initiative files, wiki entries, workflow state, validation, search, audit logging, and command behavior. Surfaces translate that core into the capabilities each host can actually provide.
+
+| Surface | Command access | Workflow enforcement | Audit | Subagent dispatch |
+| --- | --- | --- | --- | --- |
+| OpenCode | native custom tools | enforced (hooks) | enforced (hooks) | native |
+| Claude Code | MCP tools (+ CLI fallback) | enforced (PreToolUse hook) | enforced (PostToolUse hook) | native (`Task`) |
+| Codex v1 | `mdocs` CLI | advisory (instructions) | command-level | prompted |
 
 ## What It Does
 
@@ -123,6 +129,48 @@ Codex v1 limitations are intentional and should be described honestly:
 - Codex v1 does not automatically audit every host tool call
 - command access is through the `mdocs` CLI, not native Codex command tools or MCP tools
 
+## Claude Code Usage
+
+Claude Code is a Tier 3 surface — full host-level enforcement, on par with OpenCode. It integrates through an MCP server, PreToolUse/PostToolUse hooks, skills, and CLAUDE.md instructions.
+
+Add to `.claude/settings.json` (templates ship in the package under `src/surfaces/claude-code/assets/templates/`):
+
+```json
+{
+  "mcpServers": {
+    "mdocs": {
+      "command": "npx",
+      "args": ["-y", "harness-mdocs", "mcp"],
+      "env": { "MDOCS_PROJECT_DIR": "${workspaceFolder}" }
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Write|Edit|Bash", "hooks": [
+        { "type": "command", "command": "node ${workspaceFolder}/node_modules/harness-mdocs/dist/cli/hooks/pre-tool-use.js" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Write|Edit|Bash|Task|Agent", "hooks": [
+        { "type": "command", "command": "node ${workspaceFolder}/node_modules/harness-mdocs/dist/cli/hooks/post-tool-use.js" } ] }
+    ]
+  }
+}
+```
+
+Then add the CLAUDE.md snippet (also in `assets/templates/`) and copy the three skills from `assets/skills/` into your `.claude/skills/`.
+
+What the Claude Code surface provides:
+
+- **MCP server** (`mdocs mcp`) exposing all mdocs commands as tools: the aggregate `mdocs` tool plus `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`.
+- **PreToolUse hook** that blocks `Write`/`Edit` before the `PLAN` step and destructive `Bash` before `COMPLETE` (edits under `./mdocs/` are always allowed). The hook fails open — a hook error never wedges your session.
+- **PostToolUse hook** that records audit events and appends progress to the active initiative, serialized under a lock so Claude Code's parallel tool execution does not lose updates.
+- **Skills** (`mdocs-workflow`, `mdocs-initiative`, `mdocs-orchestrator`) and a native subagent (`Task`/`Agent`) orchestrator prompt.
+
+Notes:
+
+- Hook commands must use a direct `node` path, not `npx` — `npx` cold-start runs on every tool call and is too slow for the hook hot path. The MCP server (spawned once per session) may use `npx`.
+- The MCP server resolves the project root from `MDOCS_PROJECT_DIR`, falling back to `process.cwd()`. Multi-project switching within one session is not supported in v1.
+
 ## First Run
 
 On first initialization, mdocs creates a project-local memory directory:
@@ -149,7 +197,9 @@ mdocs init
 - `harness-mdocs/api` - public API helpers for programmatic consumers.
 - `harness-mdocs/core` - surface-neutral managers, workflow, command registry, validation, search, audit, and dispatch.
 - `harness-mdocs/codex` - Codex v1 surface metadata and plugin packaging.
+- `harness-mdocs/claude-code` - Claude Code surface: MCP server, hooks, translation, capability declaration.
 - `mdocs` - CLI command for surfaces that do not expose native tools.
+- `mdocs mcp` - starts the Claude Code MCP server over stdio.
 
 Programmatic API consumers can import from the API subpath:
 
@@ -321,10 +371,11 @@ When loaded in OpenCode, the plugin exposes custom tools backed by the same core
 ```text
 harness-mdocs/
 ├── src/
-│   ├── cli/                  # portable mdocs CLI
-│   ├── core/                 # surface-neutral managers and workflow
+│   ├── cli/                  # portable mdocs CLI (+ hooks/ for Claude Code)
+│   ├── core/                 # surface-neutral managers, workflow, shared operations
 │   └── surfaces/
 │       ├── codex/            # Codex v1 metadata and packaging
+│       ├── claude-code/      # MCP server, hooks, translation, assets
 │       └── opencode/         # OpenCode adapter, hooks, tools
 ├── agents/                   # OpenCode agent asset
 ├── prompts/                  # prompt assets
