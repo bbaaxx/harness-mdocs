@@ -442,17 +442,23 @@ The core command registry is the behavioral center for initiative and wiki mutat
 ```bash
 npm install
 npm run build
+npm run lint
 npm test
 npm run test:codex
 npm run test:opencode
+npm run test:claude-code
+npm run coverage
+npm run mdocs:lint
+npm run quality
+npm run release:check
 ```
+
+Local quality tooling stays lightweight: `lint` is TypeScript typechecking, `coverage` emits text and lcov reports, and `mdocs:lint` validates initiative/wiki graph health through the built CLI. `release:check` adds the package dry run, which invokes npm lifecycle scripts and may refresh generated plugin assets. Complexity analysis is intentionally deferred until the project needs a dedicated lint layer.
 
 Before publishing:
 
 ```bash
-npm run build
-npm test -- --runInBand
-npm --cache .npm-cache pack --dry-run
+npm run release:check
 ```
 
 Do not publish from an unverified tree. Inspect the dry-run package for `dist`, `agents`, `skills`, `prompts`, `docs`, `README.md`, and `LICENSE`.
