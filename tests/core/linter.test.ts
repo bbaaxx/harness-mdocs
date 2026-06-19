@@ -397,4 +397,48 @@ Directory note.
       expect.stringContaining('Done initiative dir-complete has no stable wiki learning')
     ]));
   });
+
+  test('stable wiki sources satisfy done initiative learning without backlink warning', () => {
+    const initiativesDir = path.join(testDir, 'initiatives');
+    const wikiDir = path.join(testDir, 'wiki');
+    fs.writeFileSync(path.join(initiativesDir, 'done-source--2026-06-19.md'), `---
+id: done-source
+title: Done Source
+status: done
+created: 2026-06-19
+updated: 2026-06-19
+tags: [compatibility]
+related_wiki: []
+---
+
+## Objective
+Complete work with sourced learning.
+
+## Plan
+- [x] Finish
+
+## Progress Log
+- Done
+
+## Artifacts
+`, 'utf8');
+    fs.writeFileSync(path.join(wikiDir, 'root-learning.md'), `---
+id: root-learning
+title: Root Learning
+lifecycle: stable
+source_initiatives: [done-source]
+tags: [compatibility]
+---
+
+Root-level learning from done initiative.
+`, 'utf8');
+
+    const linter = new MdocsLinter(testDir);
+    const messages = linter.lintAll().flatMap(r => r.issues.map(i => i.message));
+
+    expect(messages).not.toEqual(expect.arrayContaining([
+      expect.stringContaining('Done initiative done-source has no stable wiki learning'),
+      expect.stringContaining('missing backlink to initiative done-source')
+    ]));
+  });
 });

@@ -39,6 +39,9 @@ export class MdocsLinter {
     }
 
     if (fs.existsSync(wikiDir)) {
+      for (const filePath of this.rootWikiFiles()) {
+        results.push(this.lintFile(filePath));
+      }
       const categories = fs.readdirSync(wikiDir).filter(f => {
         const stat = fs.statSync(path.join(wikiDir, f));
         return stat.isDirectory();
@@ -63,23 +66,43 @@ export class MdocsLinter {
     const wikiDir = path.join(this.baseDir, 'wiki');
 
     // Collect all initiative data
-    const initiativeData: { id: string; status: string; relatedWiki: string[]; filePath: string }[] = [];
+    const initiativeData: { id: string; slug: string; status: string; relatedWiki: string[]; filePath: string }[] = [];
     for (const filePath of this.listInitiativeFiles()) {
       try {
         const content = fs.readFileSync(filePath, 'utf8');
         const front = parseFrontmatter(content);
+        const relativePath = path.relative(initiativesDir, filePath);
+        const slug = relativePath.endsWith('_status.md')
+          ? relativePath.split(path.sep)[0]
+          : path.basename(relativePath, '.md').replace(/--\d{4}-\d{2}-\d{2}$/, '');
         initiativeData.push({
-          id: front.id || path.basename(path.dirname(filePath)),
+          id: front.id || slug,
+          slug,
           status: normalizeInitiativeStatus(front.status),
           relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
-          filePath: path.relative(initiativesDir, filePath)
+          filePath: relativePath
         });
       } catch { /* skip */ }
     }
 
     // Collect all wiki data
-    const wikiData: { id: string; category: string; relatedInitiatives: string[]; lifecycle?: string; filePath: string }[] = [];
+    const wikiData: { id: string; category: string; relatedInitiatives: string[]; sourceInitiatives: string[]; lifecycle?: string; filePath: string }[] = [];
     if (fs.existsSync(wikiDir)) {
+      for (const filePath of this.rootWikiFiles()) {
+        try {
+          const content = fs.readFileSync(filePath, 'utf8');
+          const front = parseFrontmatter(content);
+          const stem = path.basename(filePath, '.md');
+          wikiData.push({
+            id: front.id || stem,
+            category: front.category || '',
+            relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
+            sourceInitiatives: Array.isArray(front.source_initiatives) ? front.source_initiatives : Array.isArray(front.sources) ? front.sources : [],
+            lifecycle: front.lifecycle,
+            filePath: path.basename(filePath)
+          });
+        } catch { /* skip */ }
+      }
       const categories = fs.readdirSync(wikiDir).filter(f => fs.statSync(path.join(wikiDir, f)).isDirectory());
       for (const category of categories) {
         const catDir = path.join(wikiDir, category);
@@ -93,6 +116,7 @@ export class MdocsLinter {
               id,
               category: front.category || category,
               relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
+              sourceInitiatives: Array.isArray(front.source_initiatives) ? front.source_initiatives : Array.isArray(front.sources) ? front.sources : [],
               lifecycle: front.lifecycle,
               filePath: `${category}/${f}`
             });
@@ -101,8 +125,8 @@ export class MdocsLinter {
       }
     }
 
-    const initiativeIds = new Set(initiativeData.map(i => i.id));
-    const wikiRefs = new Set(wikiData.map(w => `${w.category}/${w.id}`));
+    const initiativeIds = new Set(initiativeData.flatMap(i => [i.id, i.slug]));
+    const wikiRefs = new Set(wikiData.flatMap(w => [w.category ? `${w.category}/${w.id}` : w.id, w.id]));
 
     // Check initiative related_wiki
     for (const init of initiativeData) {
@@ -118,11 +142,13 @@ export class MdocsLinter {
 
       // Done initiative should have at least one stable wiki learning
       if (init.status === 'done') {
+        const initRefs = new Set([init.id, init.slug]);
         const stableWikiLinks = init.relatedWiki.filter(ref => {
-          const wikiEntry = wikiData.find(w => `${w.category}/${w.id}` === ref);
+          const wikiEntry = wikiData.find(w => (w.category ? `${w.category}/${w.id}` : w.id) === ref || w.id === ref);
           return wikiEntry && wikiEntry.lifecycle === 'stable';
         });
-        if (stableWikiLinks.length === 0) {
+        const stableSourceWiki = wikiData.some(wiki => wiki.lifecycle === 'stable' && wiki.sourceInitiatives.some(source => initRefs.has(source)));
+        if (stableWikiLinks.length === 0 && !stableSourceWiki) {
           issues.push({
             severity: 'warning',
             message: `Done initiative ${init.id} has no stable wiki learning`
@@ -142,12 +168,21 @@ export class MdocsLinter {
           });
         }
       }
+      for (const initRef of wiki.sourceInitiatives) {
+        if (!initiativeIds.has(initRef)) {
+          issues.push({
+            severity: 'warning',
+            message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}`
+          });
+        }
+      }
 
       // Check backlinks: initiatives referencing this wiki should have this initiative in their backlinks
       for (const init of initiativeData) {
-        if (init.relatedWiki.includes(`${wiki.category}/${wiki.id}`)) {
+        const wikiRef = wiki.category ? `${wiki.category}/${wiki.id}` : wiki.id;
+        if (init.relatedWiki.includes(wikiRef)) {
           // Initiative references this wiki entry - check if wiki has backlink
-          if (!wiki.relatedInitiatives.includes(init.id)) {
+          if (!wiki.relatedInitiatives.includes(init.id) && !wiki.sourceInitiatives.includes(init.id) && !wiki.sourceInitiatives.includes(init.slug)) {
             issues.push({
               severity: 'warning',
               message: `Wiki ${wiki.category}/${wiki.id} missing backlink to initiative ${init.id}`
@@ -185,6 +220,14 @@ export class MdocsLinter {
     return files;
   }
 
+  private rootWikiFiles(): string[] {
+    const wikiDir = path.join(this.baseDir, 'wiki');
+    if (!fs.existsSync(wikiDir)) return [];
+    return fs.readdirSync(wikiDir, { withFileTypes: true })
+      .filter(entry => entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'INDEX.md')
+      .map(entry => path.join(wikiDir, entry.name));
+  }
+
   private lintInitiative(content: string, filePath: string): LintResult {
     const issues: LintIssue[] = [];
     let score = 5;
@@ -192,6 +235,9 @@ export class MdocsLinter {
     // Parse frontmatter
     const frontmatterMatch = content.match(/---\n([\s\S]*?)\n---/);
     if (!frontmatterMatch) {
+      if (path.dirname(filePath).split(path.sep).pop() === 'wiki') {
+        return { file: filePath, type: 'wiki', score: 5, issues: [], passed: true };
+      }
       issues.push({ severity: 'error', message: 'Missing YAML frontmatter' });
       score = 0;
       return { file: filePath, type: 'initiative', score, issues, passed: false };
@@ -271,14 +317,18 @@ export class MdocsLinter {
 
     // Parse frontmatter
     const frontmatterMatch = content.match(/---\n([\s\S]*?)\n---/);
+    const isRootWiki = path.dirname(filePath).split(path.sep).pop() === 'wiki';
     if (!frontmatterMatch) {
+      if (isRootWiki) {
+        return { file: filePath, type: 'wiki', score: 5, issues, passed: true };
+      }
       issues.push({ severity: 'error', message: 'Missing YAML frontmatter' });
       score = 0;
       return { file: filePath, type: 'wiki', score, issues, passed: false };
     }
 
     const frontmatter = frontmatterMatch[1];
-    const requiredFields = ['id', 'title', 'category', 'created', 'updated', 'tags'];
+    const requiredFields = isRootWiki ? ['id', 'title'] : ['id', 'title', 'category', 'created', 'updated', 'tags'];
     for (const field of requiredFields) {
       if (!frontmatter.includes(`${field}:`)) {
         issues.push({ severity: 'error', message: `Missing required frontmatter field: ${field}` });
@@ -301,7 +351,7 @@ export class MdocsLinter {
     if (categoryMatch) {
       const category = categoryMatch[1].trim();
       const expectedDir = path.dirname(filePath).split(path.sep).pop();
-      if (category !== expectedDir) {
+      if (!isRootWiki && category !== expectedDir) {
         issues.push({ severity: 'warning', message: `Category "${category}" does not match directory "${expectedDir}"` });
         score -= 0.5;
       }

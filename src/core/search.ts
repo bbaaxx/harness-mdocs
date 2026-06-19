@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { SearchResult, SearchOptions } from './types';
 import { InitiativeManager } from './managers/initiative';
 import { WikiManager } from './managers/wiki';
@@ -21,6 +19,7 @@ export class SearchEngine {
   private docStatus: Map<string, string>;
   private docCategory: Map<string, string>;
   private docDate: Map<string, string>;
+  private docType: Map<string, 'initiative' | 'wiki'>;
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
@@ -31,6 +30,7 @@ export class SearchEngine {
     this.docStatus = new Map();
     this.docCategory = new Map();
     this.docDate = new Map();
+    this.docType = new Map();
   }
 
   /**
@@ -73,6 +73,7 @@ export class SearchEngine {
     this.docStatus.clear();
     this.docCategory.clear();
     this.docDate.clear();
+    this.docType.clear();
 
     // Index initiatives
     for (const initiative of this.initiatives.list()) {
@@ -85,32 +86,18 @@ export class SearchEngine {
       this.docTags.set(docId, initiative.tags);
       this.docStatus.set(docId, initiative.status);
       this.docDate.set(docId, initiative.created);
+      this.docType.set(docId, 'initiative');
     }
 
     // Index wiki entries
-    const wikiDir = path.join(this.baseDir, 'wiki');
-    if (fs.existsSync(wikiDir)) {
-      const categories = fs.readdirSync(wikiDir).filter(f => fs.statSync(path.join(wikiDir, f)).isDirectory());
-      for (const category of categories) {
-        const catDir = path.join(wikiDir, category);
-        const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
-        for (const f of files) {
-          try {
-            const id = f.replace('.md', '');
-            const entry = this.wiki.read(category, id);
-            if (!entry) continue;
+    for (const entry of this.wiki.list()) {
+      const docId = this.wiki.refFor(entry);
+      this.indexField(docId, 'wiki', entry.title, 'title', entry.title);
+      this.indexField(docId, 'wiki', entry.title, 'content', entry.content);
 
-            const docId = `${category}/${id}`;
-            this.indexField(docId, 'wiki', entry.title, 'title', entry.title);
-            this.indexField(docId, 'wiki', entry.title, 'content', entry.content);
-
-            this.docTags.set(docId, entry.tags);
-            this.docCategory.set(docId, category);
-          } catch {
-            // Skip malformed files
-          }
-        }
-      }
+      this.docTags.set(docId, entry.tags);
+      this.docCategory.set(docId, entry.category);
+      this.docType.set(docId, 'wiki');
     }
   }
 
@@ -195,17 +182,16 @@ export class SearchEngine {
       }
     }
     // For snippets, read the actual content
-    if (docId.includes('/')) {
+    if (this.docType.get(docId) === 'wiki') {
       // Wiki entry
-      const [category, id] = docId.split('/');
       try {
-        const entry = this.wiki.read(category, id);
+        const entry = this.wiki.readByRef(docId);
         if (entry) {
           const text = field === 'title' ? entry.title : entry.content;
           return text.replace(/\s+/g, ' ').slice(0, 180);
         }
       } catch { /* fall through */ }
-    } else {
+    } else if (this.docType.get(docId) === 'initiative') {
       // Initiative
       try {
         const initiative = this.initiatives.findById(docId);

@@ -38,6 +38,43 @@ describe('WikiManager', () => {
     expect(fs.existsSync(path.join(categoryDir, 'wiki-test.md'))).toBe(true);
   });
 
+  test('list includes root wiki pages and validates plain canonical index', () => {
+    const manager = new WikiManager(testDir);
+    const wikiDir = path.join(testDir, 'wiki');
+    fs.mkdirSync(wikiDir, { recursive: true });
+    fs.writeFileSync(path.join(wikiDir, 'index.md'), '# Wiki Index\n\nPlain canonical index.', 'utf8');
+    fs.writeFileSync(path.join(wikiDir, 'overview.md'), `---
+id: overview
+title: Overview
+tags: [root]
+---
+
+Root overview content with enough detail for listing.
+`, 'utf8');
+
+    const entries = manager.list();
+    const validation = manager.validate();
+
+    expect(entries.map(entry => entry.id)).toEqual(expect.arrayContaining(['index', 'overview']));
+    expect(manager.readByRef('overview')?.title).toBe('Overview');
+    expect(validation.errors).toEqual([]);
+  });
+
+  test('getReferencedBy includes directory-v2 _status.md initiatives', () => {
+    const manager = new WikiManager(testDir, { compatibility: { initiativeMode: 'directory' } });
+    fs.mkdirSync(path.join(testDir, 'initiatives', 'dir-init'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'initiatives', 'dir-init', '_status.md'), `---
+id: dir-init
+title: Dir Init
+status: active
+started: 2026-06-19
+related_wiki: ["architecture/dir-note"]
+---
+`, 'utf8');
+
+    expect(manager.getReferencedBy('architecture', 'dir-note')).toContain('dir-init');
+  });
+
   test('creates index files', () => {
     const manager = new WikiManager(testDir);
     manager.create({

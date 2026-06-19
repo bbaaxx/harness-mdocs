@@ -45,11 +45,8 @@ export function dispatch(core: MdocsCore, id?: string) {
 
   const wikiEntries = [];
   for (const wikiRef of initiative.relatedWiki) {
-    const [category, entryId] = wikiRef.split('/');
-    if (category && entryId) {
-      const entry = core.managers.wiki.read(category, entryId);
-      if (entry) wikiEntries.push(entry);
-    }
+    const entry = core.managers.wiki.readByRef(wikiRef);
+    if (entry) wikiEntries.push(entry);
   }
 
   const retrievedMemory = core.managers.search.query(`${initiative.title} ${initiative.objective} ${initiative.tags.join(' ')}`).slice(0, 5);

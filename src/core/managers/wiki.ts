@@ -87,17 +87,40 @@ export class WikiManager {
     return this.parseWikiEntry(content);
   }
 
-  private parseWikiEntry(content: string): WikiEntry {
-    const front = parseFrontmatter(content);
-    if (!Object.keys(front).length) throw new Error('Invalid wiki entry format');
+  readByRef(ref: string): WikiEntry | null {
+    const parts = ref.split('/').filter(Boolean);
+    if (parts.length === 1) return this.readRoot(parts[0]);
+    if (parts.length === 2) return this.read(parts[0], parts[1]);
+    return null;
+  }
 
-    let body = content.replace(/---\n[\s\S]*?\n---/, '').trim();
+  refFor(entry: WikiEntry): string {
+    if (entry.id && fs.existsSync(path.join(this.dir, `${entry.id}.md`))) return entry.id;
+    return entry.category ? `${entry.category}/${entry.id}` : entry.id;
+  }
+
+  private readRoot(id: string): WikiEntry | null {
+    const entryId = this.sanitizeName(id.replace(/\.md$/, ''));
+    const filePath = path.join(this.dir, `${entryId}.md`);
+    if (!fs.existsSync(filePath)) return null;
+    const content = fs.readFileSync(filePath, 'utf8');
+    return this.parseWikiEntry(content, { id: entryId, category: '' });
+  }
+
+  private parseWikiEntry(content: string, defaults: { id?: string; category?: string } = {}): WikiEntry {
+    const front = parseFrontmatter(content);
+    const hasFrontmatter = Object.keys(front).length > 0;
+    if (!hasFrontmatter && !defaults.id) throw new Error('Invalid wiki entry format');
+
+    let body = hasFrontmatter ? content.replace(/---\n[\s\S]*?\n---/, '').trim() : content.trim();
     body = this.stripReferencedBySection(body);
+    const firstHeading = body.match(/^#\s+(.+)$/m)?.[1]?.trim();
+    const fallbackTitle = firstHeading || (defaults.id ? defaults.id.replace(/[-_]+/g, ' ') : '');
 
     return {
-      id: front.id || '',
-      title: front.title || '',
-      category: front.category || '',
+      id: front.id || defaults.id || '',
+      title: front.title || fallbackTitle,
+      category: front.category || defaults.category || '',
       created: front.created || '',
       updated: front.updated || '',
       relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
@@ -135,12 +158,9 @@ export class WikiManager {
 
   private referencedWikiRefs(): Set<string> {
     const refs = new Set<string>();
-    const initiativesDir = path.join(path.dirname(this.dir), 'initiatives');
-    if (!fs.existsSync(initiativesDir)) return refs;
-    const files = fs.readdirSync(initiativesDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
-    for (const fileName of files) {
+    for (const filePath of this.listInitiativeFiles()) {
       try {
-        const content = fs.readFileSync(path.join(initiativesDir, fileName), 'utf8');
+        const content = fs.readFileSync(filePath, 'utf8');
         for (const ref of this.parseRelatedWiki(content)) refs.add(ref);
       } catch {
         // Ignore unreadable initiative files; initiative validation reports them.
@@ -185,13 +205,10 @@ export class WikiManager {
     const entryId = this.sanitizeName(id);
     const wikiRef = `${cat}/${entryId}`;
     const initiativeIds: string[] = [];
-    const initiativesDir = path.join(path.dirname(this.dir), 'initiatives');
-    if (!fs.existsSync(initiativesDir)) return initiativeIds;
 
-    const files = fs.readdirSync(initiativesDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
-    for (const fileName of files) {
+    for (const filePath of this.listInitiativeFiles()) {
       try {
-        const content = fs.readFileSync(path.join(initiativesDir, fileName), 'utf8');
+        const content = fs.readFileSync(filePath, 'utf8');
         const refs = this.parseRelatedWiki(content);
         if (refs.includes(wikiRef)) {
           // Extract initiative id from frontmatter
@@ -261,6 +278,15 @@ export class WikiManager {
       : fs.readdirSync(this.dir).filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
 
     const entries: WikiEntry[] = [];
+    if (!category) {
+      for (const filePath of this.rootWikiFiles()) {
+        try {
+          const entry = this.readRoot(path.basename(filePath, '.md'));
+          if (entry) entries.push(entry);
+        } catch {
+        }
+      }
+    }
     for (const cat of categories) {
       const catDir = path.join(this.dir, cat);
       if (!fs.existsSync(catDir)) continue;
@@ -290,26 +316,7 @@ export class WikiManager {
   }
 
   findRelated(queryTags: string[]): WikiEntry[] {
-    const categories = fs.readdirSync(this.dir)
-      .filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
-
-    const results: WikiEntry[] = [];
-    for (const category of categories) {
-      const catDir = path.join(this.dir, category);
-      const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
-      for (const f of files) {
-        try {
-          const content = fs.readFileSync(path.join(catDir, f), 'utf8');
-          const entry = this.parseWikiEntry(content);
-          if (entry.tags.some(t => queryTags.includes(t))) {
-            results.push(entry);
-          }
-        } catch {
-          // Skip malformed files
-        }
-      }
-    }
-    return results;
+    return this.list().filter(entry => entry.tags.some(t => queryTags.includes(t)));
   }
 
   stub(category: string, id: string, title?: string, template?: string): { success: boolean; existing?: boolean; filePath: string } {
@@ -367,19 +374,12 @@ tags: []
     // Check for broken related_wiki links in initiatives
     const initiativesDir = path.join(path.dirname(this.dir), 'initiatives');
     if (fs.existsSync(initiativesDir)) {
-      const initiativeFiles = fs.readdirSync(initiativesDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
-      for (const fileName of initiativeFiles) {
+      for (const filePath of this.listInitiativeFiles()) {
         try {
-          const content = fs.readFileSync(path.join(initiativesDir, fileName), 'utf8');
+          const content = fs.readFileSync(filePath, 'utf8');
           for (const ref of this.parseRelatedWiki(content)) {
-            const [cat, entryId] = ref.split('/');
-            if (!cat || !entryId) {
-              errors.push(`Initiative ${fileName} has invalid related_wiki format: ${ref}`);
-              continue;
-            }
-            const wikiFilePath = path.join(this.dir, cat, `${entryId}.md`);
-            if (!fs.existsSync(wikiFilePath)) {
-              errors.push(`Initiative ${fileName} references missing wiki entry: ${ref}`);
+            if (!this.readByRef(ref)) {
+              errors.push(`Initiative ${path.relative(initiativesDir, filePath)} references missing wiki entry: ${ref}`);
             }
           }
         } catch {
@@ -411,7 +411,40 @@ tags: []
       }
     }
 
+    for (const filePath of this.rootWikiFiles()) {
+      const relativeName = path.basename(filePath);
+      try {
+        const entry = this.readRoot(path.basename(filePath, '.md'));
+        if (!entry) continue;
+        if (!entry.id) errors.push(`${relativeName} missing id`);
+        if (!entry.title) errors.push(`${relativeName} missing title`);
+      } catch (err: any) {
+        errors.push(`${relativeName} invalid wiki entry format: ${err.message || String(err)}`);
+      }
+    }
+
     return { valid: errors.length === 0, errors, warnings };
+  }
+
+  private rootWikiFiles(): string[] {
+    if (!fs.existsSync(this.dir)) return [];
+    return fs.readdirSync(this.dir, { withFileTypes: true })
+      .filter(entry => entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'INDEX.md')
+      .map(entry => path.join(this.dir, entry.name));
+  }
+
+  private listInitiativeFiles(): string[] {
+    const initiativesDir = path.join(path.dirname(this.dir), 'initiatives');
+    if (!fs.existsSync(initiativesDir)) return [];
+    const files: string[] = [];
+    for (const entry of fs.readdirSync(initiativesDir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'INDEX.md') files.push(path.join(initiativesDir, entry.name));
+      if (entry.isDirectory() && entry.name !== 'archive' && entry.name !== '_archive') {
+        const statusPath = path.join(initiativesDir, entry.name, '_status.md');
+        if (fs.existsSync(statusPath)) files.push(statusPath);
+      }
+    }
+    return files;
   }
 
   checkConsistency(): { consistent: boolean; missing: string[]; orphans: string[]; stale: boolean } {

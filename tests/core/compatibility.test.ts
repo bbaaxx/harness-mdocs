@@ -163,3 +163,40 @@ test('directory-v2 initiative write commands are blocked without flat-file side 
   expect(fs.readFileSync(wikiPath, 'utf8')).toBe(beforeWiki);
   expect(fs.existsSync(path.join(initiativesDir, 'archive', 'example-complete.md'))).toBe(false);
 });
+
+test('directory-v2 root wiki index is searchable without generated index writes', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-root-search-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const wikiIndexPath = path.join(projectDir, 'mdocs', 'wiki', 'index.md');
+  const before = fs.readFileSync(wikiIndexPath, 'utf8');
+  const core = createMdocsCore(projectDir);
+
+  const results = core.managers.search.query('Canonical lowercase index');
+
+  expect(results.some(result => result.type === 'wiki' && result.id === 'index')).toBe(true);
+  expect(fs.readFileSync(wikiIndexPath, 'utf8')).toBe(before);
+  expect(exactChildExists(path.join(projectDir, 'mdocs', 'wiki'), 'INDEX.md')).toBe(false);
+});
+
+test('directory-v2 stable wiki sources satisfy complete initiative learning', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-sources-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  fs.writeFileSync(path.join(projectDir, 'mdocs', 'wiki', 'complete-learning.md'), `---
+id: complete-learning
+title: Complete Learning
+lifecycle: stable
+sources: [example-complete]
+tags: [compatibility]
+---
+
+Stable learning sourced from a complete directory initiative.
+`, 'utf8');
+  const core = createMdocsCore(projectDir);
+
+  const validation = core.commands.validationResult();
+  const graphWarnings = validation.graph.warnings.join('\n');
+
+  expect(graphWarnings).not.toContain('Done initiative example-complete has no stable wiki learning');
+});
