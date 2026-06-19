@@ -303,11 +303,11 @@ Add JWT-based authentication to the API.
 - src/auth.ts
 ```
 
-Status values are `active`, `paused`, and `done`.
+Status values are `active`, `paused`, and `done` in flat-v1 projects. Contract-aware reads also accept directory-v2 `_status.md` initiatives and normalize `complete` to `done`; directory-v2 write commands are guarded until native `_status.md` writes are implemented.
 
 ## Wiki
 
-Wiki entries are durable Markdown notes in `mdocs/wiki/<category>/`.
+Wiki entries are durable Markdown notes in `mdocs/wiki/<category>/`. Contract-aware reads also treat root wiki pages such as `mdocs/wiki/index.md`, `overview.md`, `log.md`, and `glossary.md` as first-class entries without generating or overwriting lowercase canonical indexes.
 
 Example:
 
@@ -330,6 +330,10 @@ Token exchange and session lifecycle details.
 ```
 
 Stable wiki learning matters for completed initiatives. `mdocs validate` warns when a done initiative has no linked stable learning.
+
+For directory-v2 repositories, stable wiki pages can record provenance with `source_initiatives` or `sources`; these satisfy completed-initiative learning gates without requiring the initiative to own a `related_wiki` link.
+
+`mdocs/_obsidian/` is treated only as an optional human-facing visibility/export layer. It is detected for compatibility metadata but is never scanned as canonical initiatives or wiki knowledge. Optional refresh commands can be passed through compatibility config as `obsidianRefreshCommand`; harness-mdocs does not auto-run shell refreshes during read, search, or validation.
 
 ## CLI
 

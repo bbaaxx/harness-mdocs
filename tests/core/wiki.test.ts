@@ -75,6 +75,25 @@ related_wiki: ["architecture/dir-note"]
     expect(manager.getReferencedBy('architecture', 'dir-note')).toContain('dir-init');
   });
 
+  test('wiki list ignores obsidian visibility directories', () => {
+    const manager = new WikiManager(testDir);
+    fs.mkdirSync(path.join(testDir, 'wiki', '_obsidian'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'wiki', '_obsidian', 'README.md'), `---
+id: obsidian-readme
+title: Obsidian Readme
+category: _obsidian
+tags: [obsidian]
+---
+
+Not canonical wiki content.
+`, 'utf8');
+
+    expect(manager.list().some(entry => entry.category === '_obsidian' || entry.id === 'obsidian-readme')).toBe(false);
+    expect(manager.list('_obsidian')).toEqual([]);
+    expect(manager.readByRef('_obsidian/README')).toBeNull();
+    expect(manager.validate().errors).toEqual([]);
+  });
+
   test('creates index files', () => {
     const manager = new WikiManager(testDir);
     manager.create({

@@ -200,3 +200,19 @@ Stable learning sourced from a complete directory initiative.
 
   expect(graphWarnings).not.toContain('Done initiative example-complete has no stable wiki learning');
 });
+
+test('directory-v2 detects optional obsidian visibility layer without indexing it', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-obsidian-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const mdocsRoot = path.join(projectDir, 'mdocs');
+
+  const contract = detectMdocsContract(mdocsRoot, { obsidianRefreshCommand: 'ruby mdocs/scripts/obsidian_refresh.rb' });
+  const core = createMdocsCore(projectDir, { compatibility: { obsidianRefreshCommand: 'ruby mdocs/scripts/obsidian_refresh.rb' } });
+  const results = core.managers.search.query('visibility layer');
+
+  expect(contract.obsidianVisibilityLayer).toBe(true);
+  expect(contract.obsidianDir).toBe(path.join(mdocsRoot, '_obsidian'));
+  expect(contract.obsidianRefreshCommand).toBe('ruby mdocs/scripts/obsidian_refresh.rb');
+  expect(results.some(result => result.type === 'wiki' && result.id.includes('_obsidian'))).toBe(false);
+});

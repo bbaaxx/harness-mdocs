@@ -11,6 +11,7 @@ export interface MdocsCompatibilityConfig {
   wikiIndexMode?: WikiIndexMode;
   archiveDir?: ArchiveDirMode;
   legacyFlatFiles?: boolean | 'auto';
+  obsidianRefreshCommand?: string | string[] | null;
 }
 
 export interface MdocsContract {
@@ -19,6 +20,9 @@ export interface MdocsContract {
   archiveDir: Exclude<ArchiveDirMode, 'auto'>;
   legacyFlatFiles: boolean;
   wikiIndexOwner: IndexOwner;
+  obsidianVisibilityLayer: boolean;
+  obsidianDir?: string;
+  obsidianRefreshCommand?: string | string[] | null;
 }
 
 function safeExists(filePath: string): boolean {
@@ -77,6 +81,8 @@ export function detectMdocsContract(mdocsRoot: string, config: MdocsCompatibilit
   const uppercaseWikiIndex = hasExactChild(wikiDir, 'INDEX.md');
   const underscoreArchive = safeExists(path.join(initiativesDir, '_archive'));
   const flatInitiatives = hasFlatInitiatives(initiativesDir);
+  const obsidianDir = path.join(mdocsRoot, '_obsidian');
+  const obsidianVisibilityLayer = safeExists(obsidianDir) && isDirectory(obsidianDir);
 
   const initiativeMode = config.initiativeMode && config.initiativeMode !== 'auto'
     ? config.initiativeMode
@@ -115,6 +121,17 @@ export function detectMdocsContract(mdocsRoot: string, config: MdocsCompatibilit
     wikiIndexMode,
     archiveDir,
     legacyFlatFiles,
-    wikiIndexOwner
+    wikiIndexOwner,
+    obsidianVisibilityLayer,
+    obsidianDir: obsidianVisibilityLayer ? obsidianDir : undefined,
+    obsidianRefreshCommand: config.obsidianRefreshCommand ?? null
   };
+}
+
+function isDirectory(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).isDirectory();
+  } catch {
+    return false;
+  }
 }

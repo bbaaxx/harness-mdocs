@@ -90,6 +90,7 @@ export class WikiManager {
   readByRef(ref: string): WikiEntry | null {
     const parts = ref.split('/').filter(Boolean);
     if (parts.length === 1) return this.readRoot(parts[0]);
+    if (parts[0] === '_obsidian') return null;
     if (parts.length === 2) return this.read(parts[0], parts[1]);
     return null;
   }
@@ -273,9 +274,10 @@ export class WikiManager {
   }
 
   list(category?: string): WikiEntry[] {
+    if (category && this.sanitizeName(category) === '_obsidian') return [];
     const categories = category
       ? [this.sanitizeName(category)]
-      : fs.readdirSync(this.dir).filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
+      : this.categoryDirs();
 
     const entries: WikiEntry[] = [];
     if (!category) {
@@ -308,7 +310,7 @@ export class WikiManager {
     }
     this.updateIndices();
     const paths = [path.join(this.dir, 'INDEX.md')];
-    const categories = fs.readdirSync(this.dir).filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
+    const categories = this.categoryDirs();
     for (const category of categories) {
       paths.push(path.join(this.dir, category, 'INDEX.md'));
     }
@@ -368,8 +370,7 @@ tags: []
     const errors: string[] = [];
     const warnings: string[] = [];
     const referencedWiki = this.referencedWikiRefs();
-    const categories = fs.readdirSync(this.dir)
-      .filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
+    const categories = this.categoryDirs();
 
     // Check for broken related_wiki links in initiatives
     const initiativesDir = path.join(path.dirname(this.dir), 'initiatives');
@@ -433,6 +434,11 @@ tags: []
       .map(entry => path.join(this.dir, entry.name));
   }
 
+  private categoryDirs(): string[] {
+    if (!fs.existsSync(this.dir)) return [];
+    return fs.readdirSync(this.dir).filter(f => f !== '_obsidian' && fs.statSync(path.join(this.dir, f)).isDirectory());
+  }
+
   private listInitiativeFiles(): string[] {
     const initiativesDir = path.join(path.dirname(this.dir), 'initiatives');
     if (!fs.existsSync(initiativesDir)) return [];
@@ -464,8 +470,7 @@ tags: []
       };
     }
 
-    const categories = fs.readdirSync(this.dir)
-      .filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
+    const categories = this.categoryDirs();
 
     // Check root INDEX.md
     const rootIndexPath = path.join(this.dir, 'INDEX.md');
@@ -577,8 +582,7 @@ tags: []
     if (this.contract.wikiIndexOwner !== 'harness') {
       return;
     }
-    const categories = fs.readdirSync(this.dir)
-      .filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
+    const categories = this.categoryDirs();
 
     // Per-category indices
     for (const category of categories) {

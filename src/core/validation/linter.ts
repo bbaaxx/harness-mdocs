@@ -43,6 +43,7 @@ export class MdocsLinter {
         results.push(this.lintFile(filePath));
       }
       const categories = fs.readdirSync(wikiDir).filter(f => {
+        if (f === '_obsidian') return false;
         const stat = fs.statSync(path.join(wikiDir, f));
         return stat.isDirectory();
       });
@@ -103,7 +104,7 @@ export class MdocsLinter {
           });
         } catch { /* skip */ }
       }
-      const categories = fs.readdirSync(wikiDir).filter(f => fs.statSync(path.join(wikiDir, f)).isDirectory());
+      const categories = fs.readdirSync(wikiDir).filter(f => f !== '_obsidian' && fs.statSync(path.join(wikiDir, f)).isDirectory());
       for (const category of categories) {
         const catDir = path.join(wikiDir, category);
         const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
