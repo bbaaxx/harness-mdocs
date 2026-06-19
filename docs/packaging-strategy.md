@@ -50,15 +50,24 @@ After changing the config, restart OpenCode. The running process does not reload
 
 Do not require `opencode-mdocs` beside `harness-mdocs` for new installs. If backwards compatibility on npm is needed later, publish a small `opencode-mdocs` wrapper/deprecation release that depends on and re-exports `harness-mdocs/opencode`; that is a separate release decision and is not required before publishing `harness-mdocs`.
 
+## CI/CD phases
+
+Phase 1 validates integration and pre-publish readiness without publishing:
+
+1. Pull requests targeting `staging` run `npm run quality` on Node 18 and 20.
+2. Pushes to `staging` run `npm run quality` in the GitHub `staging` environment.
+3. Pushes to `main` run `npm run release:check` in the GitHub `release` environment.
+4. Version tags matching `v*` also run `npm run release:check` in the `release` environment.
+
+Phase 2 will add actual npm publishing on version tags after release checks and environment approval. Until then, tag workflows are pre-publish validation only.
+
 ## Publish checklist
 
 Before publish:
 
-1. Run `npm run build`.
-2. Run `npm test -- --runInBand`.
-3. Run `npm --cache .npm-cache pack --dry-run`.
-4. Inspect the dry-run tarball contents for `dist`, `agents`, `skills`, `prompts`, `templates`, README, and LICENSE.
-5. Confirm the package metadata still includes `bin.mdocs`.
+1. Run `npm run release:check` locally or confirm the GitHub `release` environment check passed.
+2. Inspect the dry-run tarball contents for `dist`, `agents`, `skills`, `prompts`, `templates`, README, and LICENSE.
+3. Confirm the package metadata still includes `bin.mdocs`.
 
 After publish and replacement in a consuming folder:
 

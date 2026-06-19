@@ -455,6 +455,8 @@ npm run release:check
 
 Local quality tooling stays lightweight: `lint` is TypeScript typechecking, `coverage` emits text and lcov reports, and `mdocs:lint` validates initiative/wiki graph health through the built CLI. `release:check` adds the package dry run, which invokes npm lifecycle scripts and may refresh generated plugin assets. Complexity analysis is intentionally deferred until the project needs a dedicated lint layer.
 
+GitHub Actions mirrors the local gates in two phases: PRs into `staging` and pushes to `staging` run `npm run quality`; pushes to `main` and `v*` tags run `npm run release:check` in the `release` environment as a pre-publish check only. Publishing is intentionally separate from this CI phase.
+
 Before publishing:
 
 ```bash
