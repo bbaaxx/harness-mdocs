@@ -738,7 +738,7 @@ related_wiki: []
     await expect((plugin as any).tool.mdocs.execute({ command: 'initiative.create', args: {} })).resolves.toEqual({ error: 'initiative.create requires title' });
     await expect((plugin as any).tool.mdocs.execute({ command: 'initiative.update', args: {} })).resolves.toEqual({ error: 'initiative.update requires id' });
     await expect((plugin as any).tool.mdocs.execute({ command: 'initiative.done', args: { id: 'missing' } })).resolves.toEqual({ error: 'Initiative not found: missing' });
-    await expect((plugin as any).tool.mdocs.execute({ command: 'wiki.create', args: { category: 'developer', id: 'missing-title' } })).resolves.toEqual({ error: 'wiki.create requires category, id, and title' });
+    await expect((plugin as any).tool.mdocs.execute({ command: 'wiki.create', args: { category: 'developer', id: 'missing-title' } })).resolves.toEqual({ error: 'wiki.create requires id and title' });
     await expect((plugin as any).tool.mdocs.execute({ command: 'initiative.delete', args: {} }))
       .resolves.toEqual({ error: 'initiative.delete requires id' });
     await expect((plugin as any).tool.mdocs.execute({ command: 'initiative.delete', args: { id: 'missing' } }))
@@ -746,7 +746,7 @@ related_wiki: []
     await expect((plugin as any).tool.mdocs.execute({ command: 'initiative.archive', args: {} }))
       .resolves.toEqual({ error: 'initiative.archive requires id' });
     await expect((plugin as any).tool.mdocs.execute({ command: 'wiki.delete', args: { category: 'developer' } }))
-      .resolves.toEqual({ error: 'wiki.delete requires category and id' });
+      .resolves.toEqual({ error: 'wiki.delete requires id' });
 
     const unknown = await (plugin as any).tool.mdocs.execute({ command: 'nope', args: {} });
     expect(unknown.error).toContain('Unsupported mdocs command: nope');

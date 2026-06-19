@@ -139,24 +139,48 @@ test('directory-v2 lookup and search include directory initiatives', () => {
   expect(core.managers.search.query('directory-v2 initiative').some(result => result.id === 'example-active')).toBe(true);
 });
 
-test('directory-v2 initiative write commands are blocked without flat-file side effects', async () => {
+test('directory-v2 malformed wiki.link is blocked without flat-file side effects', async () => {
   const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-guards-'));
   const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
   copyDir(fixtureRoot, projectDir);
   const core = createMdocsCore(projectDir);
   const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
   const statusPath = path.join(initiativesDir, 'example-active', '_status.md');
-  const wikiPath = path.join(projectDir, 'mdocs', 'wiki', 'systems', 'system-page.md');
   const beforeFiles = fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort();
   const beforeStatus = fs.readFileSync(statusPath, 'utf8');
-  const beforeWiki = fs.readFileSync(wikiPath, 'utf8');
 
-  await expect(core.commands.execute('wiki.link', { initiativeId: 'example-active', wikiSlug: 'systems/system-page' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
+  await expect(core.commands.execute('wiki.link', { initiativeId: 'example-active', wikiSlug: 'bad/ref/too-deep' })).resolves.toMatchObject({ error: expect.stringContaining('Invalid wikiSlug') });
 
   expect(fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort()).toEqual(beforeFiles);
   expect(fs.readFileSync(statusPath, 'utf8')).toBe(beforeStatus);
-  expect(fs.readFileSync(wikiPath, 'utf8')).toBe(beforeWiki);
   expect(fs.existsSync(path.join(initiativesDir, 'archive', 'example-complete.md'))).toBe(false);
+});
+
+test('directory-v2 wiki.link updates status and wiki backlinks without flat-file side effects', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-link-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
+  const statusPath = path.join(initiativesDir, 'example-active', '_status.md');
+  const wikiPath = path.join(projectDir, 'mdocs', 'wiki', 'systems', 'system-page.md');
+  const wikiIndexPath = path.join(projectDir, 'mdocs', 'wiki', 'index.md');
+  const beforeWikiIndex = fs.readFileSync(wikiIndexPath, 'utf8');
+
+  const result = await core.commands.execute('wiki.link', { initiativeId: 'example-active', wikiSlug: 'systems/system-page' });
+  await core.commands.execute('wiki.link', { initiativeId: 'example-active', wikiSlug: 'systems/system-page' });
+  const status = fs.readFileSync(statusPath, 'utf8');
+  const wiki = fs.readFileSync(wikiPath, 'utf8');
+
+  expect(result).toMatchObject({ success: true, bidirectional: true, initiativeId: 'example-active', wikiSlug: 'systems/system-page' });
+  expect(core.managers.initiatives.findById('example-active')?.relatedWiki).toContain('systems/system-page');
+  expect((status.match(/systems\/system-page/g) || []).length).toBe(1);
+  expect(core.managers.wiki.read('systems', 'system-page')?.relatedInitiatives).toContain('example-active');
+  expect(wiki).toContain('## Referenced By');
+  expect(wiki).toContain('- example-active');
+  expect(fs.existsSync(path.join(initiativesDir, 'example-active.md'))).toBe(false);
+  expect(fs.readFileSync(wikiIndexPath, 'utf8')).toBe(beforeWikiIndex);
+  expect(exactChildExists(path.join(projectDir, 'mdocs', 'wiki'), 'INDEX.md')).toBe(false);
 });
 
 test('directory-v2 initiative.create writes a folder status file without generated indices', async () => {

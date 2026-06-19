@@ -303,11 +303,11 @@ Add JWT-based authentication to the API.
 - src/auth.ts
 ```
 
-Status values are `active`, `paused`, and `done` in flat-v1 projects. Contract-aware reads also accept directory-v2 `_status.md` initiatives and normalize `complete` to `done`; directory-v2 write commands are guarded until native `_status.md` writes are implemented.
+Status values are `active`, `paused`, and `done` in flat-v1 projects. Contract-aware reads also accept directory-v2 `_status.md` initiatives and normalize `complete` to `done`. Directory-v2 projects support native `_status.md` writes for initiative create, update, done, delete, archive, and wiki links without creating flat initiative files.
 
 ## Wiki
 
-Wiki entries are durable Markdown notes in `mdocs/wiki/<category>/`. Contract-aware reads also treat root wiki pages such as `mdocs/wiki/index.md`, `overview.md`, `log.md`, and `glossary.md` as first-class entries without generating or overwriting lowercase canonical indexes.
+Wiki entries are durable Markdown notes in `mdocs/wiki/<category>/`. Contract-aware reads and writes also treat root wiki pages such as `mdocs/wiki/index.md`, `overview.md`, `log.md`, and `glossary.md` as first-class entries without generating or overwriting lowercase canonical indexes. Root wiki commands use an omitted or empty category (`wiki.create` with `id` and `title`, no `category`). `wiki.link` accepts both `category/id` and root `id` references.
 
 Example:
 

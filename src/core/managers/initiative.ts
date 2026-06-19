@@ -137,7 +137,7 @@ export class InitiativeManager {
   }
 
   assertWriteSupported(operation: string): void {
-    const directoryNativeWrites = new Set(['initiative.create', 'initiative.update', 'initiative.done', 'initiative.delete', 'initiative.archive']);
+    const directoryNativeWrites = new Set(['initiative.create', 'initiative.update', 'initiative.done', 'initiative.delete', 'initiative.archive', 'wiki.link']);
     if (this.contract.initiativeMode === 'directory' && !directoryNativeWrites.has(operation)) {
       throw new Error(`${operation} is not supported for directory-v2 initiatives; write support is read-only to prevent accidental flat-file writes.`);
     }
@@ -429,7 +429,14 @@ export class InitiativeManager {
           warnings.push(`${fileName} has non-string wiki reference: ${String(ref)}`);
           continue;
         }
-        const [category, id, ...rest] = ref.split('/');
+        const parts = ref.split('/').filter(Boolean);
+        if (parts.length === 1) {
+          const [id] = parts;
+          if (!isSafePathSegment(id)) warnings.push(`${fileName} has unsafe wiki reference: ${ref}`);
+          else if (!fs.existsSync(path.join(wikiRoot, `${id}.md`))) warnings.push(`${fileName} references missing wiki entry: ${ref}`);
+          continue;
+        }
+        const [category, id, ...rest] = parts;
         if (!isSafePathSegment(category) || !isSafePathSegment(id) || rest.length > 0) {
           warnings.push(`${fileName} has unsafe wiki reference: ${ref}`);
         } else if (!fs.existsSync(path.join(wikiRoot, category, `${id}.md`))) {

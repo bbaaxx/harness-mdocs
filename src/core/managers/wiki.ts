@@ -47,6 +47,16 @@ export class WikiManager {
     return base;
   }
 
+  private isRootCategory(category: string | undefined): boolean {
+    return category === undefined || category === '';
+  }
+
+  private assertRootWritable(id: string): void {
+    if (id.toLowerCase() === 'index' && this.contract.wikiIndexMode === 'canonical-lowercase') {
+      throw new Error('Refusing to overwrite canonical root wiki index: index');
+    }
+  }
+
   private generateReferencedBySection(initiativeIds: string[]): string {
     if (initiativeIds.length === 0) return '';
     const lines = initiativeIds.map(id => `- ${id}`);
@@ -66,8 +76,16 @@ export class WikiManager {
   private referencedByMarker = '\n\n## Referenced By\n';
 
   create(entry: WikiEntry): string {
-    const category = this.sanitizeName(entry.category);
     const id = this.sanitizeName(entry.id);
+    if (this.isRootCategory(entry.category)) {
+      this.assertRootWritable(id);
+      const filePath = path.join(this.dir, `${id}.md`);
+      const content = this.toFrontmatter({ ...entry, category: '' }) + entry.content + this.generateReferencedBySection(entry.relatedInitiatives);
+      fs.writeFileSync(filePath, content, 'utf8');
+      this.updateIndices();
+      return filePath;
+    }
+    const category = this.sanitizeName(entry.category);
     const categoryDir = path.join(this.dir, category);
     fs.mkdirSync(categoryDir, { recursive: true });
     const filePath = path.join(categoryDir, `${id}.md`);
@@ -91,7 +109,7 @@ export class WikiManager {
     const parts = ref.split('/').filter(Boolean);
     if (parts.length === 1) return this.readRoot(parts[0]);
     if (parts[0] === '_obsidian') return null;
-    if (parts.length === 2) return this.read(parts[0], parts[1]);
+    if (parts.length === 2) return this.read(parts[0], parts[1].replace(/\.md$/, ''));
     return null;
   }
 
@@ -171,8 +189,19 @@ export class WikiManager {
   }
 
   update(category: string, id: string, entry: WikiEntry): string {
-    const cat = this.sanitizeName(category);
     const entryId = this.sanitizeName(id);
+    if (this.isRootCategory(category)) {
+      this.assertRootWritable(entryId);
+      const filePath = path.join(this.dir, `${entryId}.md`);
+      if (!fs.existsSync(filePath)) throw new Error(`Wiki entry not found: ${entryId}`);
+      entry.updated = new Date().toISOString().split('T')[0];
+      const cleanContent = this.stripReferencedBySection(entry.content);
+      const referencedBy = this.generateReferencedBySection(entry.relatedInitiatives);
+      fs.writeFileSync(filePath, this.toFrontmatter({ ...entry, category: '' }) + cleanContent + referencedBy, 'utf8');
+      this.updateIndices();
+      return filePath;
+    }
+    const cat = this.sanitizeName(category);
     const filePath = path.join(this.dir, cat, `${entryId}.md`);
 
     if (!fs.existsSync(filePath)) {
@@ -201,10 +230,26 @@ export class WikiManager {
     return this.update(category, id, entry);
   }
 
+  addRelatedInitiativeByRef(ref: string, initiativeId: string): string {
+    const parts = ref.split('/').filter(Boolean);
+    if (parts.length === 1) {
+      const id = parts[0].replace(/\.md$/, '');
+      const entry = this.readRoot(id);
+      if (!entry) throw new Error(`Wiki entry not found: ${ref}`);
+      if (!entry.relatedInitiatives.includes(initiativeId)) {
+        entry.relatedInitiatives.push(initiativeId);
+        entry.updated = new Date().toISOString().split('T')[0];
+      }
+      return this.update('', id, entry);
+    }
+    if (parts.length === 2) return this.addRelatedInitiative(parts[0], parts[1].replace(/\.md$/, ''), initiativeId);
+    throw new Error(`Invalid wikiSlug format: ${ref}. Expected id or category/id`);
+  }
+
   getReferencedBy(category: string, id: string): string[] {
-    const cat = this.sanitizeName(category);
     const entryId = this.sanitizeName(id);
-    const wikiRef = `${cat}/${entryId}`;
+    const cat = this.isRootCategory(category) ? '' : this.sanitizeName(category);
+    const wikiRef = cat ? `${cat}/${entryId}` : entryId;
     const initiativeIds: string[] = [];
 
     for (const filePath of this.listInitiativeFiles()) {
@@ -264,8 +309,17 @@ export class WikiManager {
   }
 
   delete(category: string, id: string): void {
-    const cat = this.sanitizeName(category);
     const entryId = this.sanitizeName(id);
+    if (this.isRootCategory(category)) {
+      this.assertRootWritable(entryId);
+      const filePath = path.join(this.dir, `${entryId}.md`);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        this.updateIndices();
+      }
+      return;
+    }
+    const cat = this.sanitizeName(category);
     const filePath = path.join(this.dir, cat, `${entryId}.md`);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -322,8 +376,18 @@ export class WikiManager {
   }
 
   stub(category: string, id: string, title?: string, template?: string): { success: boolean; existing?: boolean; filePath: string } {
-    const cat = this.sanitizeName(category);
     const entryId = this.sanitizeName(id);
+    if (this.isRootCategory(category)) {
+      this.assertRootWritable(entryId);
+      const filePath = path.join(this.dir, `${entryId}.md`);
+      if (fs.existsSync(filePath)) return { success: false, existing: true, filePath };
+      const date = new Date().toISOString().split('T')[0];
+      const stubContent = template || this.defaultStubTemplate(title || entryId, '', entryId, date);
+      fs.writeFileSync(filePath, stubContent, 'utf8');
+      this.updateIndices();
+      return { success: true, filePath };
+    }
+    const cat = this.sanitizeName(category);
     const categoryDir = path.join(this.dir, cat);
     fs.mkdirSync(categoryDir, { recursive: true });
     const filePath = path.join(categoryDir, `${entryId}.md`);

@@ -188,10 +188,11 @@ export class MdocsCommandRegistry {
   }
 
   private createWiki(args: Record<string, any>) {
-    if (!args.category || !args.id || !args.title) return { error: 'wiki.create requires category, id, and title' };
+    if (!args.id || !args.title) return { error: 'wiki.create requires id and title' };
     const date = today();
+    const category = args.category || '';
     const filePath = this.context.wiki.create({
-      category: args.category,
+      category,
       id: args.id,
       title: args.title,
       created: date,
@@ -206,13 +207,14 @@ export class MdocsCommandRegistry {
       supersedes: Array.isArray(args.supersedes) ? args.supersedes : undefined,
       relatedWiki: Array.isArray(args.relatedWiki) ? args.relatedWiki : undefined
     });
-    return { success: true, filename: path.join(path.basename(path.dirname(filePath)), path.basename(filePath)), id: args.id };
+    return { success: true, filename: category ? path.join(path.basename(path.dirname(filePath)), path.basename(filePath)) : path.basename(filePath), id: args.id };
   }
 
   private updateWiki(args: Record<string, any>) {
-    if (!args.category || !args.id) return { error: 'wiki.update requires category and id' };
-    const existing = this.context.wiki.read(args.category, args.id);
-    if (!existing) return { error: `Wiki entry not found: ${args.category}/${args.id}` };
+    if (!args.id) return { error: 'wiki.update requires id' };
+    const category = args.category || '';
+    const existing = category ? this.context.wiki.read(category, args.id) : this.context.wiki.readByRef(args.id);
+    if (!existing) return { error: `Wiki entry not found: ${category ? `${category}/` : ''}${args.id}` };
     if (args.title !== undefined) existing.title = args.title;
     if (args.content !== undefined) existing.content = args.content;
     if (Array.isArray(args.tags)) existing.tags = args.tags;
@@ -222,22 +224,24 @@ export class MdocsCommandRegistry {
     if (args.confidence !== undefined) existing.confidence = args.confidence;
     if (Array.isArray(args.sourceInitiatives)) existing.sourceInitiatives = args.sourceInitiatives;
     if (Array.isArray(args.supersedes)) existing.supersedes = args.supersedes;
-    const filePath = this.context.wiki.update(args.category, args.id, existing);
-    return { success: true, filename: path.join(path.basename(path.dirname(filePath)), path.basename(filePath)), id: args.id };
+    const filePath = this.context.wiki.update(category, args.id, existing);
+    return { success: true, filename: category ? path.join(path.basename(path.dirname(filePath)), path.basename(filePath)) : path.basename(filePath), id: args.id };
   }
 
   private stubWiki(args: Record<string, any>) {
-    if (!args.category || !args.id) return { error: 'wiki.stub requires category and id' };
-    const result = this.context.wiki.stub(args.category, args.id, args.title, args.template);
+    if (!args.id) return { error: 'wiki.stub requires id' };
+    const result = this.context.wiki.stub(args.category || '', args.id, args.title, args.template);
     if (result.existing) return { success: false, existing: true, filePath: path.relative(this.context.mdocsRoot, result.filePath) };
     return { success: true, category: args.category, id: args.id, filePath: path.relative(this.context.mdocsRoot, result.filePath) };
   }
 
   private deleteWiki(args: Record<string, any>) {
-    if (!args.category || !args.id) return { error: 'wiki.delete requires category and id' };
-    if (!this.context.wiki.read(args.category, args.id)) return { error: `Wiki entry not found: ${args.category}/${args.id}` };
-    this.context.wiki.delete(args.category, args.id);
-    return { success: true, category: args.category, id: args.id, deletedFilename: `${args.category}/${args.id}.md` };
+    if (!args.id) return { error: 'wiki.delete requires id' };
+    const category = args.category || '';
+    const existing = category ? this.context.wiki.read(category, args.id) : this.context.wiki.readByRef(args.id);
+    if (!existing) return { error: `Wiki entry not found: ${category ? `${category}/` : ''}${args.id}` };
+    this.context.wiki.delete(category, args.id);
+    return { success: true, category, id: args.id, deletedFilename: category ? `${category}/${args.id}.md` : `${args.id}.md` };
   }
 
   private listWiki(args: Record<string, any>) {
@@ -254,19 +258,25 @@ export class MdocsCommandRegistry {
   private linkWiki(args: Record<string, any>) {
     if (!args.initiativeId || !args.wikiSlug) return { error: 'wiki.link requires initiativeId and wikiSlug' };
     this.context.initiatives.assertWriteSupported('wiki.link');
-    const [category, entryId] = args.wikiSlug.split('/');
-    if (!category || !entryId) return { error: `Invalid wikiSlug format: ${args.wikiSlug}. Expected category/id` };
+    const rawParts = String(args.wikiSlug).split('/');
+    if (rawParts.some(part => !part)) return { error: `Invalid wikiSlug format: ${args.wikiSlug}. Expected id or category/id` };
+    const parts: string[] = rawParts;
+    if (parts.length !== 1 && parts.length !== 2) return { error: `Invalid wikiSlug format: ${args.wikiSlug}. Expected id or category/id` };
+    const normalizedParts = parts.map((part, index) => index === parts.length - 1 ? part.replace(/\.md$/, '') : part);
+    const wikiSlug = normalizedParts.join('/');
+    if (normalizedParts.length === 1 && normalizedParts[0].toLowerCase() === 'index') return { error: 'Refusing to overwrite canonical root wiki index: index' };
+    if (!this.context.wiki.readByRef(wikiSlug)) return { error: `Wiki entry not found: ${wikiSlug}` };
     const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.initiativeId);
     if (!fileName) return { error: `Initiative not found: ${args.initiativeId}` };
     const initiative = this.context.initiatives.read(fileName);
     if (!initiative) return { error: `Initiative not found: ${args.initiativeId}` };
-    if (!initiative.relatedWiki.includes(args.wikiSlug)) {
-      initiative.relatedWiki.push(args.wikiSlug);
+    if (!initiative.relatedWiki.includes(wikiSlug)) {
+      initiative.relatedWiki.push(wikiSlug);
       initiative.updated = today();
       this.context.initiatives.update(fileName, initiative);
     }
-    this.context.wiki.addRelatedInitiative(category, entryId, args.initiativeId);
-    return { success: true, bidirectional: true, initiativeId: args.initiativeId, wikiSlug: args.wikiSlug };
+    this.context.wiki.addRelatedInitiativeByRef(wikiSlug, args.initiativeId);
+    return { success: true, bidirectional: true, initiativeId: args.initiativeId, wikiSlug };
   }
 
   private crossReferenceWiki(args: Record<string, any>) {
