@@ -151,15 +151,77 @@ test('directory-v2 initiative write commands are blocked without flat-file side 
   const beforeStatus = fs.readFileSync(statusPath, 'utf8');
   const beforeWiki = fs.readFileSync(wikiPath, 'utf8');
 
-  await expect(core.commands.execute('initiative.create', { title: 'New Dir V2' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
-  await expect(core.commands.execute('initiative.update', { id: 'example-active', updates: { owner: 'x' } })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
-  await expect(core.commands.execute('initiative.delete', { id: 'example-active' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
   await expect(core.commands.execute('wiki.link', { initiativeId: 'example-active', wikiSlug: 'systems/system-page' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
 
   expect(fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort()).toEqual(beforeFiles);
   expect(fs.readFileSync(statusPath, 'utf8')).toBe(beforeStatus);
   expect(fs.readFileSync(wikiPath, 'utf8')).toBe(beforeWiki);
   expect(fs.existsSync(path.join(initiativesDir, 'archive', 'example-complete.md'))).toBe(false);
+});
+
+test('directory-v2 initiative.create writes a folder status file without generated indices', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-create-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
+
+  const result = await core.commands.execute('initiative.create', {
+    title: 'Native Directory Write',
+    objective: 'Create directory initiative safely.',
+    tags: ['compatibility'],
+    plan: ['Write _status.md']
+  });
+
+  const statusPath = path.join(initiativesDir, 'native-directory-write', '_status.md');
+  expect(result).toMatchObject({ success: true, id: 'native-directory-write', filename: 'native-directory-write' });
+  expect(fs.existsSync(statusPath)).toBe(true);
+  expect(fs.readFileSync(statusPath, 'utf8')).toContain('Create directory initiative safely.');
+  expect(core.managers.initiatives.findById('native-directory-write')?.title).toBe('Native Directory Write');
+  expect(exactChildExists(initiativesDir, 'native-directory-write.md')).toBe(false);
+});
+
+test('directory-v2 initiative.update edits status metadata and appends progress', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-update-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
+  const statusPath = path.join(initiativesDir, 'example-active', '_status.md');
+  const beforeFiles = fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort();
+
+  const result = await core.commands.execute('initiative.update', {
+    id: 'example-active',
+    updates: { owner: 'dir-owner', phase: 'implementation', nextAction: 'Keep writing safely' },
+    progressNote: 'Directory update note'
+  });
+  const status = fs.readFileSync(statusPath, 'utf8');
+
+  expect(result).toMatchObject({ success: true, id: 'example-active', filename: 'example-active' });
+  expect(status).toContain('owner: dir-owner');
+  expect(status).toContain('phase: implementation');
+  expect(status).toContain('next_action: Keep writing safely');
+  expect(status).toContain('Directory update note');
+  expect(core.managers.initiatives.findById('example-active')?.owner).toBe('dir-owner');
+  expect(fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort()).toEqual(beforeFiles);
+});
+
+test('directory-v2 initiative.delete removes initiative folder only', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-delete-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
+  const wikiIndexPath = path.join(projectDir, 'mdocs', 'wiki', 'index.md');
+  const beforeWikiIndex = fs.readFileSync(wikiIndexPath, 'utf8');
+
+  const result = await core.commands.execute('initiative.delete', { id: 'example-active' });
+
+  expect(result).toMatchObject({ success: true, id: 'example-active', deletedFilename: 'example-active' });
+  expect(fs.existsSync(path.join(initiativesDir, 'example-active'))).toBe(false);
+  expect(core.managers.initiatives.findById('example-active')).toBeNull();
+  expect(fs.readFileSync(wikiIndexPath, 'utf8')).toBe(beforeWikiIndex);
+  expect(exactChildExists(initiativesDir, 'INDEX.md')).toBe(true);
 });
 
 test('directory-v2 initiative.done updates status file without flat-file side effects', async () => {

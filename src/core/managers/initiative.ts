@@ -137,7 +137,7 @@ export class InitiativeManager {
   }
 
   assertWriteSupported(operation: string): void {
-    const directoryNativeWrites = new Set(['initiative.done', 'initiative.archive']);
+    const directoryNativeWrites = new Set(['initiative.create', 'initiative.update', 'initiative.done', 'initiative.delete', 'initiative.archive']);
     if (this.contract.initiativeMode === 'directory' && !directoryNativeWrites.has(operation)) {
       throw new Error(`${operation} is not supported for directory-v2 initiatives; write support is read-only to prevent accidental flat-file writes.`);
     }
@@ -145,6 +145,9 @@ export class InitiativeManager {
 
   create(initiative: Initiative): string {
     this.assertWriteSupported('initiative.create');
+    if (this.contract.initiativeMode === 'directory') {
+      return this.store.create(initiative).dirPath;
+    }
     const fileName = this.formatFileName(initiative);
     const filePath = path.join(this.dir, fileName);
 
@@ -209,6 +212,11 @@ export class InitiativeManager {
 
   update(fileName: string, initiative: Initiative): string {
     this.assertWriteSupported('initiative.update');
+    if (this.contract.initiativeMode === 'directory') {
+      const previous = this.store.read(fileName)?.initiative.progressLog || [];
+      const newProgress = initiative.progressLog.slice(previous.length).join('\n- ');
+      return this.store.update(fileName, initiative, newProgress || undefined).dirPath;
+    }
     const sanitized = this.sanitizeFileName(fileName);
     this.assertUniqueId(initiative.id, sanitized);
     const oldPath = path.join(this.dir, sanitized);
@@ -255,6 +263,10 @@ export class InitiativeManager {
 
   delete(fileName: string): void {
     this.assertWriteSupported('initiative.delete');
+    if (this.contract.initiativeMode === 'directory') {
+      this.store.delete(fileName);
+      return;
+    }
     const sanitized = this.sanitizeFileName(fileName);
     const filePath = path.join(this.dir, sanitized);
     if (fs.existsSync(filePath)) {

@@ -75,6 +75,45 @@ export class InitiativeStore {
     return this.list({ includeArchived: true }).find(record => record.key === key || record.initiative.id === key) || null;
   }
 
+  create(initiative: Initiative): { key: string; dirPath: string; filePath: string; initiative: Initiative } {
+    const key = this.safeDirectoryKey(slugify(initiative.id || initiative.title));
+    if (this.findById(initiative.id, { includeArchived: true }) || this.read(key)) {
+      throw new Error(`Initiative already exists: ${initiative.id || key}`);
+    }
+    const dirPath = path.join(this.initiativesDir, key);
+    const filePath = path.join(dirPath, '_status.md');
+    if (fs.existsSync(dirPath)) throw new Error(`Initiative directory already exists: ${key}`);
+    fs.mkdirSync(dirPath, { recursive: true });
+    fs.writeFileSync(filePath, this.formatStatusFile(initiative), 'utf8');
+    const record = this.read(key);
+    if (!record) throw new Error(`Directory initiative not found after create: ${key}`);
+    return { key, dirPath, filePath, initiative: record.initiative };
+  }
+
+  update(key: string, initiative: Initiative, progressNote?: string): { key: string; dirPath: string; filePath: string; initiative: Initiative } {
+    const record = this.read(key);
+    if (!record || record.sourceKind !== 'directory-status' || record.archived) {
+      throw new Error(`Directory initiative not found: ${key}`);
+    }
+    const duplicate = this.findById(initiative.id, { includeArchived: true });
+    if (duplicate && duplicate.key !== record.key) throw new Error(`Duplicate initiative id "${initiative.id}" found in ${duplicate.key}`);
+    this.updateStatusFile(record.filePath, this.frontmatterUpdates(initiative), progressNote);
+    const updated = this.read(record.key);
+    if (!updated) throw new Error(`Directory initiative not found after update: ${key}`);
+    return { key: record.key, dirPath: path.dirname(record.filePath), filePath: record.filePath, initiative: updated.initiative };
+  }
+
+  delete(key: string): void {
+    const record = this.read(key);
+    if (!record || record.sourceKind !== 'directory-status' || record.archived) {
+      throw new Error(`Directory initiative not found: ${key}`);
+    }
+    const slug = this.safeDirectoryKey(record.key);
+    const dirPath = path.join(this.initiativesDir, slug);
+    if (!fs.existsSync(dirPath)) throw new Error(`Directory initiative not found: ${key}`);
+    fs.rmSync(dirPath, { recursive: true, force: false });
+  }
+
   markDone(key: string, timestamp = new Date()): { key: string; filePath: string; initiative: Initiative } {
     const record = this.read(key);
     if (!record || record.sourceKind !== 'directory-status' || record.archived) {
@@ -194,6 +233,41 @@ export class InitiativeStore {
       nextAction: front.next_action || undefined
     };
     return { key, filePath, sourceKind, archived, rawFrontmatter: front, initiative };
+  }
+
+  private formatStatusFile(initiative: Initiative): string {
+    const front = this.frontmatterUpdates(initiative);
+    const lines = Object.entries(front).map(([key, value]) => `${key}: ${value}`);
+    const sections = [
+      initiative.objective ? `## Objective\n${initiative.objective}` : '',
+      initiative.plan.length ? `## Plan\n${initiative.plan.map(item => `- [${item.status === 'done' ? 'x' : item.status === 'in-progress' ? '/' : ' '}] ${item.description}`).join('\n')}` : '',
+      initiative.progressLog.length ? `## Progress Log\n${initiative.progressLog.map(item => `- ${item}`).join('\n')}` : '',
+      initiative.artifacts.length ? `## Artifacts\n${initiative.artifacts.map(item => `- ${item}`).join('\n')}` : ''
+    ].filter(Boolean).join('\n\n');
+    return `---\n${lines.join('\n')}\n---\n\n${sections}\n`;
+  }
+
+  private frontmatterUpdates(initiative: Initiative): Record<string, string> {
+    const status = initiative.status === 'done' ? 'complete' : initiative.status;
+    const front: Record<string, string> = {
+      id: initiative.id,
+      title: initiative.title,
+      status,
+      started: initiative.created,
+      updated: initiative.updated || new Date().toISOString().split('T')[0],
+      owner: initiative.owner || '',
+      tags: JSON.stringify(initiative.tags || []),
+      related_wiki: JSON.stringify(initiative.relatedWiki || [])
+    };
+    if (initiative.priority) front.priority = initiative.priority;
+    if (initiative.dueDate) front.due_date = initiative.dueDate;
+    if (initiative.dependsOn) front.depends_on = JSON.stringify(initiative.dependsOn);
+    if (initiative.phase) front.phase = initiative.phase;
+    if (initiative.handoffSummary) front.handoff_summary = initiative.handoffSummary;
+    if (initiative.openQuestions) front.open_questions = JSON.stringify(initiative.openQuestions);
+    if (initiative.blockers) front.blockers = JSON.stringify(initiative.blockers);
+    if (initiative.nextAction) front.next_action = initiative.nextAction;
+    return front;
   }
 
   private safeDirectoryKey(key: string): string {
