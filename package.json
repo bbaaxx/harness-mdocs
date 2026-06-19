@@ -65,7 +65,7 @@
     "mdocs:lint": "npm run build && node dist/cli/index.js validate",
     "mdocs:validate": "npm run mdocs:lint",
     "pack:check": "npm pack --dry-run",
-    "quality": "npm run lint && npm test && npm run coverage && npm run mdocs:validate",
+    "quality": "npm run build:claude-plugin && npm run lint && npm test && npm run coverage && npm run mdocs:validate",
     "release:check": "npm run quality && npm run pack:check",
     "build:claude-plugin": "bash scripts/build-claude-plugin.sh",
     "prepare": "npm run build",

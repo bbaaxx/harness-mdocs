@@ -966,6 +966,8 @@ Content
     const filePath = path.join(testDir, 'wiki', 'architecture', 'stale-wiki.md');
     const content = fs.readFileSync(filePath, 'utf8');
     fs.writeFileSync(filePath, content + '\n<!-- modified -->', 'utf8');
+    const future = new Date(Date.now() + 60_000);
+    fs.utimesSync(filePath, future, future);
 
     const result = manager.checkConsistency();
     expect(result.stale).toBe(true);
