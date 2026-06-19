@@ -38,9 +38,9 @@ export interface MdocsCore {
 
 export function createMdocsCore(projectDir: string, options: MdocsCoreOptions = {}): MdocsCore {
   const mdocsRoot = path.join(projectDir, options.mdocsDirName || 'mdocs');
-  const compatibility = options.compatibility || options.wiki?.compatibility || {};
+  const compatibility = { ...(options.wiki?.compatibility || {}), ...(options.compatibility || {}) };
   const mdocs = new MdocsManager(mdocsRoot, compatibility);
-  const initiatives = new InitiativeManager(mdocsRoot);
+  const initiatives = new InitiativeManager(mdocsRoot, { compatibility });
   const wiki = new WikiManager(mdocsRoot, {
     standaloneCategories: options.wiki?.standaloneCategories ?? options.standaloneCategories,
     compatibility

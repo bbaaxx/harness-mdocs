@@ -1,6 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { detectMdocsContract, MdocsCompatibilityConfig, MdocsContract } from '../contract';
 import { Initiative, PlanItem, PlanItemStatus, parseFrontmatter } from '../types';
+
+export interface InitiativeManagerOptions {
+  compatibility?: MdocsCompatibilityConfig;
+}
 
 function parseSection(content: string, sectionName: string): string {
   const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -53,9 +58,11 @@ function isSafePathSegment(segment: string): boolean {
 
 export class InitiativeManager {
   private dir: string;
+  private contract: MdocsContract;
 
-  constructor(baseDir: string) {
+  constructor(baseDir: string, options: InitiativeManagerOptions = {}) {
     this.dir = path.join(baseDir, 'initiatives');
+    this.contract = detectMdocsContract(baseDir, options.compatibility);
     fs.mkdirSync(this.dir, { recursive: true });
   }
 
@@ -226,6 +233,9 @@ export class InitiativeManager {
   }
 
   syncIndex(): string {
+    if (this.contract.initiativeMode === 'directory') {
+      return path.join(this.dir, 'INDEX.md');
+    }
     this.updateIndex();
     return path.join(this.dir, 'INDEX.md');
   }
@@ -389,6 +399,10 @@ export class InitiativeManager {
     const orphans: string[] = [];
     let stale = false;
 
+    if (this.contract.initiativeMode === 'directory') {
+      return { consistent: true, missing, orphans, stale };
+    }
+
     const indexPath = path.join(this.dir, 'INDEX.md');
     if (!fs.existsSync(indexPath)) {
       return { consistent: false, missing: ['INDEX.md missing'], orphans: [], stale: true };
@@ -468,6 +482,9 @@ export class InitiativeManager {
   }
 
   private updateIndex(): void {
+    if (this.contract.initiativeMode === 'directory') {
+      return;
+    }
     const files = this.initiativeFiles();
     const entries: { initiative: Initiative; fileName: string }[] = [];
     for (const f of files) {

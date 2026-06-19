@@ -86,9 +86,13 @@ export function detectMdocsContract(mdocsRoot: string, config: MdocsCompatibilit
 
   const wikiIndexMode = config.wikiIndexMode && config.wikiIndexMode !== 'auto'
     ? config.wikiIndexMode
-    : lowercaseWikiIndex && !uppercaseWikiIndex
-      ? 'canonical-lowercase'
-      : 'generated-uppercase';
+    : directorySignals
+      ? lowercaseWikiIndex
+        ? 'canonical-lowercase'
+        : 'none'
+      : lowercaseWikiIndex && !uppercaseWikiIndex
+        ? 'canonical-lowercase'
+        : 'generated-uppercase';
 
   const archiveDir = config.archiveDir && config.archiveDir !== 'auto'
     ? config.archiveDir

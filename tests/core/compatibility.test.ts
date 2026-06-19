@@ -82,3 +82,31 @@ test('directory-v2 index consistency does not require generated uppercase indice
 
   expect(result).toEqual({ consistent: true, missing: [], orphans: [], stale: false });
 });
+
+test('directory-v2 initiative index sync does not rewrite directory index', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-init-sync-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+
+  const initiativeIndexPath = path.join(projectDir, 'mdocs', 'initiatives', 'INDEX.md');
+  const before = fs.readFileSync(initiativeIndexPath, 'utf8');
+  const core = createMdocsCore(projectDir);
+  const result = core.managers.initiatives.syncIndex();
+  const after = fs.readFileSync(initiativeIndexPath, 'utf8');
+
+  expect(result).toBe(initiativeIndexPath);
+  expect(after).toBe(before);
+});
+
+test('directory-v2 detection avoids generated indices when lowercase index is absent', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-no-index-'));
+  fs.mkdirSync(path.join(projectDir, 'mdocs', 'initiatives', 'example-active'), { recursive: true });
+  fs.mkdirSync(path.join(projectDir, 'mdocs', 'wiki'), { recursive: true });
+  fs.writeFileSync(path.join(projectDir, 'mdocs', 'initiatives', 'example-active', '_status.md'), '---\nid: example-active\nstatus: active\n---\n');
+
+  const contract = detectMdocsContract(path.join(projectDir, 'mdocs'));
+
+  expect(contract.initiativeMode).toBe('directory');
+  expect(contract.wikiIndexMode).toBe('none');
+  expect(contract.wikiIndexOwner).toBe('none');
+});
