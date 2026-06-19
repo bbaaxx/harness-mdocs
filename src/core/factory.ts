@@ -1,6 +1,7 @@
 import * as path from 'path';
 import { AuditLog } from './audit';
 import { MdocsCommandRegistry } from './commands/registry';
+import { MdocsCompatibilityConfig } from './contract';
 import { MdocsLifecycleOptions, MdocsLifecycleService } from './lifecycle';
 import { InitiativeManager } from './managers/initiative';
 import { MdocsManager } from './managers/mdocs';
@@ -13,6 +14,7 @@ import { WorkflowEngine } from './workflow/engine';
 export interface MdocsCoreOptions {
   mdocsDirName?: string;
   standaloneCategories?: string[];
+  compatibility?: MdocsCompatibilityConfig;
   wiki?: WikiManagerOptions;
   bootstrap?: MdocsLifecycleOptions;
 }
@@ -36,10 +38,12 @@ export interface MdocsCore {
 
 export function createMdocsCore(projectDir: string, options: MdocsCoreOptions = {}): MdocsCore {
   const mdocsRoot = path.join(projectDir, options.mdocsDirName || 'mdocs');
-  const mdocs = new MdocsManager(mdocsRoot);
+  const compatibility = options.compatibility || options.wiki?.compatibility || {};
+  const mdocs = new MdocsManager(mdocsRoot, compatibility);
   const initiatives = new InitiativeManager(mdocsRoot);
   const wiki = new WikiManager(mdocsRoot, {
-    standaloneCategories: options.wiki?.standaloneCategories ?? options.standaloneCategories
+    standaloneCategories: options.wiki?.standaloneCategories ?? options.standaloneCategories,
+    compatibility
   });
   const workflow = new WorkflowEngine(mdocsRoot);
   const search = new SearchEngine(mdocsRoot);

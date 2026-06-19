@@ -1,5 +1,6 @@
 export * from './types';
 export * from './factory';
+export * from './contract';
 export * from './lifecycle';
 export * from './commands/registry';
 export * from './managers/mdocs';

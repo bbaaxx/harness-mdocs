@@ -1,18 +1,22 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { detectMdocsContract, MdocsCompatibilityConfig, MdocsContract } from '../contract';
 import { parseFrontmatter, type WikiEntry } from '../types';
 
 export interface WikiManagerOptions {
   standaloneCategories?: string[];
+  compatibility?: MdocsCompatibilityConfig;
 }
 
 export class WikiManager {
   private dir: string;
   private standaloneCategories: Set<string>;
+  private contract: MdocsContract;
 
   constructor(baseDir: string, options: WikiManagerOptions = {}) {
     this.dir = path.join(baseDir, 'wiki');
     this.standaloneCategories = new Set((options.standaloneCategories || []).map(category => this.sanitizeName(category)));
+    this.contract = detectMdocsContract(baseDir, options.compatibility);
     fs.mkdirSync(this.dir, { recursive: true });
   }
 
@@ -273,6 +277,9 @@ export class WikiManager {
   }
 
   syncIndices(): string[] {
+    if (this.contract.wikiIndexOwner !== 'harness') {
+      return [];
+    }
     this.updateIndices();
     const paths = [path.join(this.dir, 'INDEX.md')];
     const categories = fs.readdirSync(this.dir).filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
@@ -412,6 +419,18 @@ tags: []
     const orphans: string[] = [];
     let stale = false;
 
+    if (this.contract.wikiIndexOwner !== 'harness') {
+      if (this.contract.wikiIndexMode === 'canonical-lowercase' && !fs.existsSync(path.join(this.dir, 'index.md'))) {
+        missing.push('wiki/index.md');
+      }
+      return {
+        consistent: missing.length === 0,
+        missing,
+        orphans,
+        stale
+      };
+    }
+
     const categories = fs.readdirSync(this.dir)
       .filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
 
@@ -522,6 +541,9 @@ tags: []
   }
 
   private updateIndices(): void {
+    if (this.contract.wikiIndexOwner !== 'harness') {
+      return;
+    }
     const categories = fs.readdirSync(this.dir)
       .filter(f => fs.statSync(path.join(this.dir, f)).isDirectory());
 
