@@ -136,7 +136,14 @@ export class InitiativeManager {
     }
   }
 
+  assertWriteSupported(operation: string): void {
+    if (this.contract.initiativeMode === 'directory') {
+      throw new Error(`${operation} is not supported for directory-v2 initiatives; write support is read-only to prevent accidental flat-file writes.`);
+    }
+  }
+
   create(initiative: Initiative): string {
+    this.assertWriteSupported('initiative.create');
     const fileName = this.formatFileName(initiative);
     const filePath = path.join(this.dir, fileName);
 
@@ -200,6 +207,7 @@ export class InitiativeManager {
   }
 
   update(fileName: string, initiative: Initiative): string {
+    this.assertWriteSupported('initiative.update');
     const sanitized = this.sanitizeFileName(fileName);
     this.assertUniqueId(initiative.id, sanitized);
     const oldPath = path.join(this.dir, sanitized);
@@ -229,6 +237,7 @@ export class InitiativeManager {
   }
 
   delete(fileName: string): void {
+    this.assertWriteSupported('initiative.delete');
     const sanitized = this.sanitizeFileName(fileName);
     const filePath = path.join(this.dir, sanitized);
     if (fs.existsSync(filePath)) {
@@ -246,6 +255,7 @@ export class InitiativeManager {
   }
 
   archive(fileName: string): { archivedFilename: string; archiveIndex: string } {
+    this.assertWriteSupported('initiative.archive');
     const sanitized = this.sanitizeFileName(fileName);
     const sourcePath = path.join(this.dir, sanitized);
     if (!fs.existsSync(sourcePath)) throw new Error(`Initiative file not found: ${sanitized}`);

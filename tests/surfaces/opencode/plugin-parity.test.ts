@@ -9,6 +9,16 @@ import { InitiativeManager } from '../../../src/core/managers/initiative';
 
 const testDir = path.join(__dirname, 'test-plugin');
 
+function copyDir(source: string, target: string) {
+  fs.mkdirSync(target, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = path.join(source, entry.name);
+    const targetPath = path.join(target, entry.name);
+    if (entry.isDirectory()) copyDir(sourcePath, targetPath);
+    else fs.copyFileSync(sourcePath, targetPath);
+  }
+}
+
 describe('Plugin Tools', () => {
   beforeEach(() => {
     if (fs.existsSync(testDir)) {
@@ -1216,6 +1226,28 @@ Durable memory retrieval should include snippets for fresh agents.
     expect(repairResult.consistent).toBe(true);
     expect(repairResult.repaired).toBe(true);
     expect(fs.readFileSync(path.join(testDir, 'mdocs', 'initiatives', 'INDEX.md'), 'utf8')).toContain('Repair Me');
+  });
+
+  test('opencode tools see directory-v2 initiatives', async () => {
+    const fixtureRoot = path.resolve(__dirname, '../../fixtures/directory-v2-mdocs');
+    copyDir(fixtureRoot, testDir);
+    const plugin = createPlugin(testDir);
+
+    const lookup = await (plugin as any).tool.mdocs_lookup.execute({ query: 'example-active' });
+    expect(lookup).toMatchObject({ id: 'example-active', filename: 'example-active' });
+
+    const status = await (plugin as any).tool.mdocs_status.execute({});
+    expect(status.initiatives.some((initiative: any) => initiative.id === 'example-active')).toBe(true);
+
+    const resumeList = await (plugin as any).tool.mdocs_resume.execute({});
+    expect(resumeList.resumable.some((initiative: any) => initiative.id === 'example-active')).toBe(true);
+
+    const resume = await (plugin as any).tool.mdocs_resume.execute({ initiativeId: 'example-active' });
+    expect(resume.initiative).toMatchObject({ id: 'example-active', status: 'active' });
+
+    const dispatch = await (plugin as any).tool.mdocs_dispatch.execute({ initiativeId: 'example-active' });
+    expect(dispatch.error).toBeUndefined();
+    expect(dispatch.initiativeId).toBe('example-active');
   });
 
   test('default export wraps custom tool results in opencode ToolResult shape', async () => {

@@ -138,3 +138,28 @@ test('directory-v2 lookup and search include directory initiatives', () => {
   });
   expect(core.managers.search.query('directory-v2 initiative').some(result => result.id === 'example-active')).toBe(true);
 });
+
+test('directory-v2 initiative write commands are blocked without flat-file side effects', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-guards-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
+  const statusPath = path.join(initiativesDir, 'example-active', '_status.md');
+  const wikiPath = path.join(projectDir, 'mdocs', 'wiki', 'systems', 'system-page.md');
+  const beforeFiles = fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort();
+  const beforeStatus = fs.readFileSync(statusPath, 'utf8');
+  const beforeWiki = fs.readFileSync(wikiPath, 'utf8');
+
+  await expect(core.commands.execute('initiative.create', { title: 'New Dir V2' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
+  await expect(core.commands.execute('initiative.update', { id: 'example-active', updates: { owner: 'x' } })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
+  await expect(core.commands.execute('initiative.done', { id: 'example-active' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
+  await expect(core.commands.execute('initiative.delete', { id: 'example-active' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
+  await expect(core.commands.execute('initiative.archive', { id: 'example-complete' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
+  await expect(core.commands.execute('wiki.link', { initiativeId: 'example-active', wikiSlug: 'systems/system-page' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
+
+  expect(fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort()).toEqual(beforeFiles);
+  expect(fs.readFileSync(statusPath, 'utf8')).toBe(beforeStatus);
+  expect(fs.readFileSync(wikiPath, 'utf8')).toBe(beforeWiki);
+  expect(fs.existsSync(path.join(initiativesDir, 'archive', 'example-complete.md'))).toBe(false);
+});

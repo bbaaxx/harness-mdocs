@@ -342,4 +342,59 @@ This decision should link back to the initiative.
       expect.stringContaining('Done initiative done has no stable wiki learning')
     ]));
   });
+
+  test('lintAll graph includes directory-v2 _status.md initiatives and status aliases', () => {
+    const initiativesDir = path.join(testDir, 'initiatives');
+    const wikiDir = path.join(testDir, 'wiki', 'architecture');
+
+    fs.mkdirSync(path.join(initiativesDir, 'dir-linked'), { recursive: true });
+    fs.mkdirSync(path.join(initiativesDir, 'dir-complete'), { recursive: true });
+
+    fs.writeFileSync(path.join(initiativesDir, 'dir-linked', '_status.md'), `---
+id: dir-linked
+title: Directory Linked
+status: active
+started: 2026-06-19
+tags: [compatibility]
+related_wiki: ["architecture/dir-note"]
+---
+
+Directory-v2 linked initiative.
+`, 'utf8');
+
+    fs.writeFileSync(path.join(initiativesDir, 'dir-complete', '_status.md'), `---
+id: dir-complete
+title: Directory Complete
+status: complete
+started: 2026-06-19
+completed: 2026-06-19
+tags: [compatibility]
+related_wiki: []
+---
+
+Directory-v2 complete initiative.
+`, 'utf8');
+
+    fs.writeFileSync(path.join(wikiDir, 'dir-note.md'), `---
+id: dir-note
+title: Directory Note
+category: architecture
+created: 2026-06-19
+updated: 2026-06-19
+related_initiatives: []
+tags: [compatibility]
+lifecycle: stable
+---
+
+Directory note.
+`, 'utf8');
+
+    const linter = new MdocsLinter(testDir);
+    const messages = linter.lintAll().flatMap(r => r.issues.map(i => i.message));
+
+    expect(messages).toEqual(expect.arrayContaining([
+      expect.stringContaining('Wiki architecture/dir-note missing backlink to initiative dir-linked'),
+      expect.stringContaining('Done initiative dir-complete has no stable wiki learning')
+    ]));
+  });
 });

@@ -1,11 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { z } from 'zod';
 import { MdocsCore } from '../../core';
-import { findInitiativeFilename, slugify } from '../../core/commands/utils';
+import { dispatch as dispatchOperation, indexCheck as indexCheckOperation } from '../../core/operations';
 
 export function createOpencodeTools(core: MdocsCore) {
-  const { mdocs, workflow, initiatives, wiki, search, audit, dispatch } = core.managers;
+  const { mdocs, workflow, initiatives, search, audit } = core.managers;
 
   return {
     mdocs: {
@@ -34,20 +32,7 @@ export function createOpencodeTools(core: MdocsCore) {
       execute: async () => {
         try {
           const state = workflow.status();
-          const initiativesDir = path.join(core.mdocsRoot, 'initiatives');
-          const allInitiatives = fs.existsSync(initiativesDir)
-            ? fs
-                .readdirSync(initiativesDir)
-                .filter(file => file.endsWith('.md') && file !== 'INDEX.md')
-                .map(file => {
-                  try {
-                    return initiatives.read(file);
-                  } catch {
-                    return null;
-                  }
-                })
-                .filter((initiative): initiative is NonNullable<typeof initiative> => initiative !== null && initiative !== undefined)
-            : [];
+          const allInitiatives = initiatives.list();
           const activeInitiatives = allInitiatives.filter(initiative => initiative.status === 'active');
           const blocked = initiatives.findBlocked();
           const overdue = initiatives.findOverdue();
@@ -167,38 +152,30 @@ export function createOpencodeTools(core: MdocsCore) {
         try {
           const query = args?.query || '';
           const normalizedQuery = query.toLowerCase();
-          const querySlug = slugify(query);
-          const initiativesDir = path.join(core.mdocsRoot, 'initiatives');
-          const files = fs.existsSync(initiativesDir) ? fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md') && file !== 'INDEX.md') : [];
+          const match = args?.field
+            ? initiatives.list(true).map(initiative => ({ initiative, key: initiatives.findKeyById(initiative.id) || initiative.id })).find(({ initiative, key }) => {
+                const keyStem = key.replace(/\.md$/, '');
+                const keySlug = slugifyLocal(keyStem.replace(/--\d{4}-\d{2}-\d{2}$/, ''));
+                const idSlug = slugifyLocal(initiative.id || '');
+                const titleSlug = slugifyLocal(initiative.title || '');
+                const querySlug = slugifyLocal(query);
+                const candidates: Record<string, boolean> = {
+                  id: initiative.id === query || idSlug === querySlug,
+                  title: initiative.title.toLowerCase().includes(normalizedQuery) || titleSlug === querySlug,
+                  slug: idSlug === querySlug || titleSlug === querySlug || key === query || keyStem === query || keySlug === querySlug
+                };
+                return candidates[args.field!];
+              })
+            : initiatives.findByQuery(query);
 
-          for (const fileName of files) {
-            const initiative = initiatives.read(fileName);
-            if (!initiative) continue;
-
-            const fileStem = fileName.replace(/\.md$/, '');
-            const fileSlug = slugify(fileStem.replace(/--\d{4}-\d{2}-\d{2}$/, ''));
-            const idSlug = slugify(initiative.id || '');
-            const titleSlug = slugify(initiative.title || '');
-            const title = initiative.title || '';
-            const candidates: Record<string, boolean> = {
-              id: initiative.id === query || idSlug === querySlug,
-              title: title.toLowerCase().includes(normalizedQuery) || titleSlug === querySlug,
-              slug: idSlug === querySlug || titleSlug === querySlug || fileName === query || fileStem === query || fileSlug === querySlug
-            };
-
-            const matched = args?.field ? candidates[args.field] : candidates.id || candidates.title || candidates.slug;
-
-            if (matched) {
-              return {
-                type: 'initiative',
-                id: initiative.id,
-                title: initiative.title,
-                status: initiative.status,
-                tags: initiative.tags,
-                filename: fileName
-              };
-            }
-          }
+          if (match) return {
+            type: 'initiative',
+            id: match.initiative.id,
+            title: match.initiative.title,
+            status: match.initiative.status,
+            tags: match.initiative.tags,
+            filename: match.key
+          };
 
           return { error: 'No initiatives found for query', query };
         } catch (err: any) {
@@ -212,33 +189,7 @@ export function createOpencodeTools(core: MdocsCore) {
         initiativeId: z.string().optional().describe('Initiative id to assemble context for; defaults to active initiative')
       },
       execute: async (args: { initiativeId?: string }) => {
-        const initiativeId = args.initiativeId || workflow.status().activeInitiative;
-        if (!initiativeId) return { error: 'No initiativeId provided and no active initiative' };
-
-        const initiative = initiatives.findById(initiativeId);
-        if (!initiative) return { error: 'Initiative not found' };
-
-        const wikiEntries: any[] = [];
-        for (const wikiRef of initiative.relatedWiki) {
-          const [category, id] = wikiRef.split('/');
-          if (category && id) {
-            const entry = wiki.read(category, id);
-            if (entry) wikiEntries.push(entry);
-          }
-        }
-
-        const searchQuery = `${initiative.title} ${initiative.objective} ${initiative.tags.join(' ')}`;
-        const retrievedMemory = search.query(searchQuery).slice(0, 5);
-        const recentEvents = audit.query({ initiativeId: initiative.id, limit: 5 });
-        const currentStep = workflow.getCurrentStep();
-        const context = dispatch.assemble(initiative, wikiEntries, currentStep, { retrievedMemory, recentEvents });
-
-        return {
-          context,
-          initiativeId: initiative.id,
-          step: currentStep,
-          relatedWikiCount: wikiEntries.length
-        };
+        return dispatchOperation(core, args.initiativeId);
       }
     },
     mdocs_audit: {
@@ -262,28 +213,7 @@ export function createOpencodeTools(core: MdocsCore) {
       },
       execute: async (args: { mode?: 'check' | 'repair' }) => {
         try {
-          const mode = args?.mode || 'check';
-          const initiativeResult = initiatives.checkConsistency();
-          const wikiResult = wiki.checkConsistency();
-          const consistent = initiativeResult.consistent && wikiResult.consistent;
-
-          if (mode === 'repair' && !consistent) {
-            initiatives.syncIndex();
-            wiki.syncIndices();
-            return {
-              consistent: true,
-              initiatives: { consistent: true, missing: [], orphans: [], stale: false },
-              wiki: { consistent: true, missing: [], orphans: [], stale: false },
-              repaired: true
-            };
-          }
-
-          return {
-            consistent,
-            initiatives: initiativeResult,
-            wiki: wikiResult,
-            repaired: false
-          };
+          return indexCheckOperation(core, (args?.mode || 'check') === 'repair');
         } catch (err: any) {
           return { error: err.message || String(err) };
         }
@@ -298,39 +228,23 @@ export function createOpencodeTools(core: MdocsCore) {
         try {
           const initiativeId = args?.initiativeId || workflow.status().activeInitiative;
           if (!initiativeId) {
-            const initiativesDir = path.join(core.mdocsRoot, 'initiatives');
-            const allInitiatives = fs.existsSync(initiativesDir)
-              ? fs
-                  .readdirSync(initiativesDir)
-                  .filter(file => file.endsWith('.md') && file !== 'INDEX.md')
-                  .map(file => {
-                    try {
-                      return { init: initiatives.read(file), file };
-                    } catch {
-                      return null;
-                    }
-                  })
-                  .filter((item): item is NonNullable<typeof item> => item !== null && item.init !== null)
-              : [];
-            const resumable = allInitiatives
-              .filter(({ init }) => init !== null && init.status === 'active')
-              .map(({ init }) => {
-                const nextAction = init!.nextAction || init!.plan.find(item => item.status !== 'done')?.description || '';
-                const daysSinceUpdate = Math.floor((Date.now() - new Date(init!.updated).getTime()) / (1000 * 60 * 60 * 24));
+            const resumable = initiatives.list()
+              .filter(init => init.status === 'active')
+              .map(init => {
+                const nextAction = init.nextAction || init.plan.find(item => item.status !== 'done')?.description || '';
+                const daysSinceUpdate = Math.floor((Date.now() - new Date(init.updated).getTime()) / (1000 * 60 * 60 * 24));
                 return {
-                  id: init!.id,
-                  title: init!.title,
+                  id: init.id,
+                  title: init.title,
                   nextAction,
-                  blockers: init!.blockers || [],
-                  lastUpdated: init!.updated,
-                  recommendation: daysSinceUpdate > 3 ? 'stale - consider updating progress' : init!.blockers?.length ? 'blocked - resolve blockers first' : 'ready to resume'
+                  blockers: init.blockers || [],
+                  lastUpdated: init.updated,
+                  recommendation: daysSinceUpdate > 3 ? 'stale - consider updating progress' : init.blockers?.length ? 'blocked - resolve blockers first' : 'ready to resume'
                 };
               });
             return { resumable, recommendation: resumable.length > 0 ? 'Specify initiativeId to resume one of the above' : 'No active initiatives to resume' };
           }
-          const fileName = findInitiativeFilename(core.mdocsRoot, initiatives, initiativeId);
-          if (!fileName) return { error: `Initiative not found: ${initiativeId}` };
-          const initiative = initiatives.read(fileName);
+          const initiative = initiatives.findById(initiativeId);
           if (!initiative) return { error: `Initiative not found: ${initiativeId}` };
           workflow.setActiveInitiative(initiative.id);
           return {
@@ -347,4 +261,8 @@ export function createOpencodeTools(core: MdocsCore) {
       }
     }
   };
+}
+
+function slugifyLocal(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }

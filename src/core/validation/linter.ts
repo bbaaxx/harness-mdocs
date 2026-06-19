@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { LintResult, LintIssue, parseFrontmatter } from '../types';
+import { normalizeInitiativeStatus } from '../initiative-store';
 
 export class MdocsLinter {
   private baseDir: string;
@@ -31,14 +32,10 @@ export class MdocsLinter {
 
   lintAll(): LintResult[] {
     const results: LintResult[] = [];
-    const initiativesDir = path.join(this.baseDir, 'initiatives');
     const wikiDir = path.join(this.baseDir, 'wiki');
 
-    if (fs.existsSync(initiativesDir)) {
-      const files = fs.readdirSync(initiativesDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
-      for (const f of files) {
-        results.push(this.lintFile(path.join(initiativesDir, f)));
-      }
+    for (const filePath of this.listInitiativeFiles()) {
+      results.push(this.lintFile(filePath));
     }
 
     if (fs.existsSync(wikiDir)) {
@@ -67,20 +64,17 @@ export class MdocsLinter {
 
     // Collect all initiative data
     const initiativeData: { id: string; status: string; relatedWiki: string[]; filePath: string }[] = [];
-    if (fs.existsSync(initiativesDir)) {
-      const files = fs.readdirSync(initiativesDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
-      for (const f of files) {
-        try {
-          const content = fs.readFileSync(path.join(initiativesDir, f), 'utf8');
-          const front = parseFrontmatter(content);
-          initiativeData.push({
-            id: front.id || '',
-            status: front.status || 'active',
-            relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
-            filePath: f
-          });
-        } catch { /* skip */ }
-      }
+    for (const filePath of this.listInitiativeFiles()) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const front = parseFrontmatter(content);
+        initiativeData.push({
+          id: front.id || path.basename(path.dirname(filePath)),
+          status: normalizeInitiativeStatus(front.status),
+          relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
+          filePath: path.relative(initiativesDir, filePath)
+        });
+      } catch { /* skip */ }
     }
 
     // Collect all wiki data
@@ -172,6 +166,23 @@ export class MdocsLinter {
       issues,
       passed: false
     }];
+  }
+
+  private listInitiativeFiles(): string[] {
+    const initiativesDir = path.join(this.baseDir, 'initiatives');
+    if (!fs.existsSync(initiativesDir)) return [];
+
+    const files: string[] = [];
+    for (const entry of fs.readdirSync(initiativesDir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'INDEX.md') {
+        files.push(path.join(initiativesDir, entry.name));
+      }
+      if (entry.isDirectory() && entry.name !== 'archive' && entry.name !== '_archive') {
+        const statusPath = path.join(initiativesDir, entry.name, '_status.md');
+        if (fs.existsSync(statusPath)) files.push(statusPath);
+      }
+    }
+    return files;
   }
 
   private lintInitiative(content: string, filePath: string): LintResult {

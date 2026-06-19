@@ -101,6 +101,7 @@ export class MdocsCommandRegistry {
 
   private createInitiative(args: Record<string, any>) {
     if (!args.title) return { error: 'initiative.create requires title' };
+    this.context.initiatives.assertWriteSupported('initiative.create');
     const date = today();
     const id = args.id || slugify(args.title);
     const filePath = this.context.initiatives.create({
@@ -134,6 +135,7 @@ export class MdocsCommandRegistry {
 
   private updateInitiative(args: Record<string, any>) {
     if (!args.id) return { error: 'initiative.update requires id' };
+    this.context.initiatives.assertWriteSupported('initiative.update');
     const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.id);
     if (!fileName) return { error: `Initiative not found: ${args.id}` };
     const initiative = this.context.initiatives.read(fileName);
@@ -152,6 +154,7 @@ export class MdocsCommandRegistry {
 
   private doneInitiative(args: Record<string, any>) {
     if (!args.id) return { error: 'initiative.done requires id' };
+    this.context.initiatives.assertWriteSupported('initiative.done');
     const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.id);
     if (!fileName) return { error: `Initiative not found: ${args.id}` };
     const initiative = this.context.initiatives.read(fileName);
@@ -168,6 +171,7 @@ export class MdocsCommandRegistry {
 
   private deleteInitiative(args: Record<string, any>) {
     if (!args.id) return { error: 'initiative.delete requires id' };
+    this.context.initiatives.assertWriteSupported('initiative.delete');
     const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.id);
     if (!fileName) return { error: `Initiative not found: ${args.id}` };
     this.context.initiatives.delete(fileName);
@@ -176,6 +180,7 @@ export class MdocsCommandRegistry {
 
   private archiveInitiative(args: Record<string, any>) {
     if (!args.id) return { error: 'initiative.archive requires id' };
+    this.context.initiatives.assertWriteSupported('initiative.archive');
     const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.id);
     if (!fileName) return { error: `Initiative not found: ${args.id}` };
     const initiative = this.context.initiatives.read(fileName);
@@ -251,6 +256,7 @@ export class MdocsCommandRegistry {
 
   private linkWiki(args: Record<string, any>) {
     if (!args.initiativeId || !args.wikiSlug) return { error: 'wiki.link requires initiativeId and wikiSlug' };
+    this.context.initiatives.assertWriteSupported('wiki.link');
     const [category, entryId] = args.wikiSlug.split('/');
     if (!category || !entryId) return { error: `Invalid wikiSlug format: ${args.wikiSlug}. Expected category/id` };
     const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.initiativeId);
