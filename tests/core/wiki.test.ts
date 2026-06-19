@@ -807,7 +807,6 @@ related_wiki: ["architecture/referenced-by-test", "other/cat"]
     });
 
     const result = manager.checkConsistency();
-    console.log('DEBUG result:', JSON.stringify(result, null, 2));
 
     expect(result.consistent).toBe(true);
     expect(result.missing).toEqual([]);

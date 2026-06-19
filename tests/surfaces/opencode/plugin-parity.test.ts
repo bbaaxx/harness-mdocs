@@ -5,6 +5,7 @@ import * as packageRoot from '../../../src';
 import * as apiRoot from '../../../src/api';
 import opencodePlugin from '../../../src/surfaces/opencode/opencode';
 import { createOpencodeAdapter as createPlugin } from '../../../src/surfaces/opencode/adapter';
+import { createOpencodeTools } from '../../../src/surfaces/opencode/tools';
 import { InitiativeManager } from '../../../src/core/managers/initiative';
 
 const testDir = path.join(__dirname, 'test-plugin');
@@ -299,6 +300,72 @@ The active one
 
     expect(() => plugin.event({ event: { type: 'session.created' } })).not.toThrow();
     expect(() => plugin.event({})).not.toThrow();
+  });
+
+  test('permission and before hooks ask or block unsafe tools before execution', async () => {
+    const pluginInit = createPlugin(testDir);
+    (pluginInit as any).tool.mdocs_init.execute();
+    fs.writeFileSync(path.join(testDir, 'mdocs', '.workflow-state.json'), JSON.stringify({
+      currentStep: 'UNDERSTAND',
+      activeInitiative: null,
+      stepHistory: []
+    }, null, 2), 'utf8');
+
+    const plugin = createPlugin(testDir) as any;
+
+    await expect(plugin['tool.execute.before']({
+      tool: 'bash',
+      parameters: { command: 'rm -rf build' }
+    })).rejects.toThrow('Workflow gate: bash blocked at step UNDERSTAND');
+    await expect(plugin['permission.ask']({
+      tool: 'bash',
+      parameters: { command: 'rm -rf build' }
+    })).resolves.toEqual({ action: 'ask' });
+    await expect(plugin['permission.ask']({
+      name: 'read',
+      args: { filePath: 'README.md' }
+    })).resolves.toEqual({ action: 'allow' });
+  });
+
+  test('event hook handles nested initiative and eventType wiki events', async () => {
+    const pluginInit = createPlugin(testDir);
+    (pluginInit as any).tool.mdocs_init.execute();
+    const manager = new InitiativeManager(path.join(testDir, 'mdocs'));
+    manager.create({
+      id: 'event-init',
+      title: 'Event Initiative',
+      status: 'active',
+      created: '2025-05-24',
+      updated: '2025-05-24',
+      owner: 'test',
+      tags: [],
+      relatedWiki: [],
+      objective: 'Track event branches',
+      plan: [],
+      progressLog: [],
+      artifacts: []
+    });
+    fs.writeFileSync(path.join(testDir, 'mdocs', '.workflow-state.json'), JSON.stringify({
+      currentStep: 'VERIFY',
+      activeInitiative: 'event-init',
+      stepHistory: []
+    }, null, 2), 'utf8');
+
+    const plugin = createPlugin(testDir) as any;
+    plugin.event({ event: { type: 'initiative.create' } });
+    plugin.event({ eventType: 'wiki.create' });
+
+    const initiative = manager.read('event-init--2025-05-24.md');
+    expect(initiative?.progressLog).toEqual(expect.arrayContaining([
+      expect.stringContaining('Event: initiative.create'),
+      expect.stringContaining('Event: wiki.create')
+    ]));
+    await expect(plugin.tool.mdocs_audit.execute({ initiativeId: 'event-init', limit: 2 })).resolves.toMatchObject({
+      events: expect.arrayContaining([
+        expect.objectContaining({ type: 'initiative', details: { eventType: 'initiative.create' } }),
+        expect.objectContaining({ type: 'wiki', details: { eventType: 'wiki.create' } })
+      ])
+    });
   });
 
   test('mdocs_dispatch returns error when no initiativeId and no active initiative', async () => {
@@ -731,6 +798,55 @@ related_wiki: []
     ]));
   });
 
+  test('mdocs_status includes resume cockpit for active stale initiative', async () => {
+    const pluginInit = createPlugin(testDir);
+    await (pluginInit as any).tool.mdocs_init.execute();
+    const initDir = path.join(testDir, 'mdocs', 'initiatives');
+    fs.writeFileSync(path.join(initDir, 'status-resume--2020-01-01.md'), `---
+id: "status-resume"
+title: "Status Resume"
+status: "active"
+created: "2020-01-01"
+updated: "2020-01-01"
+owner: "agent"
+tags: []
+related_wiki: []
+blockers: ["blocked by dep"]
+---
+
+## Objective
+Resume status branch.
+
+## Plan
+- [/] Current work
+- [ ] Later work
+
+## Progress Log
+- Old progress
+
+## Artifacts
+`, 'utf8');
+    fs.writeFileSync(path.join(testDir, 'mdocs', '.workflow-state.json'), JSON.stringify({
+      currentStep: 'PLAN',
+      activeInitiative: 'status-resume',
+      stepHistory: []
+    }, null, 2), 'utf8');
+
+    const plugin = createPlugin(testDir) as any;
+    const result = await plugin.tool.mdocs_status.execute();
+
+    expect(result.resume).toMatchObject({
+      initiative: { id: 'status-resume', title: 'Status Resume', status: 'active' },
+      currentStep: 'PLAN',
+      nextAction: 'Current work',
+      currentPlanItem: { description: 'Current work', status: 'in-progress' },
+      blockers: ['blocked by dep'],
+      latestProgress: 'Old progress',
+      lastUpdated: '2020-01-01',
+      staleWarning: true
+    });
+  });
+
   test('mdocs returns helpful errors for invalid and unsupported commands', async () => {
     const plugin = createPlugin(testDir);
     (plugin as any).tool.mdocs_init.execute();
@@ -954,6 +1070,45 @@ Help fresh agents resume.
     expect(result.blockers).toEqual(['Need metadata']);
     expect(result.latestProgress).toBe('Metadata added');
     expect(result.validation).toBeDefined();
+  });
+
+  test('mdocs_search normalizes sparse results and tool catches return errors', async () => {
+    const boom = () => { throw new Error('boom'); };
+    const searchQuery = jest.fn().mockReturnValue([{ type: 'wiki' }, { id: 'x', title: 'X', score: 2 }]);
+    const sparseTools = createOpencodeTools({
+      managers: {
+        mdocs: {},
+        workflow: {},
+        initiatives: {},
+        search: { query: searchQuery },
+        audit: {}
+      },
+      commands: {}
+    } as any);
+    const throwingTools = createOpencodeTools({
+      managers: {
+        mdocs: { init: boom },
+        workflow: { status: boom },
+        initiatives: { list: boom, findByQuery: boom, findById: boom },
+        search: { query: boom },
+        audit: { query: boom }
+      },
+      commands: { validationResult: boom }
+    } as any);
+
+    await expect(sparseTools.mdocs_search.execute({} as any)).resolves.toEqual({
+      results: [
+        { type: 'wiki', id: '', title: '', score: 0 },
+        { type: '', id: 'x', title: 'X', score: 2 }
+      ]
+    });
+    expect(searchQuery).toHaveBeenCalledWith('', {});
+    await expect(throwingTools.mdocs_init.execute()).resolves.toEqual({ error: 'boom' });
+    await expect(throwingTools.mdocs_status.execute()).resolves.toMatchObject({ error: 'boom', initiatives: [] });
+    await expect(throwingTools.mdocs_validate.execute()).resolves.toEqual({ error: 'boom' });
+    await expect(throwingTools.mdocs_search.execute({ query: 'x' })).resolves.toEqual({ error: 'boom', results: [] });
+    await expect(throwingTools.mdocs_lookup.execute({ query: 'x' })).resolves.toEqual({ error: 'boom' });
+    await expect(throwingTools.mdocs_resume.execute({ initiativeId: 'x' })).resolves.toEqual({ error: 'boom' });
   });
 });
 

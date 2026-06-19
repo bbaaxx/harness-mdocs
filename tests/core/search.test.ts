@@ -241,4 +241,98 @@ describe('SearchEngine', () => {
       matchedFields: expect.arrayContaining([expect.any(String)])
     }));
   });
+
+  test('empty query and category/date filters cover branch edges', () => {
+    const initiatives = new InitiativeManager(testDir);
+    const wiki = new WikiManager(testDir);
+    initiatives.create({
+      id: 'early-shared',
+      title: 'Shared Date Early',
+      status: 'active',
+      priority: 'medium',
+      created: '2025-01-01',
+      updated: '2025-01-01',
+      owner: 'test',
+      tags: [],
+      relatedWiki: [],
+      objective: 'shared date filter',
+      plan: [],
+      progressLog: [],
+      artifacts: []
+    });
+    initiatives.create({
+      id: 'late-shared',
+      title: 'Shared Date Late',
+      status: 'active',
+      priority: 'medium',
+      created: '2025-12-31',
+      updated: '2025-12-31',
+      owner: 'test',
+      tags: [],
+      relatedWiki: [],
+      objective: 'shared date filter',
+      plan: [],
+      progressLog: [],
+      artifacts: []
+    });
+    wiki.create({
+      id: 'shared-arch',
+      title: 'Shared Architecture',
+      category: 'architecture',
+      created: '2025-05-01',
+      updated: '2025-05-01',
+      relatedInitiatives: [],
+      tags: [],
+      content: 'shared category filter'
+    });
+    wiki.create({
+      id: 'shared-guides',
+      title: 'Shared Guides',
+      category: 'guides',
+      created: '2025-05-01',
+      updated: '2025-05-01',
+      relatedInitiatives: [],
+      tags: [],
+      content: 'shared category filter'
+    });
+
+    const search = new SearchEngine(testDir);
+
+    expect(search.query('   ')).toEqual([]);
+    expect(search.query('shared', { category: 'architecture' }).map(r => r.id)).toEqual(['architecture/shared-arch']);
+    expect(search.query('shared', { category: 'missing' })).toEqual([]);
+    expect(search.query('shared', { dateFrom: '2025-06-01' }).some(r => r.id === 'late-shared')).toBe(true);
+    expect(search.query('shared', { dateFrom: '2025-06-01' }).some(r => r.id === 'early-shared')).toBe(false);
+    expect(search.query('shared', { dateTo: '2025-06-01' }).some(r => r.id === 'early-shared')).toBe(true);
+    expect(search.query('shared', { dateTo: '2025-06-01' }).some(r => r.id === 'late-shared')).toBe(false);
+  });
+
+  test('snippets can come from plan and progress log fields', () => {
+    const initiatives = new InitiativeManager(testDir);
+    initiatives.create({
+      id: 'snippet-fields',
+      title: 'Snippet Fields',
+      status: 'active',
+      priority: 'medium',
+      created: '2025-05-24',
+      updated: '2025-05-24',
+      owner: 'test',
+      tags: [],
+      relatedWiki: [],
+      objective: 'Generic objective',
+      plan: [{ description: 'Plan-only-token branch target', status: 'pending' }],
+      progressLog: ['Progress-only-token branch target'],
+      artifacts: []
+    });
+    const search = new SearchEngine(testDir);
+
+    expect(search.query('plan-only-token')[0]).toMatchObject({
+      snippet: expect.stringContaining('Plan-only-token'),
+      matchedFields: expect.arrayContaining(['plan'])
+    });
+    expect(search.query('progress-only-token')[0]).toMatchObject({
+      snippet: expect.stringContaining('Progress-only-token'),
+      matchedFields: expect.arrayContaining(['progressLog'])
+    });
+  });
 });

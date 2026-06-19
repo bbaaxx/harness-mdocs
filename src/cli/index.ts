@@ -170,6 +170,7 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
   }
 }
 
+/* istanbul ignore next */
 if (require.main === module) {
   runMdocsCli(process.argv.slice(2)).then(result => {
     if (result.stdout) process.stdout.write(`${result.stdout}\n`);

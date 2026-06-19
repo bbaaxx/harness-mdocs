@@ -98,6 +98,7 @@ export async function startMcpServer(): Promise<void> {
   await server.connect(transport); // owns stdio; resolves when the client disconnects
 }
 
+/* istanbul ignore next -- process entrypoint boundary; startMcpServer is unit-tested with SDK mocks. */
 if (require.main === module) {
   startMcpServer().catch(err => {
     process.stderr.write(`mdocs mcp failed: ${err?.message || err}\n`);

@@ -2,6 +2,21 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { runMdocsCli } from '../../src/cli';
+import { startMcpServer } from '../../src/surfaces/claude-code/mcp-server';
+import { runPostToolUse } from '../../src/cli/hooks/post-tool-use';
+import { runPreToolUse } from '../../src/cli/hooks/pre-tool-use';
+
+jest.mock('../../src/surfaces/claude-code/mcp-server', () => ({
+  startMcpServer: jest.fn().mockResolvedValue(undefined)
+}));
+
+jest.mock('../../src/cli/hooks/pre-tool-use', () => ({
+  runPreToolUse: jest.fn().mockResolvedValue(undefined)
+}));
+
+jest.mock('../../src/cli/hooks/post-tool-use', () => ({
+  runPostToolUse: jest.fn().mockResolvedValue(undefined)
+}));
 
 function tempProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-cli-'));
@@ -161,5 +176,34 @@ describe('mdocs CLI', () => {
     expect(JSON.parse(fs.readFileSync(path.join(projectDir, 'mdocs', '.workflow-state.json'), 'utf8'))).toMatchObject({
       activeInitiative: null
     });
+  });
+
+  test('unknown commands return usage on stderr', async () => {
+    const result = await runMdocsCli(['unknown'], tempProject());
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Usage: mdocs init');
+  });
+
+  test('invalid command JSON returns parse errors on stderr', async () => {
+    const result = await runMdocsCli(['command', 'initiative.create', '--json'], tempProject());
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('--json requires a JSON object string');
+  });
+
+  test('delegates MCP and hook entrypoints without stdout', async () => {
+    const mcp = await runMdocsCli(['mcp'], tempProject());
+    const pre = await runMdocsCli(['hooks', 'pre-tool-use'], tempProject());
+    const post = await runMdocsCli(['hooks', 'post-tool-use'], tempProject());
+
+    expect(startMcpServer).toHaveBeenCalledTimes(1);
+    expect(runPreToolUse).toHaveBeenCalledTimes(1);
+    expect(runPostToolUse).toHaveBeenCalledTimes(1);
+    expect(mcp).toEqual({ exitCode: 0, stdout: '', stderr: '' });
+    expect(pre).toEqual({ exitCode: 0, stdout: '', stderr: '' });
+    expect(post).toEqual({ exitCode: 0, stdout: '', stderr: '' });
   });
 });
