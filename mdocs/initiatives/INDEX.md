@@ -7,3 +7,4 @@
 - **Implement directory-v2 mdocs compatibility** (done) — implement-directory-v2-compatibility--2026-06-19.md — 2026-06-19 — [compatibility, directory-v2, index-policy, wiki, initiatives]
 - **Fresh Codex Thread Plugin Smoke Test** (done) — fresh-codex-thread-plugin-smoke-test--2026-06-10.md — 2026-06-10 — [codex, plugin, smoke-test]
 - **Codex Dogfood End To End** (done) — codex-dogfood-end-to-end--2026-06-10.md — 2026-06-10 — [codex, dogfood, plugin]
+- **Document OpenCode plugin version pinning** (done) — document-opencode-plugin-version-pinning--2026-06-19.md — 2026-06-19 — [docs, readme, opencode, migration]

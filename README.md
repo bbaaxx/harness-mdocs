@@ -69,11 +69,34 @@ For OpenCode, load the package root from `opencode.json`:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["harness-mdocs"]
+  "plugin": ["harness-mdocs@0.4.0"]
 }
 ```
 
-You can also use the explicit OpenCode surface:
+Pinning the exact npm version is recommended for project configs. OpenCode
+installs npm plugins into `~/.cache/opencode/packages/` at startup, and a
+previous `harness-mdocs@latest` cache can remain stale across restarts. To
+upgrade later, change the pinned version (for example, `harness-mdocs@0.5.0`)
+and restart OpenCode.
+
+If migrating from an older `harness-mdocs@latest` or `opencode-mdocs` config,
+remove stale cached packages before restarting:
+
+```bash
+rm -rf ~/.cache/opencode/packages/harness-mdocs@latest
+rm -rf ~/.cache/opencode/packages/opencode-mdocs@*
+```
+
+Verify the cached plugin version after restart:
+
+```bash
+node -p "require(process.env.HOME + '/.cache/opencode/packages/harness-mdocs@0.4.0/node_modules/harness-mdocs/package.json').version"
+```
+
+The command should print `0.4.0`.
+
+You can also use the explicit OpenCode surface when you do not need a pinned
+npm version:
 
 ```json
 {
@@ -81,6 +104,9 @@ You can also use the explicit OpenCode surface:
   "plugin": ["harness-mdocs/opencode"]
 }
 ```
+
+For pinned installs, prefer the package root (`harness-mdocs@0.4.0`). It loads
+the OpenCode surface by default.
 
 Restart OpenCode after changing plugin config. OpenCode loads plugin config at startup.
 
