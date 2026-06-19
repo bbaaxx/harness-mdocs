@@ -75,27 +75,16 @@ export class SearchEngine {
     this.docDate.clear();
 
     // Index initiatives
-    const initiativesDir = path.join(this.baseDir, 'initiatives');
-    if (fs.existsSync(initiativesDir)) {
-      const files = fs.readdirSync(initiativesDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
-      for (const f of files) {
-        try {
-          const initiative = this.initiatives.read(f);
-          if (!initiative) continue;
+    for (const initiative of this.initiatives.list()) {
+      const docId = initiative.id;
+      this.indexField(docId, 'initiative', initiative.title, 'title', initiative.title);
+      this.indexField(docId, 'initiative', initiative.title, 'objective', initiative.objective);
+      this.indexField(docId, 'initiative', initiative.title, 'plan', initiative.plan.map(p => p.description).join(' '));
+      this.indexField(docId, 'initiative', initiative.title, 'progressLog', initiative.progressLog.join(' '));
 
-          const docId = initiative.id;
-          this.indexField(docId, 'initiative', initiative.title, 'title', initiative.title);
-          this.indexField(docId, 'initiative', initiative.title, 'objective', initiative.objective);
-          this.indexField(docId, 'initiative', initiative.title, 'plan', initiative.plan.map(p => p.description).join(' '));
-          this.indexField(docId, 'initiative', initiative.title, 'progressLog', initiative.progressLog.join(' '));
-
-          this.docTags.set(docId, initiative.tags);
-          this.docStatus.set(docId, initiative.status);
-          this.docDate.set(docId, initiative.created);
-        } catch {
-          // Skip malformed files
-        }
-      }
+      this.docTags.set(docId, initiative.tags);
+      this.docStatus.set(docId, initiative.status);
+      this.docDate.set(docId, initiative.created);
     }
 
     // Index wiki entries

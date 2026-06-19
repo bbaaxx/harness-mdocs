@@ -1,4 +1,4 @@
-export type Status = 'active' | 'paused' | 'done';
+export type Status = 'active' | 'paused' | 'done' | 'archived';
 
 export type StepName = 
   | 'IDLE' 

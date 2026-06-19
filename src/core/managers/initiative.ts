@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { detectMdocsContract, MdocsCompatibilityConfig, MdocsContract } from '../contract';
+import { InitiativeStore, normalizeInitiativeStatus } from '../initiative-store';
 import { Initiative, PlanItem, PlanItemStatus, parseFrontmatter } from '../types';
 
 export interface InitiativeManagerOptions {
@@ -59,10 +60,12 @@ function isSafePathSegment(segment: string): boolean {
 export class InitiativeManager {
   private dir: string;
   private contract: MdocsContract;
+  private store: InitiativeStore;
 
   constructor(baseDir: string, options: InitiativeManagerOptions = {}) {
     this.dir = path.join(baseDir, 'initiatives');
     this.contract = detectMdocsContract(baseDir, options.compatibility);
+    this.store = new InitiativeStore(baseDir, this.contract);
     fs.mkdirSync(this.dir, { recursive: true });
   }
 
@@ -157,7 +160,9 @@ export class InitiativeManager {
   read(fileName: string): Initiative | null {
     const sanitized = this.sanitizeFileName(fileName);
     const filePath = path.join(this.dir, sanitized);
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath)) {
+      return this.contract.initiativeMode === 'directory' ? this.store.read(fileName)?.initiative || null : null;
+    }
     const content = fs.readFileSync(filePath, 'utf8');
     return this.parseInitiative(content, fileName);
   }
@@ -172,7 +177,7 @@ export class InitiativeManager {
     return {
       id: front.id || '',
       title: front.title || '',
-      status: front.status || 'active',
+      status: normalizeInitiativeStatus(front.status),
       priority: front.priority || 'medium',
       created: front.created || '',
       updated: front.updated || '',
@@ -260,8 +265,20 @@ export class InitiativeManager {
   }
 
   findById(id: string): Initiative | null {
-    const all = this.listAll();
-    return all.find(i => i.id === id) || null;
+    return this.store.findById(id)?.initiative || null;
+  }
+
+  findKeyById(id: string): string | null {
+    return this.store.findById(id, { includeArchived: true })?.key || null;
+  }
+
+  findByQuery(query: string): { initiative: Initiative; key: string } | null {
+    const record = this.store.findByQuery(query);
+    return record ? { initiative: record.initiative, key: record.key } : null;
+  }
+
+  list(includeArchived = false): Initiative[] {
+    return this.store.list({ includeArchived }).map(record => record.initiative);
   }
 
   findRelated(queryTags: string[]): Initiative[] {
@@ -445,17 +462,7 @@ export class InitiativeManager {
   }
 
   private listAll(): Initiative[] {
-    const files = this.initiativeFiles();
-    const initiatives: Initiative[] = [];
-    for (const f of files) {
-      try {
-        const init = this.read(f);
-        if (init) initiatives.push(init);
-      } catch {
-        // Skip malformed files
-      }
-    }
-    return initiatives;
+    return this.list();
   }
 
   private updateArchiveIndex(): void {

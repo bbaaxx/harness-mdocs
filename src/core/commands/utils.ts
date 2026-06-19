@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { InitiativeManager } from '../managers/initiative';
 
 export function today(): string {
@@ -11,12 +9,6 @@ export function slugify(value: string): string {
 }
 
 export function findInitiativeFilename(mdocsRoot: string, initiatives: InitiativeManager, id: string): string | null {
-  const initiativesDir = path.join(mdocsRoot, 'initiatives');
-  if (!fs.existsSync(initiativesDir)) return null;
-  const files = fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md') && file !== 'INDEX.md');
-  for (const fileName of files) {
-    const initiative = initiatives.read(fileName);
-    if (initiative?.id === id) return fileName;
-  }
-  return null;
+  void mdocsRoot;
+  return initiatives.findKeyById(id);
 }

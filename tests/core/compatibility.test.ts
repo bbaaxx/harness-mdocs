@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { createMdocsCore } from '../../src/core';
 import { detectMdocsContract } from '../../src/core/contract';
+import { lookup } from '../../src/core/operations';
 
 function copyDir(source: string, target: string) {
   fs.mkdirSync(target, { recursive: true });
@@ -109,4 +110,31 @@ test('directory-v2 detection avoids generated indices when lowercase index is ab
   expect(contract.initiativeMode).toBe('directory');
   expect(contract.wikiIndexMode).toBe('none');
   expect(contract.wikiIndexOwner).toBe('none');
+});
+
+test('directory-v2 initiatives are readable by lookup, search, and aliases', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-read-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+
+  expect(core.managers.initiatives.findById('example-active')?.title).toBe('Example Active');
+  expect(core.managers.initiatives.findById('example-complete')?.status).toBe('done');
+  expect(core.managers.initiatives.findById('legacy-flat')?.title).toBe('Legacy Flat');
+  expect(core.managers.initiatives.findById('example-archived')).toBeNull();
+  expect(core.managers.initiatives.list(true).some(initiative => initiative.id === 'example-archived')).toBe(true);
+  expect(core.managers.initiatives.findByQuery('example-active')?.key).toBe('example-active');
+});
+
+test('directory-v2 lookup and search include directory initiatives', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-ops-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+
+  expect(lookup(core, 'example-active')).toMatchObject({
+    id: 'example-active',
+    filename: 'example-active'
+  });
+  expect(core.managers.search.query('directory-v2 initiative').some(result => result.id === 'example-active')).toBe(true);
 });

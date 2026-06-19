@@ -1,6 +1,7 @@
 export * from './types';
 export * from './factory';
 export * from './contract';
+export * from './initiative-store';
 export * from './lifecycle';
 export * from './commands/registry';
 export * from './managers/mdocs';

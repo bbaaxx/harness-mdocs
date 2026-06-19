@@ -1,43 +1,16 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { MdocsCore } from './factory';
-import { findInitiativeFilename, slugify } from './commands/utils';
+import { findInitiativeFilename } from './commands/utils';
 
 export function lookup(core: MdocsCore, query: string) {
-  const normalizedQuery = query.toLowerCase();
-  const querySlug = slugify(query);
-  const initiativesDir = path.join(core.mdocsRoot, 'initiatives');
-  const files = fs.existsSync(initiativesDir) ? fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md') && file !== 'INDEX.md') : [];
-
-  for (const fileName of files) {
-    const initiative = core.managers.initiatives.read(fileName);
-    if (!initiative) continue;
-
-    const fileStem = fileName.replace(/\.md$/, '');
-    const fileSlug = slugify(fileStem.replace(/--\d{4}-\d{2}-\d{2}$/, ''));
-    const idSlug = slugify(initiative.id || '');
-    const titleSlug = slugify(initiative.title || '');
-    const title = initiative.title || '';
-    const matched =
-      initiative.id === query ||
-      idSlug === querySlug ||
-      title.toLowerCase().includes(normalizedQuery) ||
-      titleSlug === querySlug ||
-      fileName === query ||
-      fileStem === query ||
-      fileSlug === querySlug;
-
-    if (matched) {
-      return {
-        type: 'initiative',
-        id: initiative.id,
-        title: initiative.title,
-        status: initiative.status,
-        tags: initiative.tags,
-        filename: fileName
-      };
-    }
-  }
+  const match = core.managers.initiatives.findByQuery(query);
+  if (match) return {
+    type: 'initiative',
+    id: match.initiative.id,
+    title: match.initiative.title,
+    status: match.initiative.status,
+    tags: match.initiative.tags,
+    filename: match.key
+  };
 
   return { error: `No initiatives found for query: ${query}` };
 }
