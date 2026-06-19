@@ -153,15 +153,81 @@ test('directory-v2 initiative write commands are blocked without flat-file side 
 
   await expect(core.commands.execute('initiative.create', { title: 'New Dir V2' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
   await expect(core.commands.execute('initiative.update', { id: 'example-active', updates: { owner: 'x' } })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
-  await expect(core.commands.execute('initiative.done', { id: 'example-active' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
   await expect(core.commands.execute('initiative.delete', { id: 'example-active' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
-  await expect(core.commands.execute('initiative.archive', { id: 'example-complete' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
   await expect(core.commands.execute('wiki.link', { initiativeId: 'example-active', wikiSlug: 'systems/system-page' })).resolves.toMatchObject({ error: expect.stringContaining('directory-v2') });
 
   expect(fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort()).toEqual(beforeFiles);
   expect(fs.readFileSync(statusPath, 'utf8')).toBe(beforeStatus);
   expect(fs.readFileSync(wikiPath, 'utf8')).toBe(beforeWiki);
   expect(fs.existsSync(path.join(initiativesDir, 'archive', 'example-complete.md'))).toBe(false);
+});
+
+test('directory-v2 initiative.done updates status file without flat-file side effects', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-done-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
+  const statusPath = path.join(initiativesDir, 'example-active', '_status.md');
+  const beforeFiles = fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort();
+
+  const result = await core.commands.execute('initiative.done', { id: 'example-active' });
+  const status = fs.readFileSync(statusPath, 'utf8');
+
+  expect(result).toMatchObject({ success: true, id: 'example-active', filename: 'example-active' });
+  expect(status).toContain('status: complete');
+  expect(status).toContain('completed:');
+  expect(status).toContain('Marked done via mdocs command');
+  expect(status).toContain('Example directory-v2 initiative.');
+  expect(core.managers.initiatives.findById('example-active')?.status).toBe('done');
+  expect(fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort()).toEqual(beforeFiles);
+});
+
+test('directory-v2 initiative.done clears active workflow state', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-done-active-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  core.managers.workflow.setActiveInitiative('example-active');
+
+  await core.commands.execute('initiative.done', { id: 'example-active' });
+
+  expect(core.managers.workflow.status().activeInitiative).toBeNull();
+});
+
+test('directory-v2 initiative.archive moves whole folder to _archive', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-archive-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
+  const sourceDir = path.join(initiativesDir, 'example-complete');
+  const targetDir = path.join(initiativesDir, '_archive', 'example-complete');
+  fs.writeFileSync(path.join(sourceDir, 'artifact.txt'), 'preserved artifact', 'utf8');
+
+  const result = await core.commands.execute('initiative.archive', { id: 'example-complete' });
+
+  expect(result).toMatchObject({ success: true, id: 'example-complete', archivedFilename: 'example-complete' });
+  expect(fs.existsSync(sourceDir)).toBe(false);
+  expect(fs.existsSync(path.join(targetDir, '_status.md'))).toBe(true);
+  expect(fs.readFileSync(path.join(targetDir, '_status.md'), 'utf8')).toContain('status: archived');
+  expect(fs.readFileSync(path.join(targetDir, 'artifact.txt'), 'utf8')).toBe('preserved artifact');
+  expect(core.managers.initiatives.findById('example-complete')).toBeNull();
+  expect(core.managers.initiatives.list(true).some(initiative => initiative.id === 'example-complete')).toBe(true);
+});
+
+test('directory-v2 initiative.archive rejects active initiatives without moving folder', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-archive-active-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+  const core = createMdocsCore(projectDir);
+  const initiativesDir = path.join(projectDir, 'mdocs', 'initiatives');
+
+  const result = await core.commands.execute('initiative.archive', { id: 'example-active' });
+
+  expect(result).toMatchObject({ error: 'Only done initiatives can be archived: example-active' });
+  expect(fs.existsSync(path.join(initiativesDir, 'example-active', '_status.md'))).toBe(true);
+  expect(fs.existsSync(path.join(initiativesDir, '_archive', 'example-active'))).toBe(false);
 });
 
 test('directory-v2 root wiki index is searchable without generated index writes', () => {

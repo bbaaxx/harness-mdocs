@@ -159,14 +159,11 @@ export class MdocsCommandRegistry {
     if (!fileName) return { error: `Initiative not found: ${args.id}` };
     const initiative = this.context.initiatives.read(fileName);
     if (!initiative) return { error: `Initiative not found: ${args.id}` };
-    initiative.status = 'done';
-    initiative.updated = today();
-    initiative.progressLog.push(`[${new Date().toISOString()}] Marked done via mdocs command`);
-    const filePath = this.context.initiatives.update(fileName, initiative);
+    const result = this.context.initiatives.markDone(fileName);
     if (this.context.workflow.status().activeInitiative === initiative.id) {
       this.context.workflow.setActiveInitiative(null);
     }
-    return { success: true, filename: path.basename(filePath), id: initiative.id };
+    return { success: true, filename: result.filename, id: initiative.id };
   }
 
   private deleteInitiative(args: Record<string, any>) {

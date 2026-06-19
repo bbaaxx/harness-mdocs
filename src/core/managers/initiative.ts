@@ -137,7 +137,8 @@ export class InitiativeManager {
   }
 
   assertWriteSupported(operation: string): void {
-    if (this.contract.initiativeMode === 'directory') {
+    const directoryNativeWrites = new Set(['initiative.done', 'initiative.archive']);
+    if (this.contract.initiativeMode === 'directory' && !directoryNativeWrites.has(operation)) {
       throw new Error(`${operation} is not supported for directory-v2 initiatives; write support is read-only to prevent accidental flat-file writes.`);
     }
   }
@@ -167,7 +168,7 @@ export class InitiativeManager {
   read(fileName: string): Initiative | null {
     const sanitized = this.sanitizeFileName(fileName);
     const filePath = path.join(this.dir, sanitized);
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
       return this.contract.initiativeMode === 'directory' ? this.store.read(fileName)?.initiative || null : null;
     }
     const content = fs.readFileSync(filePath, 'utf8');
@@ -236,6 +237,22 @@ export class InitiativeManager {
     return newPath;
   }
 
+  markDone(fileName: string): { filePath: string; filename: string; initiative: Initiative } {
+    if (this.contract.initiativeMode === 'directory') {
+      const result = this.store.markDone(fileName);
+      return { filePath: result.filePath, filename: result.key, initiative: result.initiative };
+    }
+
+    const sanitized = this.sanitizeFileName(fileName);
+    const initiative = this.read(sanitized);
+    if (!initiative) throw new Error(`Initiative file not found: ${sanitized}`);
+    initiative.status = 'done';
+    initiative.updated = new Date().toISOString().split('T')[0];
+    initiative.progressLog.push(`[${new Date().toISOString()}] Marked done via mdocs command`);
+    const filePath = this.update(sanitized, initiative);
+    return { filePath, filename: path.basename(filePath), initiative };
+  }
+
   delete(fileName: string): void {
     this.assertWriteSupported('initiative.delete');
     const sanitized = this.sanitizeFileName(fileName);
@@ -256,6 +273,10 @@ export class InitiativeManager {
 
   archive(fileName: string): { archivedFilename: string; archiveIndex: string } {
     this.assertWriteSupported('initiative.archive');
+    if (this.contract.initiativeMode === 'directory') {
+      const result = this.store.archive(fileName);
+      return { archivedFilename: result.archivedFilename, archiveIndex: path.join(this.dir, '_archive') };
+    }
     const sanitized = this.sanitizeFileName(fileName);
     const sourcePath = path.join(this.dir, sanitized);
     if (!fs.existsSync(sourcePath)) throw new Error(`Initiative file not found: ${sanitized}`);

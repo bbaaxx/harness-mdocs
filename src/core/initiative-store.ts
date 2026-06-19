@@ -75,6 +75,43 @@ export class InitiativeStore {
     return this.list({ includeArchived: true }).find(record => record.key === key || record.initiative.id === key) || null;
   }
 
+  markDone(key: string, timestamp = new Date()): { key: string; filePath: string; initiative: Initiative } {
+    const record = this.read(key);
+    if (!record || record.sourceKind !== 'directory-status' || record.archived) {
+      throw new Error(`Directory initiative not found: ${key}`);
+    }
+    const date = timestamp.toISOString().split('T')[0];
+    this.updateStatusFile(record.filePath, {
+      status: 'complete',
+      updated: date,
+      completed: record.rawFrontmatter.completed || date
+    }, `[${timestamp.toISOString()}] Marked done via mdocs command`);
+    const updated = this.read(record.key);
+    if (!updated) throw new Error(`Directory initiative not found after update: ${key}`);
+    return { key: record.key, filePath: record.filePath, initiative: updated.initiative };
+  }
+
+  archive(key: string): { archivedFilename: string; sourcePath: string; targetPath: string } {
+    const record = this.read(key);
+    if (!record || record.sourceKind !== 'directory-status' || record.archived) {
+      throw new Error(`Directory initiative not found: ${key}`);
+    }
+    if (record.initiative.status !== 'done') throw new Error(`Only done initiatives can be archived: ${record.initiative.id}`);
+    const slug = this.safeDirectoryKey(record.key);
+    const sourcePath = path.join(this.initiativesDir, slug);
+    const archiveDir = path.join(this.initiativesDir, '_archive');
+    const targetPath = path.join(archiveDir, slug);
+    if (!fs.existsSync(sourcePath)) throw new Error(`Directory initiative not found: ${key}`);
+    if (fs.existsSync(targetPath)) throw new Error(`Archived initiative already exists: ${slug}`);
+    fs.mkdirSync(archiveDir, { recursive: true });
+    this.updateStatusFile(record.filePath, {
+      status: 'archived',
+      updated: new Date().toISOString().split('T')[0]
+    });
+    fs.renameSync(sourcePath, targetPath);
+    return { archivedFilename: slug, sourcePath, targetPath };
+  }
+
   findById(id: string, options: { includeArchived?: boolean } = {}): InitiativeRecord | null {
     return this.list(options).find(record => record.initiative.id === id) || null;
   }
@@ -157,6 +194,40 @@ export class InitiativeStore {
       nextAction: front.next_action || undefined
     };
     return { key, filePath, sourceKind, archived, rawFrontmatter: front, initiative };
+  }
+
+  private safeDirectoryKey(key: string): string {
+    const base = path.basename(key);
+    if (!base || base === '.' || base === '..' || base !== key || key.includes('/') || key.includes('\\')) {
+      throw new Error(`Invalid directory initiative key: ${key}`);
+    }
+    return base;
+  }
+
+  private updateStatusFile(filePath: string, updates: Record<string, string>, progressNote?: string): void {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n?)([\s\S]*)$/);
+    if (!match) throw new Error(`Invalid initiative status format: ${filePath}`);
+    const newline = content.includes('\r\n') ? '\r\n' : '\n';
+    const lines = match[1].split(/\r?\n/);
+    for (const [key, value] of Object.entries(updates)) {
+      const index = lines.findIndex(line => line.match(new RegExp(`^${key}:`)));
+      const nextLine = `${key}: ${value}`;
+      if (index >= 0) lines[index] = nextLine;
+      else lines.push(nextLine);
+    }
+    let body = match[3] || '';
+    if (progressNote) body = this.appendProgressNote(body, progressNote, newline);
+    fs.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${newline}${body.replace(/^\r?\n/, '')}`, 'utf8');
+  }
+
+  private appendProgressNote(body: string, progressNote: string, newline: string): string {
+    const noteLine = `- ${progressNote}`;
+    if (/## Progress Log\r?\n/.test(body)) {
+      return body.replace(/(## Progress Log\r?\n)/, `$1${noteLine}${newline}`);
+    }
+    const separator = body.trim().length > 0 ? `${newline}${newline}` : '';
+    return `${body.replace(/\s*$/, '')}${separator}## Progress Log${newline}${noteLine}${newline}`;
   }
 }
 
