@@ -133,6 +133,27 @@ Codex v1 limitations are intentional and should be described honestly:
 
 Claude Code is a Tier 3 surface — full host-level enforcement, on par with OpenCode. It integrates through an MCP server, PreToolUse/PostToolUse hooks, skills, and CLAUDE.md instructions.
 
+### Plugin install (recommended)
+
+Install from the bundled marketplace with two commands:
+
+```
+/plugin marketplace add <owner>/harness-mdocs
+/plugin install mdocs@harness-mdocs
+```
+
+This registers the MCP server, hooks, skills, and orchestrator agent automatically — no manual `.claude/settings.json` editing required.
+
+The plugin bundles the compiled `dist/` so no separate `npm install` is needed at runtime. Hooks use direct `node` paths (not `npx`) for fast per-tool-call execution.
+
+To update:
+
+```
+/plugin marketplace update harness-mdocs
+```
+
+### Manual install (fallback)
+
 Add to `.claude/settings.json` (templates ship in the package under `src/surfaces/claude-code/assets/templates/`):
 
 ```json

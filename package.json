@@ -1,6 +1,6 @@
 {
   "name": "harness-mdocs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Surface-neutral initiative and wiki memory for AI coding harnesses.",
   "license": "MIT",
   "author": "bbaaxx",
@@ -58,8 +58,9 @@
     "test:core": "jest tests/core",
     "test:opencode": "jest tests/surfaces/opencode",
     "test:codex": "jest tests/surfaces/codex",
+    "build:claude-plugin": "bash scripts/build-claude-plugin.sh",
     "prepare": "npm run build",
-    "prepack": "npm run build"
+    "prepack": "npm run build && npm run build:claude-plugin"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "^1.0.0"
@@ -91,6 +92,8 @@
     "docs/*.md",
     "src/surfaces/codex/plugin",
     "src/surfaces/claude-code/assets",
+    "src/surfaces/claude-code/plugin",
+    ".claude-plugin",
     "README.md",
     "LICENSE"
   ]

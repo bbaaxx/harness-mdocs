@@ -1,5 +1,5 @@
 {
   "currentStep": "IDLE",
-  "activeInitiative": null,
+  "activeInitiative": "implement-directory-v2-compatibility",
   "stepHistory": []
 }

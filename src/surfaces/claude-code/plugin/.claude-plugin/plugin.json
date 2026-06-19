@@ -1,0 +1,55 @@
+{
+  "name": "mdocs",
+  "version": "0.3.0",
+  "description": "Durable initiative and wiki memory for Claude Code — hooks, MCP server, skills, and orchestrator agent.",
+  "author": {
+    "name": "bbaaxx"
+  },
+  "license": "MIT",
+  "keywords": ["claude-code", "mdocs", "memory", "workflow", "wiki", "initiatives"],
+  "skills": "./skills/",
+  "agents": ["./agents/mdocs-orchestrator.md"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/dist/cli/hooks/pre-tool-use.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Bash|Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/dist/cli/hooks/post-tool-use.js"
+          }
+        ]
+      }
+    ]
+  },
+  "mcpServers": {
+    "mdocs": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js", "mcp"],
+      "env": {
+        "MDOCS_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      }
+    }
+  },
+  "interface": {
+    "displayName": "Mdocs",
+    "category": "Productivity",
+    "capabilities": ["Write", "Interactive"],
+    "defaultPrompt": [
+      "Resume mdocs work",
+      "Create an mdocs initiative",
+      "Search project memory"
+    ]
+  }
+}
