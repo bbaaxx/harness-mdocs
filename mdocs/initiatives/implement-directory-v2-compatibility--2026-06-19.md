@@ -9,7 +9,7 @@ tags: ["compatibility","directory-v2","index-policy","wiki","initiatives"]
 related_wiki: ["architecture/directory-v2-compatibility-evaluation"]
 priority: "medium"
 phase: "implementation"
-next_action: "Review first slice, then continue with InitiativeStore adapter and directory-v2 read support."
+next_action: "Route remaining validation/surface flat scans through InitiativeStore, then add directory-v2 write guards."
 ---
 
 ## Objective
