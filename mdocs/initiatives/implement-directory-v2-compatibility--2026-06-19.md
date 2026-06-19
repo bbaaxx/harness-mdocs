@@ -1,14 +1,14 @@
 ---
 id: "implement-directory-v2-compatibility"
 title: "Implement directory-v2 mdocs compatibility"
-status: "active"
+status: "done"
 created: "2026-06-19"
 updated: "2026-06-19"
 owner: "openagent"
 tags: ["compatibility","directory-v2","index-policy","wiki","initiatives"]
 related_wiki: ["architecture/directory-v2-compatibility-evaluation"]
 priority: "medium"
-phase: "verification"
+phase: "done"
 next_action: "Run final review, document remaining limitations, then consider marking initiative done after stable wiki learning is updated."
 ---
 
@@ -40,6 +40,8 @@ Make harness-mdocs contract-aware so it supports both existing flat-v1 projects 
 - Starting coordinated final pass. Scope: implement root wiki write support, re-enable directory-v2 wiki.link using native initiative updates, update docs/limitations, verify, review, then commit and consider marking initiative done.
 - Completed coordinated final compatibility slice with subagent investigation/planning and reviewer pass. Implemented root wiki create/update/delete/stub using omitted or empty category, re-enabled directory-v2 `wiki.link` via native `_status.md` updates, accepted root wiki refs, protected canonical root `index.md`/`INDEX` aliases, and documented native directory-v2 writes plus root wiki link syntax. Added regression coverage for root wiki writes, root wiki link refs, canonical index guard, directory-v2 wiki.link no flat-file side effects, and OpenCode error changes. Verified `npm run build`, `npm test -- tests/core --no-cache` (160 passing), `npm test -- tests/surfaces/opencode --no-cache` (56 passing), and `mdocs_validate`.
 - Addressed reviewer findings: root index guard now rejects case-insensitive `index` aliases, `wiki.link` normalizes `.md` suffixes before writing, validates refs before initiative updates, and rejects empty path segments without side effects. Final verification passed: `npm run build`, `npm test -- tests/core --no-cache` (162 passing), and `npm test -- tests/surfaces/opencode --no-cache` (56 passing).
+- Wrap-up: all planned directory-v2 compatibility work completed and pushed. Final state supports contract detection, safe index ownership, directory initiative reads and native writes, root wiki reads/writes, directory-v2 wiki.link, provenance validation, and opt-in-only Obsidian visibility metadata. Final verification passed before push: build, full core tests, OpenCode surface tests, and mdocs validation.
+- [2026-06-19T18:34:19.091Z] Marked done via mdocs command
 
 ## Artifacts
 - [Directory-v2 compatibility evaluation](../wiki/architecture/directory-v2-compatibility-evaluation.md)
