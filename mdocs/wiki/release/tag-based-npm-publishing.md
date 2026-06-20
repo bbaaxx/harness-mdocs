@@ -39,6 +39,8 @@ Configure this package on npmjs.com:
 - Environment name: `release`
 - Allowed action: `npm publish`
 
+This Trusted Publisher is configured for `harness-mdocs`. Package publishing access is set to require 2FA while disallowing traditional tokens.
+
 `package.json` includes `repository.url` matching this GitHub repository, which npm trusted publishing checks during publish.
 
 Workflow permissions:
