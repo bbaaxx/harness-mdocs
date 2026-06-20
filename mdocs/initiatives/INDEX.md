@@ -9,7 +9,7 @@
 - **Fix GitHub Actions Node runtime warning** (active) — fix-github-actions-node-runtime-warning--2026-06-19.md — 2026-06-19 — [ci, github-actions, node, warning]
 - **Add GitHub Actions CI** (done) — add-github-actions-ci--2026-06-19.md — 2026-06-19 — [ci, github-actions, quality, coverage, automation]
 - **Improve test coverage and lint cleanliness** (done) — improve-test-coverage-and-lint-cleanliness--2026-06-19.md — 2026-06-19 — [tests, coverage, lint, quality, cleanup]
-- **Quiet CI warning logs** (active) — quiet-ci-warning-logs--2026-06-19.md — 2026-06-19 — [ci, dependencies, logs, warnings, maintenance]
+- **Quiet CI warning logs** (done) — quiet-ci-warning-logs--2026-06-19.md — 2026-06-19 — [ci, dependencies, logs, warnings, maintenance]
 - **Implement directory-v2 mdocs compatibility** (done) — implement-directory-v2-compatibility--2026-06-19.md — 2026-06-19 — [compatibility, directory-v2, index-policy, wiki, initiatives]
 - **Add tag based npm publishing** (active) — add-tag-based-npm-publishing--2026-06-19.md — 2026-06-19 — [ci, publishing, npm, release, github-actions]
 - **Fresh Codex Thread Plugin Smoke Test** (done) — fresh-codex-thread-plugin-smoke-test--2026-06-10.md — 2026-06-10 — [codex, plugin, smoke-test]
