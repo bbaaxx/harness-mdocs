@@ -26,21 +26,34 @@ Phase 2 publishing uses `.github/workflows/publish.yml`.
 - Tag must match `package.json` version exactly as `v${version}`.
 - Workflow checks npm registry and fails if the version is already published.
 
-## Auth and provenance
+## Trusted publishing and provenance
 
-Required GitHub secret:
+Publishing uses npm Trusted Publishers/OIDC, not a long-lived npm token.
 
-- `NPM_TOKEN` in the `release` environment or repository secrets.
+Configure this package on npmjs.com:
+
+- Publisher: GitHub Actions
+- Organization/user: `bbaaxx`
+- Repository: `harness-mdocs`
+- Workflow filename: `publish.yml`
+- Environment name: `release`
+- Allowed action: `npm publish`
+
+`package.json` includes `repository.url` matching this GitHub repository, which npm trusted publishing checks during publish.
 
 Workflow permissions:
 
 - `contents: read`
-- `id-token: write` for npm provenance.
+- `id-token: write` for npm OIDC.
+
+Trusted publishing requires GitHub-hosted runners, Node 22.14+ and npm 11.5.1+. The workflow runs on Node 24.
+
+With GitHub trusted publishing for a public package from a public repository, npm automatically generates provenance. No `NPM_TOKEN` or `NODE_AUTH_TOKEN` is required for publishing.
 
 Publish command:
 
 ```bash
-npm publish --provenance --access public
+npm publish --access public
 ```
 
 ## Release flow

@@ -4,6 +4,10 @@
   "description": "Surface-neutral initiative and wiki memory for AI coding harnesses.",
   "license": "MIT",
   "author": "bbaaxx",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bbaaxx/harness-mdocs.git"
+  },
   "keywords": [
     "mdocs",
     "memory",

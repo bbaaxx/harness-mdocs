@@ -42,7 +42,6 @@ jobs:
           NODE_OPTIONS: --no-deprecation
         with:
           node-version: 24.x
-          cache: npm
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
@@ -83,6 +82,4 @@ jobs:
           fi
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
