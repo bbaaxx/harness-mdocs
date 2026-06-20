@@ -20,14 +20,13 @@ Phase 1 CI/CD validates integration and pre-publish readiness without publishing
   - Pushes to `staging`: run `npm run quality` on Node 18 and 20 in the `staging` environment.
 - `.github/workflows/release-check.yml`
   - Pushes to `main`: run `npm run release:check` in the `release` environment.
-  - Version tags matching `v*`: run `npm run release:check` in the `release` environment.
   - Manual dispatch is available for release pre-publish validation.
 
 ## Branch semantics
 
 - `staging` is the developer integration branch.
 - `main` is the frozen/version-prep branch.
-- `v*` tags are pre-publish validation in Phase 1; no npm publish happens yet.
+- `v*` tags moved to the Phase 2 publish workflow; release checks still run before publish there.
 
 ## Validation
 
@@ -40,7 +39,7 @@ Local validation for this implementation:
 
 ## Phase 2 follow-up
 
-Actual npm publishing is tracked separately by `add-tag-based-npm-publishing`.
+Actual npm publishing is tracked by `add-tag-based-npm-publishing` and documented in `release/tag-based-npm-publishing`.
 
 ## Referenced By
 
