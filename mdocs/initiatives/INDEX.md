@@ -5,7 +5,7 @@
 - **Add local quality tooling** (done) — add-local-quality-tooling--2026-06-19.md — 2026-06-19 — [tooling, lint, tests, coverage, quality]
 - **Update harness-mdocs README** (done) — update-harness-mdocs-readme--2026-06-10.md — 2026-06-10 — [docs, readme, harness-mdocs, opencode-migration]
 - **Improve mdocs CLI Command Help** (done) — improve-mdocs-cli-command-help--2026-06-10.md — 2026-06-10 — [cli, docs, usability, mdocs]
-- **Lint updated harness-mdocs plugin** (active) — lint-updated-harness-mdocs-plugin--2026-06-19.md — 2026-06-19 — [lint, plugin, verification, harness-mdocs]
+- **Lint updated harness-mdocs plugin** (done) — lint-updated-harness-mdocs-plugin--2026-06-19.md — 2026-06-19 — [lint, plugin, verification, harness-mdocs]
 - **Fix GitHub Actions Node runtime warning** (done) — fix-github-actions-node-runtime-warning--2026-06-19.md — 2026-06-19 — [ci, github-actions, node, warning]
 - **Add GitHub Actions CI** (done) — add-github-actions-ci--2026-06-19.md — 2026-06-19 — [ci, github-actions, quality, coverage, automation]
 - **Improve test coverage and lint cleanliness** (done) — improve-test-coverage-and-lint-cleanliness--2026-06-19.md — 2026-06-19 — [tests, coverage, lint, quality, cleanup]
