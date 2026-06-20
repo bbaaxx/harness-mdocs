@@ -1,6 +1,6 @@
 {
   "name": "mdocs",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Durable initiative and wiki memory for Claude Code — hooks, MCP server, skills, and orchestrator agent.",
   "author": {
     "name": "bbaaxx"
