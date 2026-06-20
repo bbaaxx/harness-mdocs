@@ -4,7 +4,7 @@ title: "CI warning log hygiene"
 category: "release"
 created: "2026-06-19"
 updated: "2026-06-19"
-related_initiatives: ["quiet-ci-warning-logs"]
+related_initiatives: ["quiet-ci-warning-logs","fix-github-actions-node-runtime-warning"]
 tags: ["ci","github-actions","warnings","dependencies","logs"]
 lifecycle: "stable"
 ---
