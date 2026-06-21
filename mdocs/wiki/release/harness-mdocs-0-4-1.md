@@ -4,7 +4,7 @@ title: "harness-mdocs 0.4.1 release"
 category: "release"
 created: "2026-06-20"
 updated: "2026-06-20"
-related_initiatives: ["publish-harness-mdocs-0-4-1"]
+related_initiatives: ["publish-harness-mdocs-0-4-1","sync-github-releases-with-npm-publishing"]
 tags: ["release","npm","version-0.4.1","trusted-publishing"]
 lifecycle: "stable"
 ---
@@ -18,6 +18,7 @@ Published `harness-mdocs@0.4.1` to npm using the tag-based GitHub Actions Publis
 - Release prep commit: `fcba9da chore(release): prepare 0.4.1`
 - Git tag: `v0.4.1`
 - Publish workflow run: `27881625591`
+- GitHub Release: `https://github.com/bbaaxx/harness-mdocs/releases/tag/v0.4.1`
 
 ## Validation
 
@@ -41,6 +42,10 @@ Publish workflow gates passed:
 - Version: `0.4.1`
 - Tarball: `https://registry.npmjs.org/harness-mdocs/-/harness-mdocs-0.4.1.tgz`
 - Integrity: `sha512-0M1h8Rpj0TyFxpCRRGU5F15zso6cINKZBjiytxStTb6t+YW56ygcHj3rVaZhJcY4rrBmt24A4f9CgA6MPb89OA==`
+
+## GitHub Release
+
+The GitHub Release for `v0.4.1` was backfilled after npm publish because the first publish workflow version only published to npm. Future publish workflow runs create the GitHub Release automatically after the npm publish step.
 
 ## Notes
 

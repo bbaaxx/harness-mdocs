@@ -12,7 +12,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 concurrency:
@@ -68,18 +68,36 @@ jobs:
             exit 1
           fi
 
+          echo "RELEASE_TAG=${TAG_NAME}" >> "${GITHUB_ENV}"
+          echo "PACKAGE_VERSION=${PACKAGE_VERSION#v}" >> "${GITHUB_ENV}"
+
       - name: Run release checks
         run: npm run release:check
 
-      - name: Verify version is not already published
+      - name: Check npm publication status
         run: |
           PACKAGE_NAME="$(node -p "require('./package.json').name")"
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
 
           if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
-            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already published" >&2
-            exit 1
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already published; skipping npm publish"
+            echo "NPM_ALREADY_PUBLISHED=true" >> "${GITHUB_ENV}"
+          else
+            echo "NPM_ALREADY_PUBLISHED=false" >> "${GITHUB_ENV}"
           fi
 
       - name: Publish to npm
+        if: env.NPM_ALREADY_PUBLISHED != 'true'
         run: npm publish --access public
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${RELEASE_TAG} already exists; skipping"
+            exit 0
+          fi
+
+          gh release create "${RELEASE_TAG}" \
+            --title "${RELEASE_TAG}" \
+            --generate-notes

@@ -4,7 +4,7 @@ title: "Tag-based npm publishing"
 category: "release"
 created: "2026-06-20"
 updated: "2026-06-20"
-related_initiatives: ["add-tag-based-npm-publishing","publish-harness-mdocs-0-4-1"]
+related_initiatives: ["add-tag-based-npm-publishing","publish-harness-mdocs-0-4-1","sync-github-releases-with-npm-publishing"]
 tags: ["release","npm","publishing","github-actions","provenance"]
 lifecycle: "stable"
 ---
@@ -24,7 +24,8 @@ Phase 2 publishing uses `.github/workflows/publish.yml`.
 - Job runs on Node 24.
 - Job runs `npm run release:check` before publishing.
 - Tag must match `package.json` version exactly as `v${version}`.
-- Workflow checks npm registry and fails if the version is already published.
+- Workflow checks npm registry and skips `npm publish` if the version is already published, so reruns can still create a missing GitHub Release.
+- Workflow creates the matching GitHub Release after npm publish succeeds or is already present.
 
 ## Trusted publishing and provenance
 
@@ -45,7 +46,7 @@ This Trusted Publisher is configured for `harness-mdocs`. Package publishing acc
 
 Workflow permissions:
 
-- `contents: read`
+- `contents: write` for GitHub Release creation.
 - `id-token: write` for npm OIDC.
 
 Trusted publishing requires GitHub-hosted runners, Node 22.14+ and npm 11.5.1+. The workflow runs on Node 24.
@@ -66,5 +67,6 @@ npm publish --access public
 4. Create and push matching tag, e.g. `git tag v0.4.1 && git push origin v0.4.1`.
 5. Approve the `release` environment if required.
 6. Confirm npm package version appears after publish.
+7. Confirm GitHub Releases shows the same tag/version.
 
 `release-check.yml` no longer runs on tags after Phase 2 to avoid duplicate tag workflows and duplicate release environment approvals.
