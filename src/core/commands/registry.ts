@@ -6,7 +6,8 @@ import { WikiManager } from '../managers/wiki';
 import { MdocsLinter } from '../validation/linter';
 import { SearchEngine } from '../search';
 import { SubagentAssembler } from '../subagent';
-import { WorkflowEngine } from '../workflow/engine';
+import { WorkflowEngine, STEPS } from '../workflow/engine';
+import { StepName } from '../types';
 import { findInitiativeFilename, slugify, today } from './utils';
 
 export interface MdocsCommandContext {
@@ -35,6 +36,7 @@ export class MdocsCommandRegistry {
     'wiki.list',
     'wiki.link',
     'wiki.xref',
+    'workflow.advance',
     'validate',
     'index.sync'
   ];
@@ -68,6 +70,8 @@ export class MdocsCommandRegistry {
           return this.linkWiki(args);
         case 'wiki.xref':
           return this.crossReferenceWiki(args);
+        case 'workflow.advance':
+          return this.advanceWorkflow(args);
         case 'validate':
           return this.validationResult();
         case 'index.sync':
@@ -78,6 +82,27 @@ export class MdocsCommandRegistry {
     } catch (err: any) {
       return { error: err.message || String(err) };
     }
+  }
+
+  private advanceWorkflow(args: Record<string, any>) {
+    const step = args.step || args.nextStep;
+    if (!step || typeof step !== 'string') {
+      return { error: 'workflow.advance requires { step: StepName }', validSteps: STEPS };
+    }
+    if (!STEPS.includes(step as StepName)) {
+      return { error: `Invalid workflow step: ${step}`, validSteps: STEPS };
+    }
+    try {
+      this.context.workflow.advance(step as StepName);
+    } catch (err: any) {
+      return { error: err.message || String(err), currentStep: this.context.workflow.getCurrentStep() };
+    }
+    return {
+      success: true,
+      currentStep: this.context.workflow.getCurrentStep(),
+      activeInitiative: this.context.workflow.status().activeInitiative,
+      stepHistory: this.context.workflow.status().stepHistory
+    };
   }
 
   validationResult() {

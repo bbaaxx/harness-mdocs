@@ -41,4 +41,34 @@ describe('MdocsCommandRegistry', () => {
     expect(result.supportedCommands).toContain('wiki.create');
     expect(result.supportedCommands).toContain('index.sync');
   });
+
+  test('workflow.advance drives the workflow state machine forward', async () => {
+    const projectDir = tempProject();
+    const core = createMdocsCore(projectDir);
+    core.lifecycle.ensureInitialized();
+    expect(core.managers.workflow.getCurrentStep()).toBe('IDLE');
+
+    const r1 = await core.commands.execute('workflow.advance', { step: 'UNDERSTAND' });
+    expect(r1).toMatchObject({ success: true, currentStep: 'UNDERSTAND' });
+    expect(core.managers.workflow.getCurrentStep()).toBe('UNDERSTAND');
+
+    for (const step of ['DISCOVER', 'CONTEXT', 'PLAN']) {
+      await core.commands.execute('workflow.advance', { step });
+    }
+    // write tools unblock once at PLAN
+    expect(core.managers.workflow.canExecuteTool('write', { filePath: '/repo/src/app.ts' })).toBe(true);
+  });
+
+  test('workflow.advance rejects invalid transitions', async () => {
+    const core = createMdocsCore(tempProject());
+
+    const skip = await core.commands.execute('workflow.advance', { step: 'PLAN' });
+    expect(skip.error).toMatch(/skip|back|invalid/i);
+
+    const missing = await core.commands.execute('workflow.advance', {});
+    expect(missing.error).toMatch(/step/i);
+
+    const bad = await core.commands.execute('workflow.advance', { step: 'NOPE' });
+    expect(bad.error).toBeDefined();
+  });
 });

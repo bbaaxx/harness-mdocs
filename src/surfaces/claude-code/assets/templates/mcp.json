@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mdocs": {
+      "command": "node",
+      "args": ["${workspaceFolder}/node_modules/harness-mdocs/dist/cli/index.js", "mcp"],
+      "env": { "MDOCS_PROJECT_DIR": "${workspaceFolder}" }
+    }
+  }
+}

@@ -50,6 +50,31 @@ describe('mdocs CLI', () => {
     expect(JSON.parse(result.stdout)).toMatchObject({ success: true, id: 'cli-created' });
   });
 
+  test('step advances the workflow state machine', async () => {
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+
+    const result = await runMdocsCli(['step', 'UNDERSTAND'], projectDir);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).currentStep).toBe('UNDERSTAND');
+  });
+
+  test('step rejects invalid transitions with nonzero exit', async () => {
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+
+    const result = await runMdocsCli(['step', 'PLAN'], projectDir); // skip from IDLE
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/skip|back|invalid/i);
+  });
+
+  test('usage lists the mcp and step subcommands', async () => {
+    const result = await runMdocsCli(['nope'], tempProject());
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('mcp');
+    expect(result.stderr).toContain('step <step>');
+  });
+
   test('command help documents payload shapes and examples', async () => {
     const result = await runMdocsCli(['command', '--help'], tempProject());
 

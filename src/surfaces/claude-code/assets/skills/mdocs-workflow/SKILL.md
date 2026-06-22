@@ -27,6 +27,21 @@ Prefer the MCP tools. Fall back to the `mdocs` CLI via Bash. Last resort: edit `
 | Validate before completion | `mdocs_validate` |
 | Assemble subagent context | `mdocs_dispatch` |
 | Any core command | `mdocs` (with `command` + `args`) |
+| Advance to next step | `mdocs_advance` (MCP) or `mdocs step <step>` (CLI) |
+
+## Advancing the workflow
+
+Enforcement only binds once you leave `IDLE` (at IDLE every tool is allowed). The
+state machine does not advance on its own — you must drive it forward:
+
+- MCP: `mdocs_advance { "step": "PLAN" }`
+- CLI: `mdocs step PLAN`
+
+Steps must be reached in order (no skipping, no going back): `UNDERSTAND →
+DISCOVER → CONTEXT → PLAN → EXECUTE → VERIFY → REPORT → COMPLETE`. Build and test
+commands (`npm`, `node`, `tsc`, `jest`, read-only `git`) run at `VERIFY`; truly
+destructive operations (`rm`, `mv`, `git commit`, `git push`, `npm publish`, …)
+stay blocked until `COMPLETE`.
 
 ## Workflow steps
 

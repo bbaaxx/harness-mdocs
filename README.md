@@ -180,17 +180,28 @@ To update:
 
 ### Manual install (fallback)
 
-Add to `.claude/settings.json` (templates ship in the package under `src/surfaces/claude-code/assets/templates/`):
+Claude Code reads project-scoped MCP servers from `.mcp.json` (repo root) and
+hooks from `.claude/settings.json` — they are **two separate files**. Templates
+ship in the package under `src/surfaces/claude-code/assets/templates/`.
+
+Create `.mcp.json` at the project root (`mcp.json` template):
 
 ```json
 {
   "mcpServers": {
     "mdocs": {
-      "command": "npx",
-      "args": ["-y", "harness-mdocs", "mcp"],
+      "command": "node",
+      "args": ["${workspaceFolder}/node_modules/harness-mdocs/dist/cli/index.js", "mcp"],
       "env": { "MDOCS_PROJECT_DIR": "${workspaceFolder}" }
     }
-  },
+  }
+}
+```
+
+Add the hooks to `.claude/settings.json` (`settings-patch.json` template):
+
+```json
+{
   "hooks": {
     "PreToolUse": [
       { "matcher": "Write|Edit|Bash", "hooks": [
@@ -204,7 +215,7 @@ Add to `.claude/settings.json` (templates ship in the package under `src/surface
 }
 ```
 
-Then add the CLAUDE.md snippet (also in `assets/templates/`) and copy the three skills from `assets/skills/` into your `.claude/skills/`.
+Then add the CLAUDE.md snippet (also in `assets/templates/`) and copy the three skills from `assets/skills/` into your `.claude/skills/`. Restart Claude Code so both the MCP server and hooks load.
 
 What the Claude Code surface provides:
 
@@ -384,6 +395,7 @@ mdocs resume [initiative-id]
 mdocs lookup <query>
 mdocs search <query>
 mdocs dispatch [initiative-id]
+mdocs step <step>
 mdocs validate
 mdocs index check
 mdocs index repair

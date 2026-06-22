@@ -89,6 +89,10 @@ export function buildMcpServer(): McpServer {
     { initiativeId: z.string().optional() },
     async ({ initiativeId }) => guard(c => ops.resume(c, initiativeId)));
 
+  server.tool('mdocs_advance', 'Advance the workflow to the next step (UNDERSTAND, DISCOVER, CONTEXT, PLAN, EXECUTE, VERIFY, REPORT, COMPLETE). Drives the gates that block Write/Edit before PLAN and destructive Bash before COMPLETE.',
+    { step: z.string().describe('Next workflow step, e.g. PLAN') },
+    async ({ step }) => guard(c => c.commands.execute('workflow.advance', { step })));
+
   return server;
 }
 

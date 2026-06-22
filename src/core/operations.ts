@@ -1,5 +1,11 @@
 import { MdocsCore } from './factory';
+import { StepName } from './types';
 import { findInitiativeFilename } from './commands/utils';
+
+export function advance(core: MdocsCore, step: string) {
+  core.managers.workflow.advance(step as StepName);
+  return core.managers.workflow.status();
+}
 
 export function lookup(core: MdocsCore, query: string) {
   const match = core.managers.initiatives.findByQuery(query);
