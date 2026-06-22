@@ -35,17 +35,40 @@ const EXPECTED_TOOLS = [
   'mdocs_dispatch',
   'mdocs_audit',
   'mdocs_index_check',
-  'mdocs_resume'
+  'mdocs_resume',
+  'mdocs_advance'
 ];
 
 describe('Claude Code MCP server registration', () => {
-  test('registers all 10 mdocs tools', () => {
+  test('registers all 11 mdocs tools', () => {
     const server = buildMcpServer();
     const names = Object.keys(registeredTools(server));
     for (const expected of EXPECTED_TOOLS) {
       expect(names).toContain(expected);
     }
-    expect(EXPECTED_TOOLS.length).toBe(10);
+    expect(EXPECTED_TOOLS.length).toBe(11);
+  });
+});
+
+describe('Claude Code MCP advance tool', () => {
+  const prevDir = process.env.MDOCS_PROJECT_DIR;
+
+  afterEach(() => {
+    if (prevDir === undefined) delete process.env.MDOCS_PROJECT_DIR;
+    else process.env.MDOCS_PROJECT_DIR = prevDir;
+  });
+
+  test('mdocs_advance drives the workflow forward', async () => {
+    const projectDir = tempProject();
+    process.env.MDOCS_PROJECT_DIR = projectDir;
+    const server = buildMcpServer();
+    await callTool(server, 'mdocs_init');
+
+    const result = await callTool(server, 'mdocs_advance', { step: 'UNDERSTAND' });
+    expect(result.content[0].text).toContain('UNDERSTAND');
+
+    const status = await callTool(server, 'mdocs_status');
+    expect(JSON.parse(status.content[0].text).currentStep).toBe('UNDERSTAND');
   });
 });
 

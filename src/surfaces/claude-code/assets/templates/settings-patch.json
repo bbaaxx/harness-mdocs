@@ -1,11 +1,4 @@
 {
-  "mcpServers": {
-    "mdocs": {
-      "command": "npx",
-      "args": ["-y", "harness-mdocs", "mcp"],
-      "env": { "MDOCS_PROJECT_DIR": "${workspaceFolder}" }
-    }
-  },
   "hooks": {
     "PreToolUse": [
       {

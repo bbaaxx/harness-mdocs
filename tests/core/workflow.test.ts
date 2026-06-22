@@ -166,4 +166,52 @@ describe('WorkflowEngine', () => {
     expect(workflow.status().currentStep).toBe('CONTEXT');
     expect(workflow.status().stepHistory.at(-1)?.step).toBe('CONTEXT');
   });
+
+  test('allows build/test commands at VERIFY (non-destructive)', () => {
+    const engine = new WorkflowEngine(testDir);
+    engine.advance('UNDERSTAND');
+    engine.advance('DISCOVER');
+    engine.advance('CONTEXT');
+    engine.advance('PLAN');
+    engine.advance('EXECUTE');
+    engine.advance('VERIFY');
+
+    // Build/test tooling must run at VERIFY so verification is reachable
+    // before COMPLETE. These are non-destructive under the blacklist gate.
+    expect(engine.canExecuteTool('bash', { command: 'npm run build' })).toBe(true);
+    expect(engine.canExecuteTool('bash', { command: 'npm test' })).toBe(true);
+    expect(engine.canExecuteTool('bash', { command: 'npx jest' })).toBe(true);
+    expect(engine.canExecuteTool('bash', { command: 'node dist/cli/index.js status' })).toBe(true);
+    expect(engine.canExecuteTool('bash', { command: 'tsc --noEmit' })).toBe(true);
+    expect(engine.canExecuteTool('bash', { command: 'git status' })).toBe(true);
+    expect(engine.canExecuteTool('bash', { command: 'git diff' })).toBe(true);
+    // /dev/null redirection is benign noise suppression, not a destructive overwrite
+    expect(engine.canExecuteTool('bash', { command: 'node dist/cli/index.js status >/dev/null' })).toBe(true);
+    expect(engine.canExecuteTool('bash', { command: 'npm test 2>/dev/null' })).toBe(true);
+    // File redirects are intentionally not gated (regex detection is unreliable);
+    // see DESTRUCTIVE_BASH comment in engine.ts.
+    expect(engine.canExecuteTool('bash', { command: 'echo x > /tmp/out.txt' })).toBe(true);
+  });
+
+  test('blocks destructive commands at VERIFY, allows at COMPLETE', () => {
+    const engine = new WorkflowEngine(testDir);
+    engine.advance('UNDERSTAND');
+    engine.advance('DISCOVER');
+    engine.advance('CONTEXT');
+    engine.advance('PLAN');
+    engine.advance('EXECUTE');
+    engine.advance('VERIFY');
+
+    // Destructive ops still require COMPLETE
+    expect(engine.canExecuteTool('bash', { command: 'rm -rf dist' })).toBe(false);
+    expect(engine.canExecuteTool('bash', { command: 'git commit -m "x"' })).toBe(false);
+    expect(engine.canExecuteTool('bash', { command: 'git push' })).toBe(false);
+    expect(engine.canExecuteTool('bash', { command: 'npm publish' })).toBe(false);
+    expect(engine.canExecuteTool('bash', { command: 'cp -f a b' })).toBe(false);
+
+    engine.advance('REPORT');
+    engine.advance('COMPLETE');
+    expect(engine.canExecuteTool('bash', { command: 'git commit -m "x"' })).toBe(true);
+    expect(engine.canExecuteTool('bash', { command: 'npm publish' })).toBe(true);
+  });
 });

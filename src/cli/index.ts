@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createMdocsCore } from '../core';
-import { status, lookup, resume, dispatch, indexCheck } from '../core/operations';
+import { status, lookup, resume, dispatch, indexCheck, advance } from '../core/operations';
 
 export interface CliResult {
   exitCode: number;
@@ -150,6 +150,14 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
       return ok(indexCheck(core, subcommand === 'repair'));
     }
 
+    if (command === 'step' && subcommand) {
+      try {
+        return ok(advance(core, subcommand));
+      } catch (error: any) {
+        return fail(error.message || String(error));
+      }
+    }
+
     if (command === 'command' && (subcommand === '--help' || subcommand === 'help' || !subcommand)) {
       return text(commandHelp());
     }
@@ -164,7 +172,7 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
       return result.error ? { exitCode: 1, stdout: json(result), stderr: '' } : ok(result);
     }
 
-    return fail('Usage: mdocs init | status | validate | resume [initiative-id] | lookup <query> | search <query> | dispatch [initiative-id] | index check | index repair | command <name> --json <args-json>');
+    return fail('Usage: mdocs init | status | validate | resume [initiative-id] | lookup <query> | search <query> | dispatch [initiative-id] | index check | index repair | mcp | step <step> | command <name> --json <args-json>');
   } catch (error: any) {
     return fail(error.message || String(error));
   }
