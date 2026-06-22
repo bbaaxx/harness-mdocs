@@ -2,10 +2,26 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { WorkflowState, StepName } from '../types';
 
-const STEPS: StepName[] = [
-  'IDLE', 'UNDERSTAND', 'DISCOVER', 'CONTEXT', 'PLAN', 
+export const STEPS: StepName[] = [
+  'IDLE', 'UNDERSTAND', 'DISCOVER', 'CONTEXT', 'PLAN',
   'EXECUTE', 'VERIFY', 'REPORT', 'COMPLETE'
 ];
+
+/**
+ * Bash commands treated as destructive and therefore gated to COMPLETE.
+ * Deliberately a BLACKLIST (not a safe-list): build/test tooling (npm, node,
+ * tsc, jest, npx, read-only git) must run at VERIFY, so the gate cannot rely on
+ * enumerating every safe command. Matches the documented destructive set:
+ * delete/move (rm, rmdir, mv), force copy (cp -f), git state mutations
+ * (commit/push/reset/clean/rm, checkout --/.), publish, and disk wipes.
+ *
+ * File-overwrite redirection (> / >>) is intentionally NOT treated as
+ * destructive: detecting it reliably via regex is impossible (echo labels like
+ * "PLAN->COMPLETE", shell arrows, 2>&1 merges all produce false positives that
+ * lock out legitimate work), and the cost of those lockouts exceeds the value.
+ * Everything outside this list is allowed at any non-IDLE step.
+ */
+const DESTRUCTIVE_BASH = /\b(rm|rmdir|mv)\b|\bcp\b[^|\n]*\s-f\b|\bgit\s+(commit|push|reset|clean|rm)\b|\bgit\s+checkout\s+(--|\.)|\bnpm\s+publish\b|\b(mkfs|dd|shred)\b/i;
 
 export class WorkflowEngine {
   private statePath: string;
@@ -112,12 +128,14 @@ export class WorkflowEngine {
       return ['PLAN', 'EXECUTE', 'VERIFY', 'REPORT', 'COMPLETE'].includes(this.state.currentStep);
     }
     if (toolName === 'bash') {
-      // Non-destructive bash commands (ls, cat, echo, pwd, grep, etc.) are always allowed
+      // Destructive ops (rm, git commit, publish, overwrite redirects, ...) require
+      // COMPLETE. Build/test tooling is non-destructive and may run at VERIFY so
+      // verification is reachable before completion.
       const command = toolArgs?.command || toolArgs?.args?.command || '';
-      const nonDestructive = /^(ls|cat|echo|pwd|cd|which|type|head|tail|wc|sort|uniq|grep|find|date|whoami|hostname|env|printenv|id|uname|df|du|ps|top|uptime|clear|history|man|help)\b/i;
-      if (nonDestructive.test(command)) return true;
-      // Destructive commands (rm, mv, cp -f, git commit, etc.) require COMPLETE
-      return this.state.currentStep === 'COMPLETE';
+      if (DESTRUCTIVE_BASH.test(command)) {
+        return this.state.currentStep === 'COMPLETE';
+      }
+      return true;
     }
     return true;
   }
