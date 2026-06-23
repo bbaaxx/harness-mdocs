@@ -1,12 +1,13 @@
 ---
 id: "directory-v2-maintained-index-optin"
 title: "Maintained lowercase index.md/log.md in directory-v2 (opt-in)"
-status: "active"
+status: "done"
 created: "2026-06-23"
 updated: "2026-06-23"
 owner: ""
 tags: ["core","wiki","index","directory-v2","contract","0.4.3"]
-related_wiki: []
+related_wiki: ["architecture/wiki-index-ownership"]
+priority: "medium"
 ---
 
 ## Objective
@@ -18,16 +19,9 @@ Provide an opt-in mode for harness-mdocs to maintain the lowercase canonical wik
 - [ ] Make index.sync regenerate lowercase index.md only when owner equals harness and no-op when external
 - [ ] Add directory-v2 fixture test for opt-in regeneration and default byte-stable no-op
 
-## Context
-Source: Gap Closure Spec (0.4.3 / 0.5.0) G5. In directory-v2 the contract sets `wikiIndexOwner: 'external'` in `src/core/contract.ts` and `index.sync` leaves lowercase `wiki/index.md` untouched. There is currently no opt-in for harness to maintain it. Hotspots: `src/core/contract.ts`, `src/core/managers/wiki.ts`, and directory-v2 fixture tests.
-
-## Acceptance Criteria
-- `wikiIndexMode: 'canonical-lowercase'` plus explicit `wikiIndexOwner: 'harness'` is accepted in the contract.
-- `index.sync` regenerates lowercase `wiki/index.md` only when owner equals `harness`; default external owner remains a no-op.
-- Generated format matches grouped/status-tagged style so it does not churn diffs for consumers already using that style.
-- Directory-v2 fixture proves opt-in regeneration and default byte-stable no-op.
-
 ## Progress Log
 - [2026-06-23T03:38:06.130Z] Created initiative via mdocs command
+- [2026-06-23] G5 IMPLEMENTED + VERIFIED via executor. contract.ts: WikiIndexMode adds 'canonical-lowercase'; IndexOwner='harness'|'external'|'none'; wikiIndexOwner field + validateWikiIndexOwner (harness permitted for generated-uppercase+canonical-lowercase; external only canonical-lowercase; default external for dir-v2). wiki.ts: every index.sync path gated on wikiIndexOwner!=='harness' => no-op (L362/529/650); generateLowercaseCanonicalIndex() (L696) matches existing grouped/status-tagged format (no consumer churn). Tests extended: tests/core/directory-v2-writes.test.ts + compatibility.test.ts (opt-in regeneration + default byte-stable no-op). 330 tests pass. release:check RC_EXIT=0 (build:plugin+lint+test+coverage+mdocs:validate+pack). Non-breaking (default external=no-op). Note: WIKI index ownership; does not touch initiatives/INDEX.md drift (separate data-hygiene item).
+- [2026-06-23T18:55:33.310Z] Marked done via mdocs command
 
 ## Artifacts

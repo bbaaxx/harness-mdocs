@@ -219,15 +219,34 @@ Then add the CLAUDE.md snippet (also in `assets/templates/`) and copy the three 
 
 What the Claude Code surface provides:
 
-- **MCP server** (`mdocs mcp`) exposing all mdocs commands as tools: the aggregate `mdocs` tool plus `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`.
-- **PreToolUse hook** that blocks `Write`/`Edit` before the `PLAN` step and destructive `Bash` before `COMPLETE` (edits under `./mdocs/` are always allowed). The hook fails open — a hook error never wedges your session.
-- **PostToolUse hook** that records audit events and appends progress to the active initiative, serialized under a lock so Claude Code's parallel tool execution does not lose updates.
+- **MCP server** (`mdocs mcp`) exposing all mdocs commands as tools: the aggregate `mdocs` tool plus `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`, `mdocs_reset`.
+- **SessionStart hook** that injects a compact mdocs orientation banner (initiative counts by status, the active initiative id/title + workflow step, wiki page count, and a pointer to `mdocs_status`) at the start of every fresh or resumed session. The hook fails open — a hook error never wedges the session. A matching **PreCompact hook** re-emits the banner so orientation survives compaction.
+- **PreToolUse hook** that blocks `Write`/`Edit` before the `PLAN` step (edits under `./mdocs/` are always allowed). `Bash` is audited but not gated by content. The hook fails open — a hook error never wedges your session.
+- **PostToolUse hook** that records audit events, serialized under a lock so Claude Code's parallel tool execution does not lose updates.
 - **Skills** (`mdocs-workflow`, `mdocs-initiative`, `mdocs-orchestrator`) and a native subagent (`Task`/`Agent`) orchestrator prompt.
+
+For guidance on layering workspace-specific conventions over harness-mdocs (sibling knowledge bases, external task lists, consumer SessionStart hooks, and CLAUDE.md composition), see [docs/consumer-layering.md](docs/consumer-layering.md).
+
+## Enforcement
+
+Workflow enforcement blocks `Write`/`Edit` before the `PLAN` step and allows them from `PLAN` through `COMPLETE`. `Bash` is audited but not gated by content. Edits under `./mdocs/` are always allowed.
+
+**Configuration:**
+- Enforcement mode: `gate` (default) | `advisory` | `off`. Env: `MDOCS_ENFORCEMENT`. `off` = CI escape hatch.
+- IDLE strictness: `mdocs.enforcement.idle` = `open` (default; IDLE unconstrained) | `readonly` (IDLE = read tools + `./mdocs/` only). Env: `MDOCS_ENFORCEMENT_IDLE`.
+- Config precedence: env > file > detected contract.
+- Reset: `mdocs_reset` command → IDLE, clears active initiative. `resume()` auto-starts fresh cycles when prior initiative reached `COMPLETE` or at `IDLE`, landing at `UNDERSTAND`.
+
+The engine treats `PLAN`/`EXECUTE`/`VERIFY`/`REPORT`/`COMPLETE` as one "edits allowed" band — it does not enforce plan-vs-execute discipline.
 
 Notes:
 
 - Hook commands must use a direct `node` path, not `npx` — `npx` cold-start runs on every tool call and is too slow for the hook hot path. The MCP server (spawned once per session) may use `npx`.
-- The MCP server resolves the project root from `MDOCS_PROJECT_DIR`, falling back to `process.cwd()`. Multi-project switching within one session is not supported in v1.
+- **Project root resolution** — the MCP server and the PreToolUse / PostToolUse hooks all resolve the project root through one shared helper (`resolveProjectRoot` in `src/core/project-root.ts`), so the gate and MCP always operate on the same mdocs root even when `cwd` and `MDOCS_PROJECT_DIR` disagree. Precedence:
+  1. `MDOCS_PROJECT_DIR` env var if set and points at an existing directory (explicit pin — honored even before `mdocs/` is bootstrapped, so the `set env → mdocs init` flow roots at the pinned dir);
+  2. else the nearest ancestor (walking up from `cwd`, inclusive) that contains a `mdocs/` dir;
+  3. else the effective `cwd` itself (preserves `process.cwd()` behavior).
+- Multi-project switching within one session is not supported — a session resolves a single root. Run separate sessions (or restart the MCP server after `cd`) to switch projects.
 
 ## First Run
 

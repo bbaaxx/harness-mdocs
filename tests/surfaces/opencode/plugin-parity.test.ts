@@ -302,7 +302,13 @@ The active one
     expect(() => plugin.event({})).not.toThrow();
   });
 
-  test('permission and before hooks ask or block unsafe tools before execution', async () => {
+  test('permission and before hooks gate Write/Edit but not Bash (F2: bash ungated by content)', async () => {
+    // F2 (workflow-enforcement-dogfood-friction-log): the destructive-bash
+    // gate was deleted. opencode's `tool.execute.before` and `permission.ask`
+    // hooks delegate to the SAME `canExecuteTool` engine as the Claude Code
+    // surface — there is no separate opencode unsafe-tool list. So at
+    // UNDERSTAND, Bash (`rm -rf build`) is now ALLOWED (audited, not blocked),
+    // while Write/Edit to a non-mdocs source file would still be blocked.
     const pluginInit = createPlugin(testDir);
     (pluginInit as any).tool.mdocs_init.execute();
     fs.writeFileSync(path.join(testDir, 'mdocs', '.workflow-state.json'), JSON.stringify({
@@ -313,14 +319,29 @@ The active one
 
     const plugin = createPlugin(testDir) as any;
 
+    // Bash is no longer blocked by content at any step — before-hook resolves
+    // (does not throw), permission.ask allows.
     await expect(plugin['tool.execute.before']({
       tool: 'bash',
       parameters: { command: 'rm -rf build' }
-    })).rejects.toThrow('Workflow gate: bash blocked at step UNDERSTAND');
+    })).resolves.toBeUndefined();
     await expect(plugin['permission.ask']({
       tool: 'bash',
       parameters: { command: 'rm -rf build' }
+    })).resolves.toEqual({ action: 'allow' });
+
+    // Write/Edit enforcement is unchanged: a non-mdocs write is still gated
+    // at UNDERSTAND (the real "plan before mutation" guardrail).
+    await expect(plugin['tool.execute.before']({
+      tool: 'write',
+      parameters: { filePath: 'src/app.ts', content: 'x' }
+    })).rejects.toThrow('Workflow gate: write blocked at step UNDERSTAND');
+    await expect(plugin['permission.ask']({
+      tool: 'write',
+      parameters: { filePath: 'src/app.ts', content: 'x' }
     })).resolves.toEqual({ action: 'ask' });
+
+    // Read tools remain always-allowed.
     await expect(plugin['permission.ask']({
       name: 'read',
       args: { filePath: 'README.md' }

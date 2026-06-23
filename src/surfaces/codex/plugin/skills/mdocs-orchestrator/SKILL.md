@@ -28,4 +28,4 @@ Before marking work complete:
 3. Write or update at least one stable wiki learning for completed initiatives.
 4. Mark the initiative done with `mdocs command initiative.done --json '{"id":"initiative-id"}'`.
 
-Codex v1 follows workflow gates by instruction. It does not block host file edits or shell commands.
+Codex v1 follows workflow gates by instruction. It does not block host file edits or shell commands. `Bash` is audited but not gated by content.

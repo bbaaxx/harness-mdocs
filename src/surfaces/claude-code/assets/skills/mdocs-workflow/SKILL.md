@@ -9,11 +9,19 @@ Use mdocs as durable project memory when the user opts into initiative/wiki trac
 
 **Enforcement is real.** Claude Code PreToolUse hooks actively BLOCK tool calls — this is not advisory:
 
-- `Write` / `Edit` are blocked before the `PLAN` step (edits under `./mdocs/` are always allowed).
-- Destructive `Bash` (e.g. `rm`, `mv`, `git commit`) is blocked before `COMPLETE`.
+- `Write` / `Edit` are blocked before the `PLAN` step and allowed from `PLAN` through `COMPLETE` (edits under `./mdocs/` are always allowed).
+- `Bash` is audited but not gated by content — the gate does not block commands by keyword.
 - `Read` / `Glob` / `Grep` are always allowed.
 
 If a tool is blocked, advance the workflow rather than fighting the gate.
+
+**Configuration:**
+- Enforcement mode: `gate` (default) | `advisory` | `off`. Env: `MDOCS_ENFORCEMENT`. `off` = CI escape hatch.
+- IDLE strictness: `mdocs.enforcement.idle` = `open` (default; IDLE unconstrained) | `readonly` (IDLE = read tools + `./mdocs/` only). Env: `MDOCS_ENFORCEMENT_IDLE`.
+- Config precedence: env > file > detected contract.
+- Reset: `mdocs_reset` command → IDLE, clears active initiative. `resume()` auto-starts fresh cycles when prior initiative reached `COMPLETE` or at `IDLE`, landing at `UNDERSTAND`.
+
+The engine treats `PLAN`/`EXECUTE`/`VERIFY`/`REPORT`/`COMPLETE` as one "edits allowed" band — it does not enforce plan-vs-execute discipline; that is the agent's responsibility via the prompt.
 
 ## Command access
 
@@ -31,17 +39,21 @@ Prefer the MCP tools. Fall back to the `mdocs` CLI via Bash. Last resort: edit `
 
 ## Advancing the workflow
 
-Enforcement only binds once you leave `IDLE` (at IDLE every tool is allowed). The
-state machine does not advance on its own — you must drive it forward:
+Under the default `open` IDLE mode, enforcement binds once you leave `IDLE`
+(at IDLE every tool is allowed). Under `readonly` (env `MDOCS_ENFORCEMENT_IDLE=readonly`),
+IDLE already permits only read tools plus `./mdocs/` paths. The state machine
+does not advance on its own — you must drive it forward:
 
 - MCP: `mdocs_advance { "step": "PLAN" }`
 - CLI: `mdocs step PLAN`
 
 Steps must be reached in order (no skipping, no going back): `UNDERSTAND →
 DISCOVER → CONTEXT → PLAN → EXECUTE → VERIFY → REPORT → COMPLETE`. Build and test
-commands (`npm`, `node`, `tsc`, `jest`, read-only `git`) run at `VERIFY`; truly
-destructive operations (`rm`, `mv`, `git commit`, `git push`, `npm publish`, …)
-stay blocked until `COMPLETE`.
+commands (`npm`, `node`, `tsc`, `jest`, `git`) run at every step — `Bash` is
+audited but not gated by content, so `rm`, `mv`, `git commit`, `git push`, and
+`npm publish` are not blocked by the gate either. The "don't commit before
+COMPLETE" guidance lives in this prompt, not a regex; the Write/Edit gate is the
+real "plan before mutation" guardrail.
 
 ## Workflow steps
 

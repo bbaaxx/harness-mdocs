@@ -68,11 +68,12 @@ describe('mdocs CLI', () => {
     expect(result.stderr).toMatch(/skip|back|invalid/i);
   });
 
-  test('usage lists the mcp and step subcommands', async () => {
+  test('usage lists the mcp, step, and reset subcommands', async () => {
     const result = await runMdocsCli(['nope'], tempProject());
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('mcp');
     expect(result.stderr).toContain('step <step>');
+    expect(result.stderr).toContain('reset');
   });
 
   test('command help documents payload shapes and examples', async () => {
@@ -173,6 +174,159 @@ describe('mdocs CLI', () => {
     const status = await runMdocsCli(['status'], projectDir);
     expect(status.exitCode).toBe(0);
     expect(JSON.parse(status.stdout)).toMatchObject({ activeInitiative: null });
+  });
+
+  test('mdocs reset clears active initiative and returns the workflow to IDLE (F9-B)', async () => {
+    // F9-B: explicit `mdocs_reset` (CLI: `mdocs reset`) → IDLE + clears
+    // activeInitiative (full clean slate). Use cases: abandon mid-flight,
+    // force-reset for testing, begin a fresh initiative cycle after COMPLETE.
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+    await runMdocsCli(
+      [
+        'command',
+        'initiative.create',
+        '--json',
+        '{"id":"abandon-me","title":"Abandon Me","objective":"Exercise reset","tags":["cli"],"relatedWiki":[]}'
+      ],
+      projectDir
+    );
+    await runMdocsCli(['resume', 'abandon-me'], projectDir);
+    // resume lands at UNDERSTAND; walk forward to a mid-flight PLAN state so
+    // reset has something non-trivial to clear.
+    await runMdocsCli(['step', 'DISCOVER'], projectDir);
+    await runMdocsCli(['step', 'CONTEXT'], projectDir);
+    await runMdocsCli(['step', 'PLAN'], projectDir);
+    const beforeReset = await runMdocsCli(['status'], projectDir);
+    expect(JSON.parse(beforeReset.stdout)).toMatchObject({
+      activeInitiative: 'abandon-me',
+      currentStep: 'PLAN'
+    });
+
+    const reset = await runMdocsCli(['reset'], projectDir);
+    expect(reset.exitCode).toBe(0);
+    expect(JSON.parse(reset.stdout)).toMatchObject({
+      activeInitiative: null,
+      currentStep: 'IDLE'
+    });
+
+    const statusAfter = await runMdocsCli(['status'], projectDir);
+    expect(JSON.parse(statusAfter.stdout)).toMatchObject({
+      activeInitiative: null,
+      currentStep: 'IDLE'
+    });
+  });
+
+  test('resume(id) auto-resets to UNDERSTAND when currentStep is IDLE (F1-D/F9-A)', async () => {
+    // F1-D / F9-A: resume(id) auto-advances out of IDLE. When currentStep is
+    // IDLE, resume lands at UNDERSTAND so the resumed initiative is inside the
+    // gated region immediately. The active initiative is preserved (not
+    // wiped) — this is the resume path, NOT the mdocs_reset path.
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+    await runMdocsCli(
+      [
+        'command',
+        'initiative.create',
+        '--json',
+        '{"id":"resume-from-idle","title":"Resume From Idle","objective":"Exercise F1-D","tags":["cli"],"relatedWiki":[]}'
+      ],
+      projectDir
+    );
+
+    // At IDLE (fresh init), resume should land at UNDERSTAND.
+    const resume = await runMdocsCli(['resume', 'resume-from-idle'], projectDir);
+    expect(resume.exitCode).toBe(0);
+    expect(JSON.parse(resume.stdout).currentStep).toBe('UNDERSTAND');
+
+    const status = await runMdocsCli(['status'], projectDir);
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      activeInitiative: 'resume-from-idle',
+      currentStep: 'UNDERSTAND'
+    });
+  });
+
+  test('resume(id) auto-resets to UNDERSTAND when currentStep is COMPLETE (F9-A)', async () => {
+    // F9-A: when currentStep is terminal (COMPLETE), resume resets to IDLE
+    // then advances to UNDERSTAND so the next initiative cycle can begin
+    // cleanly without hand-editing .workflow-state.json.
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+    await runMdocsCli(
+      [
+        'command',
+        'initiative.create',
+        '--json',
+        '{"id":"first-cycle","title":"First Cycle","objective":"Reach complete","tags":["cli"],"relatedWiki":[]}'
+      ],
+      projectDir
+    );
+    await runMdocsCli(['resume', 'first-cycle'], projectDir); // IDLE -> UNDERSTAND
+    // Walk to COMPLETE.
+    for (const step of ['DISCOVER', 'CONTEXT', 'PLAN', 'EXECUTE', 'VERIFY', 'REPORT', 'COMPLETE']) {
+      await runMdocsCli(['step', step], projectDir);
+    }
+    const atComplete = await runMdocsCli(['status'], projectDir);
+    expect(JSON.parse(atComplete.stdout).currentStep).toBe('COMPLETE');
+
+    // Now create a second initiative and resume it — should reset out of
+    // COMPLETE and land at UNDERSTAND with the new initiative active.
+    await runMdocsCli(
+      [
+        'command',
+        'initiative.create',
+        '--json',
+        '{"id":"second-cycle","title":"Second Cycle","objective":"Begin after complete","tags":["cli"],"relatedWiki":[]}'
+      ],
+      projectDir
+    );
+    const resume = await runMdocsCli(['resume', 'second-cycle'], projectDir);
+    expect(resume.exitCode).toBe(0);
+    expect(JSON.parse(resume.stdout).currentStep).toBe('UNDERSTAND');
+    expect(JSON.parse(resume.stdout).initiative.id).toBe('second-cycle');
+
+    const status = await runMdocsCli(['status'], projectDir);
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      activeInitiative: 'second-cycle',
+      currentStep: 'UNDERSTAND'
+    });
+  });
+
+  test('resume(id) preserves a mid-flight currentStep (F9-A: mid-flight unchanged)', async () => {
+    // F9-A: if currentStep is any mid-flight step (UNDERSTAND…REPORT), resume
+    // preserves it — mid-flight resume of in-progress work is unchanged.
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+    await runMdocsCli(
+      [
+        'command',
+        'initiative.create',
+        '--json',
+        '{"id":"mid-flight","title":"Mid Flight","objective":"Exercise preserve","tags":["cli"],"relatedWiki":[]}'
+      ],
+      projectDir
+    );
+    await runMdocsCli(['resume', 'mid-flight'], projectDir); // -> UNDERSTAND
+    await runMdocsCli(['step', 'DISCOVER'], projectDir);
+    await runMdocsCli(['step', 'CONTEXT'], projectDir);
+    await runMdocsCli(['step', 'PLAN'], projectDir);
+    await runMdocsCli(['step', 'EXECUTE'], projectDir);
+    await runMdocsCli(['step', 'VERIFY'], projectDir);
+
+    // Resuming a different initiative mid-flight preserves VERIFY.
+    await runMdocsCli(
+      [
+        'command',
+        'initiative.create',
+        '--json',
+        '{"id":"mid-flight-2","title":"Mid Flight 2","objective":"Exercise preserve","tags":["cli"],"relatedWiki":[]}'
+      ],
+      projectDir
+    );
+    const resume = await runMdocsCli(['resume', 'mid-flight-2'], projectDir);
+    expect(resume.exitCode).toBe(0);
+    expect(JSON.parse(resume.stdout).currentStep).toBe('VERIFY');
+    expect(JSON.parse(resume.stdout).initiative.id).toBe('mid-flight-2');
   });
 
   test('status clears a stale active workflow initiative when it is done', async () => {

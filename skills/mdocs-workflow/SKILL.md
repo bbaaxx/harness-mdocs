@@ -21,11 +21,20 @@ The mdocs workflow is a 9-step process for AI-assisted development:
 ## Rules
 
 - Never skip steps. Each step sets a checkpoint.
-- Read tools are always allowed. Write tools require PLAN state.
-- Commits require COMPLETE state.
+- Read tools are always allowed. Write/Edit tools require PLAN state (allowed from PLAN through COMPLETE).
+- Bash is audited but not gated by content.
+- Commits are not gated by enforcement (guidance only).
 - If no active initiative exists, workflow is opt-in.
-- Resume-first: start DISCOVER with `mdocs_resume` or `mdocs_status` to see active work, blockers, and next actions.
+- Resume-first: start DISCOVER with `mdocs_resume` or `mdocs_status` to see active work, blockers, and next actions. `resume()` auto-starts fresh cycles when prior initiative reached COMPLETE or at IDLE.
+- Use `mdocs_reset` to clear active initiative and return to IDLE.
 - Verification includes graph linting: cross-links, backlinks, and completion gates.
+
+**Configuration (when enforced):**
+- Enforcement mode: `gate` (default) | `advisory` | `off`. Env: `MDOCS_ENFORCEMENT`.
+- IDLE strictness: `mdocs.enforcement.idle` = `open` (default) | `readonly`. Env: `MDOCS_ENFORCEMENT_IDLE`.
+- Config precedence: env > file > detected contract.
+
+**Workflow band:** `PLAN`/`EXECUTE`/`VERIFY`/`REPORT`/`COMPLETE` are treated as one "edits allowed" band; the engine does not enforce plan-vs-execute discipline.
 
 ## Subagent Dispatch
 

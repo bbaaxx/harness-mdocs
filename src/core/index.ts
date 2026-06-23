@@ -1,4 +1,5 @@
 export * from './types';
+export * from './project-root';
 export * from './factory';
 export * from './contract';
 export * from './initiative-store';

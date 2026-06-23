@@ -28,8 +28,9 @@ mdocs  { "command": "initiative.create",
 ## During work
 
 - Keep `nextAction`, `blockers`, and `handoffSummary` current via `initiative.update`.
-- Enforcement is real: PreToolUse hooks block `Write`/`Edit` before `PLAN` and destructive `Bash` before `COMPLETE`. Advance the workflow instead of working around the gate. Edits under `./mdocs/` are always allowed.
-- Record progress through the `mdocs` tool (`initiative.update` with `progressNote`); the PostToolUse hook also auto-logs tool activity to the active initiative.
+- Enforcement is real: PreToolUse hooks block `Write`/`Edit` before `PLAN` (allowed from PLAN through COMPLETE). `Bash` is audited but not gated by content. Advance the workflow instead of working around the gate. Edits under `./mdocs/` are always allowed.
+- Configuration: Enforcement mode (`gate`|`advisory`|`off`, env `MDOCS_ENFORCEMENT`), IDLE strictness (`open`|`readonly`, env `MDOCS_ENFORCEMENT_IDLE`), precedence env>file>contract. Use `mdocs_reset` to clear active initiative.
+- Record progress through the `mdocs` tool (`initiative.update` with `progressNote`); the PostToolUse hook also logs tool activity to the audit log.
 
 ## Subagent dispatch (native)
 

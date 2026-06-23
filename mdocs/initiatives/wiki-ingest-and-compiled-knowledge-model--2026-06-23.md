@@ -7,6 +7,7 @@ updated: "2026-06-23"
 owner: ""
 tags: ["core","wiki","ingest","overview","compiled-knowledge","0.5.0"]
 related_wiki: []
+priority: "medium"
 ---
 
 ## Objective
@@ -22,16 +23,8 @@ Add a wiki.ingest command that synthesizes initiative artifacts into curated wik
 - [ ] Mirror the command in OpenCode src/surfaces/opencode/tools.ts and Codex surfaces
 - [ ] Add directory-v2 fixture proving index.md stays byte-stable when owner external and updates when owner harness
 
-## Context
-Source: Gap Closure Spec (0.4.3 / 0.5.0) G2. `registry.ts` exposes `wiki.create/update/stub/delete/list/link/xref` and `index.sync` but no `ingest`. There is no first-class concept of `overview.md`, `repos/<repo>.md`, `systems/<system>.md`, grouped `index.md`, or append-only `log.md`. Hotspots: `src/core/commands/registry.ts`, `src/core/managers/wiki.ts`, `src/core/contract.ts`, `src/surfaces/claude-code/mcp-server.ts`, `src/cli/index.ts`, and the `mdocs-orchestrator`/`mdocs-workflow` skills.
-
-## Acceptance Criteria
-- One `wiki.ingest` call upserts the initiative page, applies repo/system edits with auto-stubbing, reflects status in `overview.md`, and appends to `log.md`.
-- Directory-v2 canonical lowercase `index.md` stays byte-stable when `wikiIndexOwner` is `external` and regenerates only when opt-in `harness`.
-- MCP `mdocs_ingest` and CLI `mdocs wiki ingest` both work.
-- No auto-generated synthesis prose; all prose edits are recorded as caller-supplied operations.
-
 ## Progress Log
 - [2026-06-23T03:37:50.324Z] Created initiative via mdocs command
+- [2026-06-23] 0.4.3 checkpoint complete (G1/G3/G5/G6/G7/G8/G9 done, release:check green 330 tests). G2 is NEXT (0.5.0, largest gap). RECOMMENDED SPLIT into sub-initiatives before executing: G2a = overview.md/log.md section grammar + updateOverviewSection/appendLog helpers in wiki.ts (respect wikiIndexOwner/Mode from G5); G2b = wiki.ingest command in registry.ts (compose wiki.* under withLock, no auto-prose) + MCP mdocs_ingest + CLI; G2c = repo/system stub templates + wiki.stub/create recognition; G2d = skills (orchestrator/workflow use ingest at REPORT) + OpenCode/Codex mirror + dir-v2 byte-stable fixture. G4 depends on G2a (graduate moves overview sections + appends log.md). Start fresh session.
 
 ## Artifacts
