@@ -281,6 +281,35 @@ When you upgrade harness-mdocs, the snippet may gain new lines. Re-merge by:
 
 Your workspace sections remain intact; only the mdocs section updates.
 
+## Consumer Schema Compatibility (.mdocs.json)
+
+A consumer mdocs tree may use a thinner schema than harness-mdocs authors by default:
+
+- **Metadata-only initiative `_status.md`** — lifecycle frontmatter plus prose, with plan/notes/artifacts kept in sibling files rather than injected body sections.
+- **Wiki pages** with a path-style frontmatter `id` (e.g. `systems/foo`), a singular `category` (e.g. `system`), and a hyphenated `expected-duration`.
+
+harness-mdocs operates on such a tree **without any consumer data migration**. The behaviors are opt-in via a `.mdocs.json` file in the mdocs root and default to current behavior, so an unconfigured tree is untouched.
+
+```json
+{
+  "compatibility": {
+    "initiativeRecordMode": "metadata-only",
+    "enforcementMode": "advisory"
+  },
+  "standaloneCategories": ["repos", "systems", "glossary"]
+}
+```
+
+Under `initiativeRecordMode: "metadata-only"`:
+
+- `_status.md` writes are surgical: only lifecycle keys (`status`, `updated`, `completed`, `graduated`) are added or updated; structural keys (`id`, `title`, `owner`, `related_wiki`, `tags`) are never injected, and inline array formatting like `tags: [a, b]` is preserved verbatim. No `## Objective` / `## Plan` / `## Progress Log` sections are injected into a prose body.
+- The PostToolUse hook records an audit entry only; it does not mutate `_status.md`.
+- The linter skips body-section and required-field deductions for initiatives while keeping lifecycle telemetry (long-running-active, stale-complete, graduation-due), and accepts singular/plural wiki category matches and an optional `created` (with `updated` fallback).
+
+Wiki identity resolves by filename stem plus parent-directory category, so a page at `wiki/systems/foo.md` with `id: systems/foo, category: system` resolves backlinks from an initiative `related_wiki: ["systems/foo"]`. `appendLog` emits the consumer heading `## [YYYY-MM-DD] {operation} | {subject}` when both `operation` and `subject` are supplied, and preserves the legacy `## {timestamp}` form otherwise.
+
+This keeps the plugin generic: a consumer opts into the format it already uses, and harness-mdocs adapts rather than requiring the consumer to migrate.
+
 ## Summary
 
 Consumer layering follows three principles:

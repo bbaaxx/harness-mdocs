@@ -372,3 +372,31 @@ test('directory-v2 detects optional obsidian visibility layer without indexing i
   expect(contract.obsidianRefreshCommand).toBe('ruby mdocs/scripts/obsidian_refresh.rb');
   expect(results.some(result => result.type === 'wiki' && result.id.includes('_obsidian'))).toBe(false);
 });
+
+test('contract defaults initiativeRecordMode to full', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-record-default-'));
+  fs.mkdirSync(path.join(projectDir, 'mdocs', 'initiatives'), { recursive: true });
+
+  const contract = detectMdocsContract(path.join(projectDir, 'mdocs'));
+
+  expect(contract.initiativeRecordMode).toBe('full');
+});
+
+test('contract honors an explicit initiativeRecordMode override', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-record-override-'));
+  fs.mkdirSync(path.join(projectDir, 'mdocs', 'initiatives'), { recursive: true });
+
+  const contract = detectMdocsContract(path.join(projectDir, 'mdocs'), { initiativeRecordMode: 'metadata-only' });
+
+  expect(contract.initiativeRecordMode).toBe('metadata-only');
+});
+
+test('createMdocsCore exposes the resolved contract', () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-record-expose-'));
+  fs.mkdirSync(path.join(projectDir, 'mdocs', 'initiatives'), { recursive: true });
+
+  const core = createMdocsCore(projectDir);
+
+  expect(core.contract).toBeDefined();
+  expect(core.contract.initiativeRecordMode).toBe('full');
+});

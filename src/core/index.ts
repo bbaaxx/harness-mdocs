@@ -1,4 +1,5 @@
 export * from './types';
+export * from './config';
 export * from './project-root';
 export { withLock } from './lock';
 export * from './factory';

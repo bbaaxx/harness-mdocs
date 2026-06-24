@@ -102,7 +102,7 @@ export class WikiManager {
     const filePath = path.join(this.dir, cat, `${entryId}.md`);
     if (!fs.existsSync(filePath)) return null;
     const content = fs.readFileSync(filePath, 'utf8');
-    return this.parseWikiEntry(content);
+    return this.parseWikiEntry(content, { id: entryId, category: cat });
   }
 
   readByRef(ref: string): WikiEntry | null {
@@ -114,8 +114,11 @@ export class WikiManager {
   }
 
   refFor(entry: WikiEntry): string {
-    if (entry.id && fs.existsSync(path.join(this.dir, `${entry.id}.md`))) return entry.id;
-    return entry.category ? `${entry.category}/${entry.id}` : entry.id;
+    // Tolerate path-style ids (e.g. "systems/foo") by reducing to the stem; the page
+    // always lives at <category>/<stem>.md on disk.
+    const stem = entry.id ? path.basename(entry.id) : entry.id;
+    if (stem && fs.existsSync(path.join(this.dir, `${stem}.md`))) return stem;
+    return entry.category ? `${entry.category}/${stem}` : stem;
   }
 
   private readRoot(id: string): WikiEntry | null {
@@ -136,10 +139,22 @@ export class WikiManager {
     const firstHeading = body.match(/^#\s+(.+)$/m)?.[1]?.trim();
     const fallbackTitle = firstHeading || (defaults.id ? defaults.id.replace(/[-_]+/g, ' ') : '');
 
+    // Canonical id: a path-style frontmatter id (e.g. "systems/foo") is tolerated by
+    // reducing it to its filename stem. When an on-disk default id is available it is
+    // authoritative (it always matches the actual filename), so consumers see a stable
+    // stem id regardless of how the frontmatter id was authored.
+    const rawFrontId = typeof front.id === 'string' ? front.id : '';
+    const frontIdStem = rawFrontId ? path.basename(rawFrontId) : '';
+    const canonicalId = defaults.id || frontIdStem || rawFrontId || '';
+    // Canonical category: prefer the on-disk parent dir when supplied (always plural and
+    // correct); otherwise fall back to the frontmatter category. This tolerates singular
+    // consumer categories (e.g. "system") without breaking plural-canonical resolution.
+    const canonicalCategory = defaults.category || (typeof front.category === 'string' ? front.category : '') || '';
+
     return {
-      id: front.id || defaults.id || '',
+      id: canonicalId,
       title: front.title || fallbackTitle,
-      category: front.category || defaults.category || '',
+      category: canonicalCategory,
       created: front.created || '',
       updated: front.updated || '',
       relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
@@ -250,13 +265,22 @@ export class WikiManager {
     const entryId = this.sanitizeName(id);
     const cat = this.isRootCategory(category) ? '' : this.sanitizeName(category);
     const wikiRef = cat ? `${cat}/${entryId}` : entryId;
+    // Build a set of accepted ref spellings so consumer formats resolve too:
+    //   - the canonical ref (wikiRef above)
+    //   - both plural and singular category variants (systems/foo, system/foo)
+    //   - the bare stem (path-style frontmatter id like "systems/foo")
+    const accepted = new Set<string>([wikiRef, entryId]);
+    if (cat) {
+      const singular = cat.length > 1 && cat.endsWith('s') ? cat.slice(0, -1) : `${cat}s`;
+      accepted.add(`${singular}/${entryId}`);
+    }
     const initiativeIds: string[] = [];
 
     for (const filePath of this.listInitiativeFiles()) {
       try {
         const content = fs.readFileSync(filePath, 'utf8');
         const refs = this.parseRelatedWiki(content);
-        if (refs.includes(wikiRef)) {
+        if (refs.some(ref => accepted.has(ref))) {
           // Extract initiative id from frontmatter
           const front = parseFrontmatter(content);
           if (front.id) {
@@ -907,20 +931,37 @@ tags: []
    * '# Log') if absent. The timestamp defaults to new Date().toISOString(); the
    * content is caller-supplied (entry.content, or entry if a string is passed).
    * Existing entries are preserved and never reordered.
+   *
+   * Consumer-format heading: when BOTH entry.operation and entry.subject are
+   * supplied, the block heading is `## [YYYY-MM-DD] {operation} | {subject}`
+   * where the date is entry.date (YYYY-MM-DD) or today. The legacy
+   * `## {timestamp}` form is preserved byte-for-byte for every other caller.
+   *
    * No-op (returns null) outside directory-v2 (canonical-lowercase) mode.
    * Never writes wiki/index.md directly.
    */
-  appendLog(entry: { timestamp?: string; content: string } | string): string | null {
+  appendLog(entry: { timestamp?: string; date?: string; operation?: string; subject?: string; content: string } | string): string | null {
     if (this.contract.wikiIndexMode !== 'canonical-lowercase') return null;
     const filePath = path.join(this.dir, 'log.md');
     const today = new Date().toISOString().split('T')[0];
+    const isObj = typeof entry !== 'string';
     const content = typeof entry === 'string' ? entry : entry.content;
-    const timestamp = (typeof entry !== 'string' && entry.timestamp) || new Date().toISOString();
     const trimmedContent = content.trim();
+
+    // Consumer-format heading requires BOTH operation and subject; any other
+    // combination falls through to the legacy timestamp form unchanged.
+    const operation = isObj ? entry.operation : undefined;
+    const subject = isObj ? entry.subject : undefined;
+    const useConsumerHeading = !!(operation && subject);
+    const dateOrTimestamp = (isObj && entry.date) || today;
+    const timestamp = (isObj && entry.timestamp) || new Date().toISOString();
+    const heading = useConsumerHeading
+      ? `[${dateOrTimestamp}] ${operation} | ${subject}`
+      : timestamp;
 
     if (!fs.existsSync(filePath)) {
       const frontmatter = this.serializeCompiledViewFrontmatter('log', 'Log', today);
-      const fileContent = `${frontmatter}# Log\n\n## ${timestamp}\n\n${trimmedContent}\n`;
+      const fileContent = `${frontmatter}# Log\n\n## ${heading}\n\n${trimmedContent}\n`;
       fs.writeFileSync(filePath, fileContent, 'utf8');
       this.updateIndices();
       return filePath;
@@ -939,7 +980,7 @@ tags: []
       newFrontmatter = this.serializeCompiledViewFrontmatter('log', 'Log', today).replace(/\n\n$/, '');
     }
 
-    const appendedBlock = `\n## ${timestamp}\n\n${trimmedContent}\n`;
+    const appendedBlock = `\n## ${heading}\n\n${trimmedContent}\n`;
     fs.writeFileSync(filePath, `${newFrontmatter}\n\n${bodyText}${appendedBlock}`, 'utf8');
     this.updateIndices();
     return filePath;

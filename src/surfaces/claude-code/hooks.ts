@@ -51,6 +51,14 @@ export function createClaudeCodeHooks(core: MdocsCore) {
         details: { toolName, args: toCore(payload).toolArgs }
       });
 
+      // Metadata-only mode: consumer `_status.md` is thin lifecycle metadata.
+      // Skip the initiative read-modify-write progress-log mutation; the audit
+      // entry above is the only record. Prevents injecting `## Progress Log`
+      // into a prose-only body and preserves consumer formatting.
+      if (core.contract.initiativeRecordMode === 'metadata-only') {
+        return;
+      }
+
       if (step !== 'IDLE' && activeInitiativeId) {
         withLock(core.mdocsRoot, 'initiative-progress', () => {
           const fileName = findInitiativeFilename(core.mdocsRoot, core.managers.initiatives, activeInitiativeId);
