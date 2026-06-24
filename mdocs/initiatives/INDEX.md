@@ -32,7 +32,7 @@
 - **Lint updated harness-mdocs plugin** (done) — lint-updated-harness-mdocs-plugin--2026-06-19.md — 2026-06-19 — [lint, plugin, verification, harness-mdocs]
 - **Prepare release 0.4.0** (done) — prepare-release-0-4-0--2026-06-19.md — 2026-06-19 — [release, npm, version-0.4.0]
 - **Prepare release 0.4.2** (done) — prepare-release-0-4-2--2026-06-22.md — 2026-06-22 — [release, 0.4.2, claude-code]
-- **Prepare release 0.5.1** (active) — prepare-release-0-5-1--2026-06-24.md — 2026-06-24 — [release, 0.5.1, consumer-schema, compat]
+- **Prepare release 0.5.1** (done) — prepare-release-0-5-1--2026-06-24.md — 2026-06-24 — [release, 0.5.1, consumer-schema, compat]
 - **Publish harness-mdocs 0.4.1** (done) — publish-harness-mdocs-0-4-1--2026-06-20.md — 2026-06-20 — [release, npm, version-0.4.1, publishing]
 - **Quiet CI warning logs** (done) — quiet-ci-warning-logs--2026-06-19.md — 2026-06-19 — [ci, dependencies, logs, warnings, maintenance]
 - **Package hygiene: self-referential devDependency** (done) — remove-self-referential-devdependency--2026-06-23.md — 2026-06-23 — [packaging, hygiene, dependencies, 0.4.3]
