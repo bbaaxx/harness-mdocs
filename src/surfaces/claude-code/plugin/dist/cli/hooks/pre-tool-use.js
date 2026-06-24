@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.runPreToolUse = runPreToolUse;
+/**
+ * Claude Code PreToolUse hook entrypoint, invoked via:
+ *   node <pkg>/dist/cli/hooks/pre-tool-use.js
+ *
+ * Contract:
+ *   stdin  = PreToolUse payload JSON (tool_name, tool_input, cwd, ...)
+ *   exit 2 = BLOCK; stderr text shown to the model as the reason
+ *   exit 0 = allow
+ *
+ * FAIL OPEN: any error in this hook exits 0. A translator bug must never wedge
+ * the session by blocking every tool. Only an explicit, successful gate denial
+ * produces exit 2.
+ */
+const core_1 = require("../../core");
+const translate_1 = require("../../surfaces/claude-code/translate");
+function readStdin() {
+    return new Promise(resolve => {
+        let data = '';
+        process.stdin.setEncoding('utf8');
+        process.stdin.on('data', chunk => { data += chunk; });
+        process.stdin.on('end', () => resolve(data));
+        process.stdin.on('error', () => resolve(data));
+    });
+}
+async function runPreToolUse() {
+    const raw = await readStdin();
+    const payload = (0, translate_1.parseHookStdin)(raw);
+    if (!payload)
+        return; // malformed -> fail open
+    const { toolName, toolArgs } = (0, translate_1.toCore)(payload);
+    // Project root via the shared helper so the hook agrees with the MCP
+    // server on the same mdocs root. The helper honors MDOCS_PROJECT_DIR,
+    // walks up to the nearest mdocs/ ancestor, and falls back to the cwd.
+    const projectDir = (0, core_1.resolveProjectRoot)(payload.cwd || process.cwd());
+    const core = (0, core_1.createMdocsCore)(projectDir);
+    const allowed = core.managers.workflow.canExecuteTool(toolName, toolArgs);
+    if (allowed)
+        return; // exit 0
+    // Explicit, successful denial: block via exit 2 + stderr reason.
+    const step = core.managers.workflow.getCurrentStep();
+    const blockedTool = String(payload.tool_name || toolName).toLowerCase();
+    process.stderr.write(`mdocs workflow gate: "${blockedTool}" is blocked at step ${step}. ` +
+        `Advance the workflow (e.g. reach PLAN before edits), ` +
+        `or operate on ./mdocs/ files which are always allowed.\n`);
+    process.exit(2);
+}
+if (require.main === module) {
+    runPreToolUse().catch(() => {
+        // Fail open on any unexpected error.
+        process.exit(0);
+    });
+}
+//# sourceMappingURL=pre-tool-use.js.map

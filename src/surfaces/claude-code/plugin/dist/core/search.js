@@ -1,0 +1,206 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SearchEngine = void 0;
+const initiative_1 = require("./managers/initiative");
+const wiki_1 = require("./managers/wiki");
+/**
+ * In-memory inverted index for full-text search across initiatives and wiki.
+ * Rebuilds index on demand by scanning the file system.
+ */
+class SearchEngine {
+    baseDir;
+    initiatives;
+    wiki;
+    // term -> docId -> { type, title, field, freq }
+    index;
+    // Metadata for filtering
+    docTags;
+    docStatus;
+    docCategory;
+    docDate;
+    docType;
+    constructor(baseDir) {
+        this.baseDir = baseDir;
+        this.initiatives = new initiative_1.InitiativeManager(baseDir);
+        this.wiki = new wiki_1.WikiManager(baseDir);
+        this.index = new Map();
+        this.docTags = new Map();
+        this.docStatus = new Map();
+        this.docCategory = new Map();
+        this.docDate = new Map();
+        this.docType = new Map();
+    }
+    /**
+     * Tokenize text into lowercase terms on whitespace.
+     */
+    tokenize(text) {
+        return text.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+    }
+    /**
+     * Add a document field to the inverted index.
+     */
+    indexField(docId, type, title, field, text) {
+        const tokens = this.tokenize(text);
+        const freqMap = new Map();
+        for (const token of tokens) {
+            freqMap.set(token, (freqMap.get(token) || 0) + 1);
+        }
+        for (const [term, count] of freqMap) {
+            if (!this.index.has(term)) {
+                this.index.set(term, new Map());
+            }
+            const docMap = this.index.get(term);
+            if (!docMap.has(docId)) {
+                docMap.set(docId, { type, title, field, freq: 0 });
+            }
+            const entry = docMap.get(docId);
+            entry.freq += count;
+        }
+    }
+    /**
+     * Build the inverted index from all initiatives and wiki entries.
+     * Scans the file system every time — fast enough for <100 files.
+     */
+    buildIndex() {
+        this.index.clear();
+        this.docTags.clear();
+        this.docStatus.clear();
+        this.docCategory.clear();
+        this.docDate.clear();
+        this.docType.clear();
+        // Index initiatives
+        for (const initiative of this.initiatives.list()) {
+            const docId = initiative.id;
+            this.indexField(docId, 'initiative', initiative.title, 'title', initiative.title);
+            this.indexField(docId, 'initiative', initiative.title, 'objective', initiative.objective);
+            this.indexField(docId, 'initiative', initiative.title, 'plan', initiative.plan.map(p => p.description).join(' '));
+            this.indexField(docId, 'initiative', initiative.title, 'progressLog', initiative.progressLog.join(' '));
+            this.docTags.set(docId, initiative.tags);
+            this.docStatus.set(docId, initiative.status);
+            this.docDate.set(docId, initiative.created);
+            this.docType.set(docId, 'initiative');
+        }
+        // Index wiki entries
+        for (const entry of this.wiki.list()) {
+            const docId = this.wiki.refFor(entry);
+            this.indexField(docId, 'wiki', entry.title, 'title', entry.title);
+            this.indexField(docId, 'wiki', entry.title, 'content', entry.content);
+            this.docTags.set(docId, entry.tags);
+            this.docCategory.set(docId, entry.category);
+            this.docType.set(docId, 'wiki');
+        }
+    }
+    /**
+     * Search the index for documents matching the query.
+     * Results are ranked by total term frequency across all query tokens.
+     */
+    query(query, options) {
+        // Always rebuild on query to keep results fresh
+        this.buildIndex();
+        const tokens = this.tokenize(query);
+        if (tokens.length === 0)
+            return [];
+        // Track matched fields and field-level scores per document
+        const scores = new Map();
+        for (const token of tokens) {
+            const docMap = this.index.get(token);
+            if (!docMap)
+                continue;
+            for (const [docId, entry] of docMap) {
+                if (!scores.has(docId)) {
+                    scores.set(docId, { type: entry.type, title: entry.title, score: 0, fieldScores: new Map() });
+                }
+                const doc = scores.get(docId);
+                doc.score += entry.freq;
+                doc.fieldScores.set(entry.field, (doc.fieldScores.get(entry.field) || 0) + entry.freq);
+            }
+        }
+        const results = [];
+        for (const [docId, data] of scores) {
+            // Apply filters
+            if (options?.tags && options.tags.length > 0) {
+                const tags = this.docTags.get(docId) || [];
+                if (!options.tags.some(t => tags.includes(t)))
+                    continue;
+            }
+            if (options?.status) {
+                if (this.docStatus.get(docId) !== options.status)
+                    continue;
+            }
+            if (options?.category) {
+                if (this.docCategory.get(docId) !== options.category)
+                    continue;
+            }
+            if (options?.dateFrom) {
+                const date = this.docDate.get(docId) || '';
+                if (date && date < options.dateFrom)
+                    continue;
+            }
+            if (options?.dateTo) {
+                const date = this.docDate.get(docId) || '';
+                if (date && date > options.dateTo)
+                    continue;
+            }
+            // Determine best matching field and snippet
+            const matchedFields = Array.from(data.fieldScores.keys());
+            const bestField = matchedFields.reduce((a, b) => data.fieldScores.get(a) > data.fieldScores.get(b) ? a : b, matchedFields[0]);
+            const snippet = this.getSnippet(docId, bestField);
+            results.push({
+                type: data.type,
+                id: docId,
+                title: data.title,
+                score: data.score,
+                snippet,
+                matchedFields
+            });
+        }
+        // Sort by score descending
+        return results.sort((a, b) => b.score - a.score);
+    }
+    /**
+     * Get a snippet (first 180 chars) from the best-matching field for a document.
+     */
+    getSnippet(docId, field) {
+        // Reconstruct the field content from index entries
+        const tokens = [];
+        for (const [term, docMap] of this.index) {
+            if (docMap.has(docId) && docMap.get(docId).field === field) {
+                // This is a matched term - we need the original content for snippet
+            }
+        }
+        // For snippets, read the actual content
+        if (this.docType.get(docId) === 'wiki') {
+            // Wiki entry
+            try {
+                const entry = this.wiki.readByRef(docId);
+                if (entry) {
+                    const text = field === 'title' ? entry.title : entry.content;
+                    return text.replace(/\s+/g, ' ').slice(0, 180);
+                }
+            }
+            catch { /* fall through */ }
+        }
+        else if (this.docType.get(docId) === 'initiative') {
+            // Initiative
+            try {
+                const initiative = this.initiatives.findById(docId);
+                if (initiative) {
+                    let text = '';
+                    if (field === 'title')
+                        text = initiative.title;
+                    else if (field === 'objective')
+                        text = initiative.objective;
+                    else if (field === 'plan')
+                        text = initiative.plan.map(p => p.description).join(' ');
+                    else if (field === 'progressLog')
+                        text = initiative.progressLog.join(' ');
+                    return text.replace(/\s+/g, ' ').slice(0, 180);
+                }
+            }
+            catch { /* fall through */ }
+        }
+        return '';
+    }
+}
+exports.SearchEngine = SearchEngine;
+//# sourceMappingURL=search.js.map
