@@ -4,6 +4,8 @@ dist/
 coverage/
 .omc/
 .vscode/
+.claude/
+.mcp.json
 *.tsbuildinfo
 *.tgz
 
