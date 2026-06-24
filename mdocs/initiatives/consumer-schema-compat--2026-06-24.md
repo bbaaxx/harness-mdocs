@@ -18,7 +18,7 @@ Make harness-mdocs operate correctly on a consumer mdocs tree that uses a thin m
 - [ ] Land cc1-metadata-only-initiative (store + manager + PostToolUse honor metadata-only writes) and cc2-linter-consumer-tolerance and cc3-wiki-id-and-emitters in parallel (disjoint files: initiative-store/manager/hooks vs validation/linter.ts vs managers/wiki.ts).
 - [ ] Land cc4-docs-and-dogfood (README, claude-md-snippet, CLAUDE.md, package mdocs initiative + wiki ingest).
 - [ ] Run `npm run build && npm run build:claude-plugin && npm test && npm run coverage && npm run mdocs:validate` green before opening the PR.
-- [ ] Open PR `EdM-WAG:feat/consumer-schema-compat -> bbaaxx:main`.
+- [x] Open PR feat/consumer-schema-compat -> main (#5).
 
 ## Acceptance Criteria
 - Done when a consumer `.mdocs.json` of `{ "compatibility": { "initiativeRecordMode": "metadata-only", "enforcementMode": "advisory" }, "standaloneCategories": ["repos","systems","glossary"] }` drives the package over a thin-`_status.md` + path-style-wiki tree with: no spurious `_status.md` mutation, `mdocs_validate` valid:true, correct wiki backlink resolution, lifecycle lint honoring hyphenated `expected-duration`, and zero consumer file migrations.
