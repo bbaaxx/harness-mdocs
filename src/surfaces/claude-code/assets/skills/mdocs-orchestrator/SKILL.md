@@ -28,8 +28,9 @@ mdocs  { "command": "initiative.create",
 ## During work
 
 - Keep `nextAction`, `blockers`, and `handoffSummary` current via `initiative.update`.
-- Enforcement is real: PreToolUse hooks block `Write`/`Edit` before `PLAN` and destructive `Bash` before `COMPLETE`. Advance the workflow instead of working around the gate. Edits under `./mdocs/` are always allowed.
-- Record progress through the `mdocs` tool (`initiative.update` with `progressNote`); the PostToolUse hook also auto-logs tool activity to the active initiative.
+- Enforcement is real: PreToolUse hooks block `Write`/`Edit` before `PLAN` (allowed from PLAN through COMPLETE). `Bash` is audited but not gated by content. Advance the workflow instead of working around the gate. Edits under `./mdocs/` are always allowed.
+- Configuration: Enforcement mode (`gate`|`advisory`|`off`, env `MDOCS_ENFORCEMENT`), IDLE strictness (`open`|`readonly`, env `MDOCS_ENFORCEMENT_IDLE`), precedence env>file>contract. Use `mdocs_reset` to clear active initiative.
+- Record progress through the `mdocs` tool (`initiative.update` with `progressNote`); the PostToolUse hook also logs tool activity to the audit log.
 
 ## Subagent dispatch (native)
 
@@ -45,5 +46,5 @@ Pass the returned context bundle into the subagent prompt so it inherits objecti
 
 1. Run project verification commands.
 2. Call `mdocs_validate`.
-3. Write or update at least one **stable** wiki learning for the completed initiative.
-4. Mark done: `mdocs { "command": "initiative.done", "args": { "id": "<id>" } }`.
+3. Write or update at least one **stable** wiki learning for the completed initiative. Use `mdocs_ingest` to batch-compose wiki pages + overview/log sections from caller-supplied operations (no auto-prose — author all text yourself). For completed initiatives, use `lifecycle.graduate` to record learning into `wiki/overview.md` and `wiki/log.md`.
+4. Mark done: `mdocs { "command": "initiative.done", "args": { "id": "<id>" } }`. In directory-v2, this writes `status: complete`; `done` is the flat-v1 alias. Both mean completed — `isCompleted()` treats them equally.

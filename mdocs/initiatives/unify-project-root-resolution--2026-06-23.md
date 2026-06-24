@@ -1,12 +1,13 @@
 ---
 id: "unify-project-root-resolution"
 title: "Project-root resolution: unify cwd vs MDOCS_PROJECT_DIR"
-status: "active"
+status: "done"
 created: "2026-06-23"
 updated: "2026-06-23"
 owner: ""
 tags: ["claude-code","mcp","hooks","project-root","multi-project","0.4.3"]
-related_wiki: []
+related_wiki: ["architecture/project-root-resolution"]
+priority: "medium"
 ---
 
 ## Objective
@@ -20,16 +21,9 @@ Unify project-root resolution across the MCP server and PreToolUse/PostToolUse h
 - [ ] Document multi-project behavior and resolution order in README.md
 - [ ] Add test proving hook and MCP resolve identical roots for same env and cwd
 
-## Context
-Source: Gap Closure Spec (0.4.3 / 0.5.0) G6. `src/surfaces/claude-code/mcp-server.ts` uses `MDOCS_PROJECT_DIR || process.cwd()` while `src/cli/hooks/pre-tool-use.ts` uses `payload.cwd || process.cwd()` and ignores `MDOCS_PROJECT_DIR`. In multi-repo workspaces this makes the gate and MCP operate on different mdocs roots. Hotspots: `src/surfaces/claude-code/mcp-server.ts`, `src/cli/hooks/pre-tool-use.ts`, `src/cli/hooks/post-tool-use.ts`, the new `src/cli/hooks/session-start.ts` from G1, and `README.md`.
-
-## Acceptance Criteria
-- One shared helper implements precedence `MDOCS_PROJECT_DIR` → walk up from `cwd` to nearest `mdocs/` → `process.cwd()`.
-- MCP server and all hooks resolve the same root for any combination of env var and cwd.
-- README documents the precedence and the single-root-per-session limit.
-- Test verifies hook and MCP produce identical roots.
-
 ## Progress Log
 - [2026-06-23T03:38:11.599Z] Created initiative via mdocs command
+- [2026-06-23] G6 IMPLEMENTED + VERIFIED via executor. New src/core/project-root.ts resolveProjectRoot(cwd): precedence (a) MDOCS_PROJECT_DIR if set+existing dir (honored even before mdocs/ bootstrapped, preserves set-env->init flow), (b) walk up cwd to nearest ancestor containing mdocs/, (c) fallback cwd. Exported from core index. Applied to all 3 surfaces: mcp-server.ts L25, pre-tool-use.ts L38, post-tool-use.ts L36 (all now resolveProjectRoot(...)). README section added (L242). Tests: tests/core/project-root.test.ts + tests/surfaces/claude-code/project-root-unified.test.ts (hook+MCP identical-root parity). 318 tests pass. build+lint+test exit 0. Non-breaking (no env+cwd-has-mdocs => root==cwd). session-start.ts application deferred to G1.
+- [2026-06-23T14:04:59.771Z] Marked done via mdocs command
 
 ## Artifacts

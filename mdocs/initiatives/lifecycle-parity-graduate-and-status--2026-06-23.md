@@ -1,12 +1,13 @@
 ---
 id: "lifecycle-parity-graduate-and-status"
 title: "Lifecycle parity: complete status, graduate, long-running warnings"
-status: "active"
+status: "done"
 created: "2026-06-23"
-updated: "2026-06-23"
+updated: "2026-06-24"
 owner: ""
 tags: ["core","lifecycle","validation","initiative-status","0.5.0"]
-related_wiki: []
+related_wiki: ["docs/lifecycle-parity-complete-graduate"]
+priority: "medium"
 ---
 
 ## Objective
@@ -20,16 +21,9 @@ Extend the initiative lifecycle to support complete as a distinct surfaced state
 - [ ] Update skills and README to document complete, expectedDuration, and graduate
 - [ ] Add fixtures proving each lint rule fires and clears and graduate moves overview without touching other pages
 
-## Context
-Source: Gap Closure Spec (0.4.3 / 0.5.0) G4. `src/core/initiative-store.ts` collapses status to `active | paused | done`. A mature process needs `complete` surfaced distinctly, graduation after 4 weeks, and expected-duration long-running warnings. Hotspots: `src/core/initiative-store.ts`, `src/core/managers/initiative.ts`, `src/core/validation/linter.ts`, and `src/core/commands/registry.ts`.
-
-## Acceptance Criteria
-- `complete` is a distinct surfaced state for directory-v2; flat-v1 `done` alias remains unchanged.
-- `expectedDuration` (`normal`/`long`/`suppress`) is read/written and respected by long-running warnings.
-- `mdocs validate` reports `long-running-active`, `stale-complete`, and `graduation-due` with fixtures proving each fires and clears.
-- `lifecycle.graduate` moves the initiative entry between overview sections and appends `graduate | <slug>` to `log.md` without touching other pages.
-
 ## Progress Log
 - [2026-06-23T03:38:01.199Z] Created initiative via mdocs command
+- [2026-06-23] 0.4.3 checkpoint complete. G4 is 0.5.0, AFTER G2 (graduate moves overview.md sections + appends log.md = the grammar G2a introduces). Do not start until G2a lands. Scope: complete as distinct surfaced state (dir-v2) keeping done alias (flat-v1) in initiative-store.ts; expectedDuration normal/long/suppress in initiative.ts; 3 lint rules (long-running-active, stale-complete, graduation-due) in linter.ts; lifecycle.graduate command in registry.ts; skills+README docs; fixtures for each rule + graduate.
+- [2026-06-24T01:24:36.074Z] Marked done via mdocs command
 
 ## Artifacts

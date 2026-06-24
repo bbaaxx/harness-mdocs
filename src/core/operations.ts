@@ -32,6 +32,19 @@ export function resume(core: MdocsCore, id?: string) {
   const initiative = core.managers.initiatives.read(fileName);
   if (!initiative) return { error: `Initiative not found: ${resolvedId}` };
   core.managers.workflow.setActiveInitiative(initiative.id);
+
+  // F1-D / F9-A: when currentStep is terminal (COMPLETE) or IDLE, move the
+  // step back to IDLE then advance to UNDERSTAND so a resumed initiative lands
+  // inside the gated region. Mid-flight steps (UNDERSTAND…REPORT) are
+  // preserved unchanged. NOTE: this uses `resumeAt('IDLE')` (step-only reset),
+  // NOT `reset()` — `reset()` is the F9-B full-clean-slate primitive that also
+  // clears activeInitiative, which would wipe the id we just set above.
+  const currentStep = core.managers.workflow.getCurrentStep();
+  if (currentStep === 'COMPLETE' || currentStep === 'IDLE') {
+    core.managers.workflow.resumeAt('IDLE');
+    core.managers.workflow.advance('UNDERSTAND');
+  }
+
   return {
     initiative: { id: initiative.id, title: initiative.title, status: initiative.status },
     currentStep: core.managers.workflow.status().currentStep,
@@ -40,6 +53,16 @@ export function resume(core: MdocsCore, id?: string) {
     latestProgress: initiative.progressLog.at(-1) || '',
     validation: core.commands.validationResult()
   };
+}
+
+/**
+ * F9-B: explicit reset. Returns the workflow to IDLE and clears the active
+ * initiative (full clean slate). Use cases: abandon an initiative mid-flight,
+ * force-reset for testing, or begin a fresh initiative cycle after COMPLETE.
+ */
+export function reset(core: MdocsCore) {
+  core.managers.workflow.reset();
+  return core.managers.workflow.status();
 }
 
 export function dispatch(core: MdocsCore, id?: string) {
@@ -109,4 +132,52 @@ export function audit(core: MdocsCore, opts: {
   endDate?: string;
 }) {
   return core.managers.audit.query(opts);
+}
+
+/**
+ * G1: Compact orientation snapshot for the Claude Code SessionStart hook.
+ * Returns only what the orientation banner needs — initiative counts by
+ * status, the active initiative id/title + current workflow step, and the
+ * wiki page count. Kept deliberately small so the additionalContext string
+ * stays well under the 10,000-char hook output cap.
+ *
+ * Reuses existing managers (initiatives.list, wiki.list, workflow.status)
+ * so it agrees with `mdocs_status` / `mdocs_resume` on what "active" means.
+ * Any read error is swallowed by the caller (session-start.ts fail-open).
+ */
+export function sessionContext(core: MdocsCore): {
+  counts: Record<string, number>;
+  activeInitiative: { id: string; title: string } | null;
+  currentStep: string;
+  wikiPageCount: number;
+} {
+  const initiatives = core.managers.initiatives.list();
+  const counts: Record<string, number> = {};
+  for (const i of initiatives) {
+    const status = i.status || 'unknown';
+    counts[status] = (counts[status] || 0) + 1;
+  }
+
+  const workflowStatus = core.managers.workflow.status();
+  let activeInitiative: { id: string; title: string } | null = null;
+  if (workflowStatus.activeInitiative) {
+    const active = initiatives.find(i => i.id === workflowStatus.activeInitiative);
+    if (active && active.status === 'active') {
+      activeInitiative = { id: active.id, title: active.title };
+    }
+  }
+
+  let wikiPageCount = 0;
+  try {
+    wikiPageCount = core.managers.wiki.list().length;
+  } catch {
+    wikiPageCount = 0;
+  }
+
+  return {
+    counts,
+    activeInitiative,
+    currentStep: workflowStatus.currentStep,
+    wikiPageCount
+  };
 }

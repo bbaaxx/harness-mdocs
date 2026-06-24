@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { LintResult, LintIssue, parseFrontmatter } from '../types';
+import { LintResult, LintIssue, isCompleted, parseFrontmatter } from '../types';
 import { normalizeInitiativeStatus } from '../initiative-store';
 
 export class MdocsLinter {
@@ -142,7 +142,7 @@ export class MdocsLinter {
       }
 
       // Done initiative should have at least one stable wiki learning
-      if (init.status === 'done') {
+      if (isCompleted(init.status)) {
         const initRefs = new Set([init.id, init.slug]);
         const stableWikiLinks = init.relatedWiki.filter(ref => {
           const wikiEntry = wikiData.find(w => (w.category ? `${w.category}/${w.id}` : w.id) === ref || w.id === ref);
@@ -305,11 +305,64 @@ export class MdocsLinter {
       score -= 0.5;
     }
 
+    // ---- Lifecycle telemetry warnings (G4 Slice B) ----
+    // These are advisory `warning`-severity signals with NO score deduction.
+    // They surface lifecycle state (age, staleness, graduation) without
+    // affecting an initiative's quality score or `passed` flag.
+    const front = parseFrontmatter(content);
+    const status = normalizeInitiativeStatus(front.status);
+    const expectedDuration = front.expected_duration || front.expectedDuration;
+
+    // 1. long-running-active — active past its expected duration window.
+    if (status === 'active' && expectedDuration !== 'suppress') {
+      const threshold = expectedDuration === 'long' ? 60 : 14;
+      const age = this.daysSince(front.created || front.started);
+      if (age !== null && age > threshold) {
+        issues.push({
+          severity: 'warning',
+          message: `long-running-active: active for ${age} days (expectedDuration ${expectedDuration || 'normal'}); mark done, split, or set expectedDuration:'suppress'`,
+        });
+      }
+    }
+
+    // 2 & 3 apply only to completed (done/complete) initiatives that are not archived.
+    if (isCompleted(status)) {
+      const sinceComplete = this.daysSince(front.completed || front.updated);
+
+      // 2. stale-complete — completed but not archived within 30 days.
+      if (sinceComplete !== null && sinceComplete > 30) {
+        issues.push({
+          severity: 'warning',
+          message: `stale-complete: completed ${sinceComplete} days ago and not archived; archive or graduate it`,
+        });
+      }
+
+      // 3. graduation-due — completed but not graduated within 7 days.
+      if (!front.graduated && sinceComplete !== null && sinceComplete > 7) {
+        issues.push({
+          severity: 'warning',
+          message: `graduation-due: completed ${sinceComplete} days ago and not graduated; run lifecycle.graduate to record its learning in overview.md/log.md`,
+        });
+      }
+    }
+
     // Normalize score to 0-5
     score = Math.max(0, Math.min(5, score));
     const passed = score >= 4;
 
     return { file: filePath, type: 'initiative', score, issues, passed };
+  }
+
+  /**
+   * Whole-day age between `dateStr` and today. Returns null when the value is
+   * missing or unparseable. Lifecycle lint rules use this to compute staleness.
+   */
+  private daysSince(dateStr: string | undefined): number | null {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const today = new Date();
+    return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
   }
 
   private lintWiki(content: string, filePath: string): LintResult {

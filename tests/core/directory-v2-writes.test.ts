@@ -141,3 +141,89 @@ test('directory-v2 wiki.link rejects empty path segments without side effects', 
 
   expect(fs.readFileSync(statusPath, 'utf8')).toBe(beforeStatus);
 });
+
+test('directory-v2 default external owner leaves lowercase wiki index.md byte-stable on sync', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-default-noop-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+
+  const wikiIndexPath = path.join(projectDir, 'mdocs', 'wiki', 'index.md');
+  const before = fs.readFileSync(wikiIndexPath, 'utf8');
+
+  // Default contract: canonical-lowercase + external owner (no opt-in).
+  const core = createMdocsCore(projectDir);
+  expect(core.managers.wiki['contract'].wikiIndexMode).toBe('canonical-lowercase');
+  expect(core.managers.wiki['contract'].wikiIndexOwner).toBe('external');
+
+  const managerResult = core.managers.wiki.syncIndices();
+  expect(managerResult).toEqual([]);
+
+  const commandResult = await core.commands.execute('index.sync') as any;
+  expect(commandResult).toMatchObject({ success: true });
+  // Wiki index is external-owned, so it must NOT appear in regenerated paths.
+  expect(commandResult.regenerated).not.toContain('wiki/index.md');
+
+  const after = fs.readFileSync(wikiIndexPath, 'utf8');
+  // Byte-stable no-op: default external owner must not touch the file.
+  expect(after).toBe(before);
+  expect(exactChildExists(path.join(projectDir, 'mdocs', 'wiki'), 'INDEX.md')).toBe(false);
+});
+
+test('directory-v2 opt-in harness owner regenerates lowercase wiki index.md with canonical format', async () => {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-mdocs-dirv2-optin-sync-'));
+  const fixtureRoot = path.resolve(__dirname, '../fixtures/directory-v2-mdocs');
+  copyDir(fixtureRoot, projectDir);
+
+  const wikiDir = path.join(projectDir, 'mdocs', 'wiki');
+  const wikiIndexPath = path.join(wikiDir, 'index.md');
+  const before = fs.readFileSync(wikiIndexPath, 'utf8');
+
+  // Opt-in: harness maintains the lowercase canonical index.
+  const core = createMdocsCore(projectDir, { compatibility: { wikiIndexOwner: 'harness' } });
+  expect(core.managers.wiki['contract'].wikiIndexMode).toBe('canonical-lowercase');
+  expect(core.managers.wiki['contract'].wikiIndexOwner).toBe('harness');
+
+  const managerResult = core.managers.wiki.syncIndices();
+  expect(managerResult).toEqual([wikiIndexPath]);
+
+  const afterFirst = fs.readFileSync(wikiIndexPath, 'utf8');
+  // Regenerated content replaces the external placeholder.
+  expect(afterFirst).not.toBe(before);
+  // Canonical grouped/status-tagged format: header, descriptive line, link entries.
+  expect(afterFirst.startsWith('# Wiki\n\n')).toBe(true);
+  expect(afterFirst).toContain('- [System Page](systems/system-page.md)');
+  // No uppercase INDEX.md is generated in canonical-lowercase mode.
+  expect(exactChildExists(wikiDir, 'INDEX.md')).toBe(false);
+
+  // Byte-stable across repeated syncs given the same on-disk set.
+  const afterSecond = fs.readFileSync(wikiIndexPath, 'utf8');
+  expect(afterSecond).toBe(afterFirst);
+
+  // index.sync command surfaces the regenerated path.
+  const commandResult = await core.commands.execute('index.sync') as any;
+  expect(commandResult.success).toBe(true);
+  expect(commandResult.regenerated).toContain('wiki/index.md');
+
+  // Adding a wiki entry then syncing refreshes the lowercase index in place.
+  fs.writeFileSync(path.join(wikiDir, 'overview.md'), `---
+id: overview
+title: Overview
+category: ""
+created: 2026-06-23
+updated: 2026-06-23
+related_initiatives: []
+tags: []
+---
+
+Root overview.
+`, 'utf8');
+  core.managers.wiki.syncIndices();
+  const afterAdd = fs.readFileSync(wikiIndexPath, 'utf8');
+  expect(afterAdd).toContain('- [Overview](overview.md)');
+  expect(afterAdd).toContain('- [System Page](systems/system-page.md)');
+  // Root write of `index` via user-facing create is still rejected even when
+  // harness owns the canonical index (the manager's regeneration path bypasses
+  // the guard, but user-facing writes must not).
+  const rejected = await core.commands.execute('wiki.create', { id: 'index', title: 'Bad' }) as any;
+  expect(rejected.error).toEqual(expect.stringContaining('canonical root wiki index'));
+});

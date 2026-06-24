@@ -1,12 +1,13 @@
 ---
 id: "consumer-layering-docs"
 title: "Workspace-glue / layering documentation"
-status: "active"
+status: "done"
 created: "2026-06-23"
 updated: "2026-06-23"
 owner: ""
 tags: ["docs","integration","layering","0.4.3"]
-related_wiki: []
+related_wiki: ["reference/consumer-layering"]
+priority: "medium"
 ---
 
 ## Objective
@@ -18,16 +19,9 @@ Document how consumers can layer workspace-specific conventions over the generic
 - [ ] Document that assets/templates/claude-md-snippet.md is additive and how to extend it without breaking tool routing
 - [ ] Link docs/consumer-layering.md from README.md
 
-## Context
-Source: Gap Closure Spec (0.4.3 / 0.5.0) G8. The package is generic; real consumers add workspace layers such as sibling shared knowledge bases, external task lists, and house authoring rules. There is currently no guidance on composing these with the plugin's hooks, skills, or `assets/templates/claude-md-snippet.md`. This overlaps with G1 because consumer SessionStart hooks must compose with the new orientation hook.
-
-## Acceptance Criteria
-- `docs/consumer-layering.md` exists and explains how to layer a sibling knowledge base and external task list over harness-mdocs.
-- Document explains how consumer SessionStart hooks compose with the G1 orientation hook without duplicate or conflicting context.
-- Document explains that `assets/templates/claude-md-snippet.md` is additive and shows safe extension patterns.
-- README links to the new doc.
-
 ## Progress Log
 - [2026-06-23T03:38:20.045Z] Created initiative via mdocs command
+- [2026-06-23] G8 IMPLEMENTED + VERIFIED via writer (docs-only). New docs/consumer-layering.md: Core Design, Composition with Sibling Knowledge Base, External Task List Integration, Consumer SessionStart Hooks (composition with G1 orientation - concatenated additionalContext, keep compact, no order guarantee), CLAUDE.md Snippet is Additive (compose-into not replace; safe extension patterns; re-merge on upgrade), Summary. README link at L228. No src/ touched (composition is external - consumer own hooks/CLAUDE.md/sibling dirs; no package-internal edits instructed).
+- [2026-06-23T18:49:51.410Z] Marked done via mdocs command
 
 ## Artifacts

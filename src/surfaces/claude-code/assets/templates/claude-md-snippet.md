@@ -12,7 +12,9 @@ mdocs is active. Use the MCP tools for all mdocs operations.
 
 ## Enforcement
 
-Workflow enforcement is active via hooks. `Write`/`Edit` are blocked before the `PLAN` step, and destructive `Bash` is blocked before `COMPLETE`. Edits under `./mdocs/` are always allowed. Advance the workflow rather than working around a blocked tool.
+Workflow enforcement is active via hooks. `Write`/`Edit` are blocked before the `PLAN` step and allowed from `PLAN` through `COMPLETE`. `Bash` is audited but not gated by content. Edits under `./mdocs/` are always allowed. Advance the workflow rather than working around a blocked tool.
+
+**Configuration:** Enforcement mode `gate` (default) | `advisory` | `off` (env `MDOCS_ENFORCEMENT`). IDLE strictness `open` (default) | `readonly` (env `MDOCS_ENFORCEMENT_IDLE`). Config precedence: env > file > detected contract. Reset: `mdocs_reset` command.
 
 ## Subagents
 

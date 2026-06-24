@@ -192,6 +192,20 @@ export function createOpencodeTools(core: MdocsCore) {
         return dispatchOperation(core, args.initiativeId);
       }
     },
+    mdocs_ingest: {
+      description: 'Batch-compose wiki pages + compiled views (overview.md/log.md) from caller-supplied operations. Records only caller-supplied ops — never auto-generates prose.',
+      args: {
+        operations: z.array(z.record(z.string(), z.any())).describe('Caller-authored operations: createPage, updatePage, updateOverviewSection, appendLog, link'),
+        note: z.string().optional().describe('Optional note echoed in the manifest')
+      },
+      execute: async (args: { operations: any[]; note?: string }) => {
+        try {
+          return core.commands.execute('wiki.ingest', { operations: args.operations, note: args.note });
+        } catch (err: any) {
+          return { error: err.message || String(err) };
+        }
+      }
+    },
     mdocs_audit: {
       description: 'Query the audit log for events',
       args: {

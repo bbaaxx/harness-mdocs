@@ -1,4 +1,17 @@
-export type Status = 'active' | 'paused' | 'done' | 'archived';
+export type Status = 'active' | 'paused' | 'done' | 'complete' | 'archived';
+
+/**
+ * True for any status that means "completed".
+ * `done` is the flat-v1 alias; `complete` is the directory-v2 canonical value.
+ * Both surface the same semantic completion state.
+ *
+ * Accepts a raw `string` in addition to `Status` because some callers (e.g. the
+ * linter) hold initiative status as an untyped string; the comparison only
+ * ever matches the two completed values, so unknown strings simply return false.
+ */
+export function isCompleted(status: Status | string): boolean {
+  return status === 'done' || status === 'complete';
+}
 
 export type StepName = 
   | 'IDLE' 
@@ -43,6 +56,17 @@ export interface Initiative {
   openQuestions?: string[];
   blockers?: string[];
   nextAction?: string;
+  /**
+   * Optional expected-duration bucket. `suppress` opts an initiative out of
+   * overdue enforcement; `long` widens the normal cadence expectations.
+   * Set via initiative.create / initiative.update.
+   */
+  expectedDuration?: 'normal' | 'long' | 'suppress';
+  /**
+   * ISO date the initiative was graduated via `lifecycle.graduate` (Slice C).
+   * Empty/absent for un-graduated initiatives.
+   */
+  graduated?: string;
 }
 
 export interface WikiEntry {
@@ -98,6 +122,13 @@ export interface SearchOptions {
   dateFrom?: string;
   dateTo?: string;
 }
+
+export type WikiIngestOp =
+  | { type: 'createPage'; category: string; id: string; title: string; content?: string; tags?: string[]; relatedInitiatives?: string[]; lifecycle?: WikiEntry['lifecycle']; knowledgeType?: WikiEntry['knowledgeType']; confidence?: WikiEntry['confidence'] }
+  | { type: 'updatePage'; category: string; id: string; content?: string; lifecycle?: WikiEntry['lifecycle']; tags?: string[]; relatedInitiatives?: string[] }
+  | { type: 'updateOverviewSection'; section: string; body: string }
+  | { type: 'appendLog'; entry: { timestamp?: string; content: string } | string }
+  | { type: 'link'; initiativeId: string; wikiSlug: string };
 
 export interface AuditEvent {
   timestamp: string;
