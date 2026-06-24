@@ -34,6 +34,7 @@ Prefer the MCP tools. Fall back to the `mdocs` CLI via Bash. Last resort: edit `
 | Search memory | `mdocs_search` |
 | Validate before completion | `mdocs_validate` |
 | Assemble subagent context | `mdocs_dispatch` |
+| Batch-compose wiki pages + overview/log | `mdocs_ingest` |
 | Any core command | `mdocs` (with `command` + `args`) |
 | Advance to next step | `mdocs_advance` (MCP) or `mdocs step <step>` (CLI) |
 
@@ -63,8 +64,8 @@ real "plan before mutation" guardrail.
 4. `PLAN`: Write or update the initiative plan via the `mdocs` tool (`initiative.create` / `initiative.update`). Edits to project source unblock at this step.
 5. `EXECUTE`: Do the implementation work.
 6. `VERIFY`: Run project checks and `mdocs_validate`.
-7. `REPORT`: Update progress and write durable wiki learnings.
-8. `COMPLETE`: Mark the initiative done only after validation passes.
+7. `REPORT`: Update progress and write durable wiki learnings. Use `mdocs_ingest` to batch-compose wiki pages + overview/log sections from caller-supplied operations (no auto-prose — author all text yourself; ingest only records what you give it). For completed initiatives, use `lifecycle.graduate` to record learning into `wiki/overview.md` and `wiki/log.md` (MCP: `mdocs` with command `lifecycle.graduate`).
+8. `COMPLETE`: Mark the initiative done only after validation passes. In directory-v2, this writes `status: complete`; `done` is the flat-v1 alias. Both mean completed — `isCompleted()` treats them equally.
 
 Always call `mdocs_status` or `mdocs_resume` before resuming long-running work, and `mdocs_validate` before claiming work is complete.
 

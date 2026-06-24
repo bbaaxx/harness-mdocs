@@ -46,12 +46,12 @@ export function formatOrientationBanner(ctx: ReturnType<typeof sessionContext>):
   if (totalInitiatives === 0) {
     countParts.push('0 initiatives');
   } else {
-    for (const status of ['active', 'done', 'archived']) {
+    for (const status of ['active', 'complete', 'done', 'archived']) {
       if (ctx.counts[status]) countParts.push(`${ctx.counts[status]} ${status}`);
     }
     // Surface any unexpected statuses too (e.g. paused, blocked).
     for (const [status, n] of Object.entries(ctx.counts)) {
-      if (!['active', 'done', 'archived'].includes(status)) {
+      if (!['active', 'complete', 'done', 'archived'].includes(status)) {
         countParts.push(`${n} ${status}`);
       }
     }

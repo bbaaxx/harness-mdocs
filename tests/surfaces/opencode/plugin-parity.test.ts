@@ -1051,7 +1051,7 @@ Resume status branch.
     await expect((plugin as any).tool.mdocs.execute({ command: 'initiative.archive', args: { id: 'missing' } }))
       .resolves.toEqual({ error: 'Initiative not found: missing' });
     await expect((plugin as any).tool.mdocs.execute({ command: 'initiative.archive', args: { id: 'not-done' } }))
-      .resolves.toEqual({ error: 'Only done initiatives can be archived: not-done' });
+      .resolves.toEqual({ error: 'Only completed initiatives can be archived: not-done' });
   });
 
   test('mdocs_resume returns next action, blockers, latest progress, and validation', async () => {
@@ -1231,6 +1231,7 @@ describe('Config Hook', () => {
       'mdocs_audit',
       'mdocs_dispatch',
       'mdocs_index_check',
+      'mdocs_ingest',
       'mdocs_init',
       'mdocs_lookup',
       'mdocs_resume',

@@ -342,6 +342,7 @@ tags: [auth, api]
 related_wiki: [architecture/auth-flow]
 phase: implementation
 next_action: Run integration tests.
+expected_duration: normal
 ---
 
 ## Objective
@@ -360,6 +361,26 @@ Add JWT-based authentication to the API.
 ```
 
 Status values are `active`, `paused`, and `done` in flat-v1 projects. Contract-aware reads also accept directory-v2 `_status.md` initiatives and normalize `complete` to `done`. Directory-v2 projects support native `_status.md` writes for initiative create, update, done, delete, archive, and wiki links without creating flat initiative files.
+
+### Initiative lifecycle
+
+**Completion states:** `complete` is the surfaced completion state for directory-v2 initiatives (dir-v2 `markDone` writes `complete`). `done` remains the flat-v1 alias. Both mean "completed" — `isCompleted()` treats them equally for archive, lint, blocking, and overdue checks.
+
+**Expected duration:** The optional `expected_duration` field (`'normal' | 'long' | 'suppress'` in frontmatter) drives the `long-running-active` lint rule. `normal` warns if active > 14 days, `long` > 60 days, `suppress` never warns. This helps distinguish quick tasks from long-running research without false positives.
+
+**Graduation:** The `lifecycle.graduate` command records a completed initiative's learning into `wiki/overview.md` (as named H2 sections) and `wiki/log.md` (append-only entries). It stamps the initiative `graduated` and clears the `graduation-due` lint rule. Only caller-supplied text is written — no auto-generation. Example:
+
+```bash
+mdocs command lifecycle.graduate --json '{
+  "id": "add-authentication",
+  "sections": [
+    {"section": "Authentication", "body": "JWT-based auth with refresh tokens."}
+  ],
+  "logEntry": "Implemented JWT auth flow; see overview."
+}'
+```
+
+**Lint rules:** Three advisory lint rules (zero score impact) track initiative health: `long-running-active` (active initiative exceeds expected duration), `stale-complete` (completed > 30 days, not archived), and `graduation-due` (completed > 7 days, not graduated).
 
 ## Wiki
 

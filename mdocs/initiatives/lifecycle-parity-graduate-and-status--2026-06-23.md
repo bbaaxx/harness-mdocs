@@ -1,12 +1,12 @@
 ---
 id: "lifecycle-parity-graduate-and-status"
 title: "Lifecycle parity: complete status, graduate, long-running warnings"
-status: "active"
+status: "done"
 created: "2026-06-23"
-updated: "2026-06-23"
+updated: "2026-06-24"
 owner: ""
 tags: ["core","lifecycle","validation","initiative-status","0.5.0"]
-related_wiki: []
+related_wiki: ["docs/lifecycle-parity-complete-graduate"]
 priority: "medium"
 ---
 
@@ -24,5 +24,6 @@ Extend the initiative lifecycle to support complete as a distinct surfaced state
 ## Progress Log
 - [2026-06-23T03:38:01.199Z] Created initiative via mdocs command
 - [2026-06-23] 0.4.3 checkpoint complete. G4 is 0.5.0, AFTER G2 (graduate moves overview.md sections + appends log.md = the grammar G2a introduces). Do not start until G2a lands. Scope: complete as distinct surfaced state (dir-v2) keeping done alias (flat-v1) in initiative-store.ts; expectedDuration normal/long/suppress in initiative.ts; 3 lint rules (long-running-active, stale-complete, graduation-due) in linter.ts; lifecycle.graduate command in registry.ts; skills+README docs; fixtures for each rule + graduate.
+- [2026-06-24T01:24:36.074Z] Marked done via mdocs command
 
 ## Artifacts

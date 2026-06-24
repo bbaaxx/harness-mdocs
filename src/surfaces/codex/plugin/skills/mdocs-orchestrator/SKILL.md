@@ -25,7 +25,7 @@ Before marking work complete:
 
 1. Run project verification commands.
 2. Run `mdocs validate`.
-3. Write or update at least one stable wiki learning for completed initiatives.
-4. Mark the initiative done with `mdocs command initiative.done --json '{"id":"initiative-id"}'`.
+3. Write or update at least one stable wiki learning for completed initiatives. Use `mdocs_ingest` to batch-compose wiki pages + overview/log sections from caller-supplied operations (no auto-prose — author all text yourself). For completed initiatives, use `lifecycle.graduate` to record learning into `wiki/overview.md` and `wiki/log.md`.
+4. Mark the initiative done with `mdocs command initiative.done --json '{"id":"initiative-id"}'`. In directory-v2, this writes `status: complete`; `done` is the flat-v1 alias. Both mean completed — `isCompleted()` treats them equally.
 
 Codex v1 follows workflow gates by instruction. It does not block host file edits or shell commands. `Bash` is audited but not gated by content.

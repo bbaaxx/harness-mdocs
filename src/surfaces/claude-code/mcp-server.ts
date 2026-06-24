@@ -102,6 +102,11 @@ export function buildMcpServer(): McpServer {
     { step: z.string().describe('Next workflow step, e.g. PLAN') },
     async ({ step }) => guard(c => c.commands.execute('workflow.advance', { step })));
 
+  server.tool('mdocs_ingest',
+    'Batch-compose wiki pages + compiled views (overview.md/log.md) from caller-supplied operations. Records only what the caller supplies — never auto-generates prose. Composes wiki.* atomically under a lock.',
+    { operations: z.array(z.record(z.string(), z.any())), note: z.string().optional() },
+    async ({ operations, note }) => guard(c => c.commands.execute('wiki.ingest', { operations, note })));
+
   return server;
 }
 

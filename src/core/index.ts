@@ -1,5 +1,6 @@
 export * from './types';
 export * from './project-root';
+export { withLock } from './lock';
 export * from './factory';
 export * from './contract';
 export * from './initiative-store';

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { MdocsContract } from './contract';
-import { Initiative, parseFrontmatter, PlanItemStatus, Status } from './types';
+import { Initiative, isCompleted, parseFrontmatter, PlanItemStatus, Status } from './types';
 
 function parseSection(content: string, sectionName: string): string {
   const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -35,10 +35,21 @@ function titleize(slug: string): string {
 
 export function normalizeInitiativeStatus(status: string | undefined): Status {
   const value = (status || 'active').toLowerCase();
-  if (['done', 'complete', 'completed'].includes(value)) return 'done';
+  // `complete` is the directory-v2 canonical completed value; `done` is the
+  // flat-v1 alias. Both mean "completed" — see isCompleted() in ./types.
+  if (['complete', 'completed'].includes(value)) return 'complete';
+  if (value === 'done') return 'done';
   if (['archived', 'archive'].includes(value)) return 'archived';
   if (['paused', 'blocked', 'hold', 'on-hold', 'on_hold'].includes(value)) return 'paused';
   return 'active';
+}
+
+const ALLOWED_EXPECTED_DURATIONS = new Set(['normal', 'long', 'suppress']);
+
+function coerceExpectedDuration(raw: any): 'normal' | 'long' | 'suppress' | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const value = raw.toLowerCase();
+  return ALLOWED_EXPECTED_DURATIONS.has(value) ? (value as 'normal' | 'long' | 'suppress') : undefined;
 }
 
 export interface InitiativeRecord {
@@ -135,7 +146,7 @@ export class InitiativeStore {
     if (!record || record.sourceKind !== 'directory-status' || record.archived) {
       throw new Error(`Directory initiative not found: ${key}`);
     }
-    if (record.initiative.status !== 'done') throw new Error(`Only done initiatives can be archived: ${record.initiative.id}`);
+    if (!isCompleted(record.initiative.status)) throw new Error(`Only completed initiatives can be archived: ${record.initiative.id}`);
     const slug = this.safeDirectoryKey(record.key);
     const sourcePath = path.join(this.initiativesDir, slug);
     const archiveDir = path.join(this.initiativesDir, '_archive');
@@ -230,7 +241,9 @@ export class InitiativeStore {
       handoffSummary: front.handoff_summary || undefined,
       openQuestions: Array.isArray(front.open_questions) ? front.open_questions : undefined,
       blockers: Array.isArray(front.blockers) ? front.blockers : undefined,
-      nextAction: front.next_action || undefined
+      nextAction: front.next_action || undefined,
+      expectedDuration: coerceExpectedDuration(front.expected_duration || front.expectedDuration),
+      graduated: front.graduated || undefined
     };
     return { key, filePath, sourceKind, archived, rawFrontmatter: front, initiative };
   }
@@ -248,7 +261,9 @@ export class InitiativeStore {
   }
 
   private frontmatterUpdates(initiative: Initiative): Record<string, string> {
-    const status = initiative.status === 'done' ? 'complete' : initiative.status;
+    // The store is directory-mode only; `complete` is the canonical on-disk
+    // completed value. `done` (flat-v1 alias) and `complete` both map to it.
+    const status = isCompleted(initiative.status) ? 'complete' : initiative.status;
     const front: Record<string, string> = {
       id: initiative.id,
       title: initiative.title,
@@ -267,6 +282,8 @@ export class InitiativeStore {
     if (initiative.openQuestions) front.open_questions = JSON.stringify(initiative.openQuestions);
     if (initiative.blockers) front.blockers = JSON.stringify(initiative.blockers);
     if (initiative.nextAction) front.next_action = initiative.nextAction;
+    if (initiative.expectedDuration) front.expected_duration = initiative.expectedDuration;
+    if (initiative.graduated) front.graduated = initiative.graduated;
     return front;
   }
 

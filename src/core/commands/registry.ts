@@ -7,7 +7,8 @@ import { MdocsLinter } from '../validation/linter';
 import { SearchEngine } from '../search';
 import { SubagentAssembler } from '../subagent';
 import { WorkflowEngine, STEPS } from '../workflow/engine';
-import { StepName } from '../types';
+import { isCompleted, StepName } from '../types';
+import { withLock } from '../lock';
 import { findInitiativeFilename, slugify, today } from './utils';
 
 export interface MdocsCommandContext {
@@ -31,12 +32,14 @@ export class MdocsCommandRegistry {
     'initiative.archive',
     'wiki.create',
     'wiki.update',
+    'wiki.ingest',
     'wiki.stub',
     'wiki.delete',
     'wiki.list',
     'wiki.link',
     'wiki.xref',
     'workflow.advance',
+    'lifecycle.graduate',
     'validate',
     'index.sync'
   ];
@@ -60,6 +63,8 @@ export class MdocsCommandRegistry {
           return this.createWiki(args);
         case 'wiki.update':
           return this.updateWiki(args);
+        case 'wiki.ingest':
+          return this.ingestWiki(args);
         case 'wiki.stub':
           return this.stubWiki(args);
         case 'wiki.delete':
@@ -72,6 +77,8 @@ export class MdocsCommandRegistry {
           return this.crossReferenceWiki(args);
         case 'workflow.advance':
           return this.advanceWorkflow(args);
+        case 'lifecycle.graduate':
+          return this.graduateInitiative(args);
         case 'validate':
           return this.validationResult();
         case 'index.sync':
@@ -103,6 +110,92 @@ export class MdocsCommandRegistry {
       activeInitiative: this.context.workflow.status().activeInitiative,
       stepHistory: this.context.workflow.status().stepHistory
     };
+  }
+
+  /**
+   * lifecycle.graduate — record a completed initiative's learning into the
+   * compiled views (overview.md sections + log.md entry) using the G2a helpers,
+   * wrapped in withLock, and stamp the initiative `graduated` so the
+   * graduation-due lint rule clears.
+   *
+   * INVARIANT: NEVER auto-generates prose. Only caller-supplied `sections`
+   * bodies and `logEntry` content are written. Best-effort batch like ingest:
+   * each section/log write is isolated in its own try/catch; a failing write
+   * records an error but does NOT abort the rest. The `graduated` stamp is
+   * applied last; if it throws, the write results are still returned with the
+   * stamp error included.
+   */
+  private graduateInitiative(args: Record<string, any>) {
+    if (!args.id) return { error: 'lifecycle.graduate requires id' };
+    this.context.initiatives.assertWriteSupported('lifecycle.graduate');
+    const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.id);
+    if (!fileName) return { error: `Initiative not found: ${args.id}` };
+    const initiative = this.context.initiatives.read(fileName);
+    if (!initiative) return { error: `Initiative not found: ${args.id}` };
+    if (!isCompleted(initiative.status)) {
+      return { error: `Only completed initiatives can be graduated (current status: ${initiative.status})` };
+    }
+
+    const sections: Array<{ section: string; body: string }> = Array.isArray(args.sections) ? args.sections : [];
+    const logEntry = args.logEntry;
+
+    const lockResult = withLock(this.context.mdocsRoot, 'lifecycle-graduate', () => {
+      const sectionResults: any[] = [];
+      let logResult: any = undefined;
+
+      for (const s of sections) {
+        try {
+          const p = this.context.wiki.updateOverviewSection(s.section, s.body);
+          sectionResults.push({
+            section: s.section,
+            ok: true,
+            skipped: p === null ? 'non-directory-v2' : undefined,
+            filePath: p ? path.relative(this.context.mdocsRoot, p) : undefined
+          });
+        } catch (err: any) {
+          sectionResults.push({ section: s.section, ok: false, error: err.message || String(err) });
+        }
+      }
+
+      if (logEntry !== undefined) {
+        try {
+          const p = this.context.wiki.appendLog(logEntry);
+          logResult = {
+            ok: true,
+            skipped: p === null ? 'non-directory-v2' : undefined,
+            filePath: p ? path.relative(this.context.mdocsRoot, p) : undefined
+          };
+        } catch (err: any) {
+          logResult = { ok: false, error: err.message || String(err) };
+        }
+      }
+
+      let stampError: string | undefined;
+      try {
+        initiative.graduated = today();
+        this.context.initiatives.update(fileName, initiative);
+      } catch (stampErr: any) {
+        stampError = stampErr.message || String(stampErr);
+      }
+
+      return { sectionResults, logResult, stampError };
+    });
+
+    if (!lockResult.ran || lockResult.value === undefined) {
+      return { success: false, error: 'lifecycle-graduate lock timeout' };
+    }
+
+    const { sectionResults, logResult, stampError } = lockResult.value;
+    const wrote: any = { overviewSections: sectionResults };
+    if (logResult !== undefined) wrote.logEntry = logResult;
+    const result: any = {
+      success: true,
+      initiativeId: initiative.id,
+      graduated: today(),
+      wrote
+    };
+    if (stampError) result.stampError = stampError;
+    return result;
   }
 
   validationResult() {
@@ -153,7 +246,9 @@ export class MdocsCommandRegistry {
       handoffSummary: args.handoffSummary || undefined,
       openQuestions: Array.isArray(args.openQuestions) ? args.openQuestions : undefined,
       blockers: Array.isArray(args.blockers) ? args.blockers : undefined,
-      nextAction: args.nextAction || undefined
+      nextAction: args.nextAction || undefined,
+      expectedDuration: args.expectedDuration || undefined,
+      graduated: args.graduated || undefined
     });
     return { success: true, filename: path.basename(filePath), id };
   }
@@ -166,7 +261,7 @@ export class MdocsCommandRegistry {
     const initiative = this.context.initiatives.read(fileName);
     if (!initiative) return { error: `Initiative not found: ${args.id}` };
     const updates = args.updates || args;
-    for (const field of ['status', 'tags', 'priority', 'dueDate', 'dependsOn', 'owner', 'phase', 'handoffSummary', 'nextAction']) {
+    for (const field of ['status', 'tags', 'priority', 'dueDate', 'dependsOn', 'owner', 'phase', 'handoffSummary', 'nextAction', 'expectedDuration', 'graduated']) {
       if (updates[field] !== undefined) (initiative as any)[field] = updates[field];
     }
     if (updates.openQuestions !== undefined) initiative.openQuestions = Array.isArray(updates.openQuestions) ? updates.openQuestions : undefined;
@@ -207,7 +302,7 @@ export class MdocsCommandRegistry {
     if (!fileName) return { error: `Initiative not found: ${args.id}` };
     const initiative = this.context.initiatives.read(fileName);
     if (!initiative) return { error: `Initiative not found: ${args.id}` };
-    if (initiative.status !== 'done') return { error: `Only done initiatives can be archived: ${args.id}` };
+    if (!isCompleted(initiative.status)) return { error: `Only completed initiatives can be archived: ${args.id}` };
     const result = this.context.initiatives.archive(fileName);
     return { success: true, id: args.id, archivedFilename: result.archivedFilename };
   }
@@ -312,6 +407,117 @@ export class MdocsCommandRegistry {
     if (!toCategory || !toId) return { error: `Invalid toSlug format: ${args.toSlug}. Expected category/id` };
     this.context.wiki.addWikiCrossRef(fromCategory, fromId, toCategory, toId);
     return { success: true, bidirectional: true, fromSlug: args.fromSlug, toSlug: args.toSlug };
+  }
+
+  /**
+   * wiki.ingest — record caller-supplied operations and apply them as one
+   * isolated multi-file write composed from existing wiki.* primitives plus the
+   * updateOverviewSection/appendLog helpers, wrapped in withLock.
+   *
+   * INVARIANT: ingest NEVER auto-generates prose. It only records + applies
+   * exactly what the caller supplies (the agent authors all text). The manifest
+   * contains only caller-supplied data + structural metadata (counts, refs,
+   * ok/error).
+   *
+   * Best-effort batch: isolation is provided by the lock, NOT transactional
+   * rollback — each op is wrapped in its own try/catch so one failing op records
+   * an error but does NOT abort the rest of the batch.
+   */
+  private ingestWiki(args: Record<string, any>) {
+    const operations = args.operations;
+    if (!Array.isArray(operations) || operations.length === 0) {
+      return { error: 'wiki.ingest requires { operations: WikiIngestOp[] }' };
+    }
+
+    const lockResult = withLock(this.context.mdocsRoot, 'wiki-ingest', () => {
+      const appliedOps: any[] = [];
+      const changedFiles: string[] = [];
+
+      for (const op of operations) {
+        // Each op application is isolated: a failing op records an error but
+        // does NOT abort the rest of the batch.
+        try {
+          if (op.type === 'createPage') {
+            const category = op.category || '';
+            const ref = category ? `${category}/${op.id}` : op.id;
+            const filePath = this.context.wiki.create({
+              category,
+              id: op.id,
+              title: op.title,
+              created: today(),
+              updated: today(),
+              content: op.content ?? '',
+              relatedInitiatives: Array.isArray(op.relatedInitiatives) ? op.relatedInitiatives : [],
+              tags: Array.isArray(op.tags) ? op.tags : [],
+              lifecycle: op.lifecycle,
+              knowledgeType: op.knowledgeType,
+              confidence: op.confidence
+            });
+            appliedOps.push({ type: op.type, ref, ok: true });
+            changedFiles.push(path.relative(this.context.mdocsRoot, filePath));
+          } else if (op.type === 'updatePage') {
+            const category = op.category || '';
+            const ref = category ? `${category}/${op.id}` : op.id;
+            const existing = category ? this.context.wiki.read(category, op.id) : this.context.wiki.readByRef(op.id);
+            if (!existing) {
+              appliedOps.push({ type: op.type, ref, ok: false, error: 'not found' });
+            } else {
+              if (op.content !== undefined) existing.content = op.content;
+              if (op.lifecycle !== undefined) existing.lifecycle = op.lifecycle;
+              if (Array.isArray(op.tags)) existing.tags = op.tags;
+              if (Array.isArray(op.relatedInitiatives)) existing.relatedInitiatives = op.relatedInitiatives;
+              const filePath = this.context.wiki.update(category, op.id, existing);
+              appliedOps.push({ type: op.type, ref, ok: true });
+              changedFiles.push(path.relative(this.context.mdocsRoot, filePath));
+            }
+          } else if (op.type === 'updateOverviewSection') {
+            const filePath = this.context.wiki.updateOverviewSection(op.section, op.body);
+            if (filePath === null) {
+              // Legitimate no-op outside directory-v2 — NOT an error.
+              appliedOps.push({ type: op.type, ref: `overview#${op.section}`, ok: true, skipped: 'non-directory-v2' });
+            } else {
+              appliedOps.push({ type: op.type, ref: `overview#${op.section}`, ok: true });
+              changedFiles.push(path.relative(this.context.mdocsRoot, filePath));
+            }
+          } else if (op.type === 'appendLog') {
+            const filePath = this.context.wiki.appendLog(op.entry);
+            if (filePath === null) {
+              // Legitimate no-op outside directory-v2 — NOT an error.
+              appliedOps.push({ type: op.type, ref: 'log', ok: true, skipped: 'non-directory-v2' });
+            } else {
+              appliedOps.push({ type: op.type, ref: 'log', ok: true });
+              changedFiles.push(path.relative(this.context.mdocsRoot, filePath));
+            }
+          } else if (op.type === 'link') {
+            try {
+              this.context.wiki.addRelatedInitiativeByRef(op.wikiSlug, op.initiativeId);
+              appliedOps.push({ type: op.type, ref: `${op.initiativeId}->${op.wikiSlug}`, ok: true });
+            } catch (linkErr: any) {
+              appliedOps.push({ type: op.type, ref: `${op.initiativeId}->${op.wikiSlug}`, ok: false, error: linkErr.message || String(linkErr) });
+            }
+          } else {
+            appliedOps.push({ type: String(op.type), ref: '', ok: false, error: `unknown op type` });
+          }
+        } catch (opErr: any) {
+          appliedOps.push({ type: String(op.type), ref: '', ok: false, error: opErr.message || String(opErr) });
+        }
+      }
+
+      return { appliedOps, changedFiles };
+    });
+
+    if (!lockResult.ran || lockResult.value === undefined) {
+      return { success: false, error: 'wiki-ingest lock timeout' };
+    }
+
+    const { appliedOps, changedFiles } = lockResult.value;
+    return {
+      success: true,
+      applied: appliedOps.length,
+      operations: appliedOps,
+      changedFiles,
+      note: args.note ?? null
+    };
   }
 
   private syncIndex() {

@@ -59,6 +59,14 @@ function commandHelp(commandName?: string): string {
       '  Changed fields go at the top level after category and id. Do not use an updates wrapper.',
       '  Example:',
       '    mdocs command wiki.update --json \'{"category":"testing","id":"cli-help","content":"Updated learning.","lifecycle":"stable","sourceInitiatives":["add-auth"]}\''
+    ],
+    'wiki.ingest': [
+      'wiki.ingest',
+      '  Payload: { operations: WikiIngestOp[], note?: string }',
+      '  Applies a caller-supplied batch atomically under a lock. Never auto-generates prose.',
+      '  Op types: createPage, updatePage, updateOverviewSection, appendLog, link.',
+      '  Example:',
+      '    mdocs command wiki.ingest --json \'{"note":"ship d1","operations":[{"type":"createPage","category":"decisions","id":"d1","title":"D1","content":"decide X"},{"type":"updateOverviewSection","section":"Status","body":"green"},{"type":"appendLog","entry":"shipped d1"}]}\''
     ]
   };
 
@@ -85,7 +93,7 @@ function commandHelp(commandName?: string): string {
     '',
     ...examples['wiki.update'],
     '',
-    'Other commands: initiative.done, initiative.delete, initiative.archive, wiki.stub, wiki.delete, wiki.list, wiki.link, wiki.xref, validate, index.sync'
+    'Other commands: initiative.done, initiative.delete, initiative.archive, wiki.ingest, wiki.stub, wiki.delete, wiki.list, wiki.link, wiki.xref, lifecycle.graduate, validate, index.sync'
   ].join('\n');
 }
 

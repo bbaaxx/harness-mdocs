@@ -15,8 +15,8 @@ The mdocs workflow is a 9-step process for AI-assisted development:
 4. **PLAN** — Write an implementation plan to the initiative file.
 5. **EXECUTE** — Dispatch subagents with assembled context via Task tool. `mdocs_dispatch` now includes retrieved memory, handoff summary, blockers, and recent audit events.
 6. **VERIFY** — Check results (lint, tests). Run `mdocs_validate` to check initiative/wiki integrity and graph cross-links. Loop if needed.
-7. **REPORT** — Write wiki entries for artifacts, update initiative. For done initiatives, ensure at least one wiki entry with `lifecycle: stable` captures durable learnings.
-8. **COMPLETE** — Offer to commit, mark initiative done. Graph linter verifies done initiatives have stable wiki learnings.
+7. **REPORT** — Write wiki entries for artifacts, update initiative. For done initiatives, ensure at least one wiki entry with `lifecycle: stable` captures durable learnings. Use `mdocs_ingest` to batch-compose wiki pages + overview/log sections from caller-supplied operations (no auto-prose — author all text yourself; ingest only records what you give it). For completed initiatives, use `lifecycle.graduate` to record learning into `wiki/overview.md` and `wiki/log.md`.
+8. **COMPLETE** — Offer to commit, mark initiative done. In directory-v2, this writes `status: complete`; `done` is the flat-v1 alias. Both mean completed — `isCompleted()` treats them equally. Graph linter verifies done initiatives have stable wiki learnings.
 
 ## Rules
 

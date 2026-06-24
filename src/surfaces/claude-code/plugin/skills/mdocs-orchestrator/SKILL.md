@@ -46,5 +46,5 @@ Pass the returned context bundle into the subagent prompt so it inherits objecti
 
 1. Run project verification commands.
 2. Call `mdocs_validate`.
-3. Write or update at least one **stable** wiki learning for the completed initiative.
-4. Mark done: `mdocs { "command": "initiative.done", "args": { "id": "<id>" } }`.
+3. Write or update at least one **stable** wiki learning for the completed initiative. Use `mdocs_ingest` to batch-compose wiki pages + overview/log sections from caller-supplied operations (no auto-prose — author all text yourself). For completed initiatives, use `lifecycle.graduate` to record learning into `wiki/overview.md` and `wiki/log.md`.
+4. Mark done: `mdocs { "command": "initiative.done", "args": { "id": "<id>" } }`. In directory-v2, this writes `status: complete`; `done` is the flat-v1 alias. Both mean completed — `isCompleted()` treats them equally.

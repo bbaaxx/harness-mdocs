@@ -25,8 +25,8 @@ Workflow steps:
 4. `PLAN`: Write or update the initiative plan.
 5. `EXECUTE`: Do the implementation work.
 6. `VERIFY`: Run project checks and `mdocs validate`.
-7. `REPORT`: Update progress and write durable wiki learnings.
-8. `COMPLETE`: Mark the initiative done only after validation.
+7. `REPORT`: Update progress and write durable wiki learnings. Use `mdocs_ingest` to batch-compose wiki pages + overview/log sections from caller-supplied operations (no auto-prose — author all text yourself; ingest only records what you give it). For completed initiatives, use `lifecycle.graduate` to record learning into `wiki/overview.md` and `wiki/log.md`.
+8. `COMPLETE`: Mark the initiative done only after validation. In directory-v2, this writes `status: complete`; `done` is the flat-v1 alias. Both mean completed — `isCompleted()` treats them equally.
 
 Prefer CLI command access:
 
