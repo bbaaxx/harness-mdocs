@@ -362,6 +362,10 @@ export class WikiManager {
     if (this.contract.wikiIndexOwner !== 'harness') {
       return [];
     }
+    if (this.contract.wikiIndexMode === 'canonical-lowercase') {
+      this.writeLowercaseCanonicalIndex();
+      return [path.join(this.dir, 'index.md')];
+    }
     this.updateIndices();
     const paths = [path.join(this.dir, 'INDEX.md')];
     const categories = this.categoryDirs();
@@ -382,7 +386,7 @@ export class WikiManager {
       const filePath = path.join(this.dir, `${entryId}.md`);
       if (fs.existsSync(filePath)) return { success: false, existing: true, filePath };
       const date = new Date().toISOString().split('T')[0];
-      const stubContent = template || this.defaultStubTemplate(title || entryId, '', entryId, date);
+      const stubContent = template || this.entityOrGenericStubTemplate(title || entryId, '', entryId, date);
       fs.writeFileSync(filePath, stubContent, 'utf8');
       this.updateIndices();
       return { success: true, filePath };
@@ -398,7 +402,7 @@ export class WikiManager {
 
     const date = new Date().toISOString().split('T')[0];
     const stubTitle = title || entryId;
-    const stubContent = template || this.defaultStubTemplate(stubTitle, cat, entryId, date);
+    const stubContent = template || this.entityOrGenericStubTemplate(stubTitle, cat, entryId, date);
 
     fs.writeFileSync(filePath, stubContent, 'utf8');
     this.updateIndices();
@@ -427,6 +431,74 @@ tags: []
 ## References
 
 - Linked from initiative: <!-- initiative ids will be auto-populated -->
+`;
+  }
+
+  private entityOrGenericStubTemplate(title: string, category: string, id: string, date: string): string {
+    if (category === 'repos') return this.defaultRepoTemplate(title, id, date);
+    if (category === 'systems') return this.defaultSystemTemplate(title, id, date);
+    return this.defaultStubTemplate(title, category, id, date);
+  }
+
+  private defaultRepoTemplate(title: string, id: string, date: string): string {
+    return `---
+id: "${id}"
+title: "${title}"
+category: "repos"
+created: "${date}"
+updated: "${date}"
+related_initiatives: []
+tags: []
+---
+
+# ${title}
+
+## Summary
+
+<!-- One-paragraph summary of the repository -->
+
+## Responsibilities
+
+<!-- What this repo owns and is accountable for -->
+
+## Dependencies
+
+<!-- Upstream/downstream repositories and systems -->
+
+## Owners / Links
+
+<!-- Owners, URL, and key links -->
+`;
+  }
+
+  private defaultSystemTemplate(title: string, id: string, date: string): string {
+    return `---
+id: "${id}"
+title: "${title}"
+category: "systems"
+created: "${date}"
+updated: "${date}"
+related_initiatives: []
+tags: []
+---
+
+# ${title}
+
+## Summary
+
+<!-- One-paragraph summary of the system -->
+
+## Boundaries
+
+<!-- System scope: what is in and out of this system -->
+
+## Dependencies
+
+<!-- Upstream/downstream systems and repos -->
+
+## Owners / Links
+
+<!-- Owners, URL, and key links -->
 `;
   }
 
@@ -646,6 +718,10 @@ tags: []
     if (this.contract.wikiIndexOwner !== 'harness') {
       return;
     }
+    if (this.contract.wikiIndexMode === 'canonical-lowercase') {
+      this.writeLowercaseCanonicalIndex();
+      return;
+    }
     const categories = this.categoryDirs();
 
     // Per-category indices
@@ -676,5 +752,196 @@ tags: []
     const rootIndex = `# Wiki\n\n## Categories\n\n${catLines.join('\n')}`;
     fs.writeFileSync(path.join(this.dir, 'INDEX.md'), rootIndex, 'utf8');
     this.writeIndexMeta();
+  }
+
+  /**
+   * Build the lowercase canonical `wiki/index.md` content. Format matches the
+   * grouped/status-tagged style already in use: `# Wiki` header, a stable
+   * descriptive sentence, then one `- [Title](relative-path.md)` line per wiki
+   * entry (root and category) sorted by relative path so output is byte-stable
+   * across runs given the same on-disk set.
+   */
+  private generateLowercaseCanonicalIndex(): string {
+    const entries: { title: string; relPath: string }[] = [];
+    for (const filePath of this.rootWikiFiles()) {
+      const fileName = path.basename(filePath);
+      if (fileName === 'index.md' || fileName === 'INDEX.md') continue;
+      const id = fileName.replace(/\.md$/, '');
+      let title = id;
+      try {
+        const parsed = this.readRoot(id);
+        if (parsed?.title) title = parsed.title;
+      } catch {
+        // Fall back to filename-derived title.
+      }
+      entries.push({ title, relPath: fileName });
+    }
+    for (const category of this.categoryDirs()) {
+      const catDir = path.join(this.dir, category);
+      const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md') && f !== 'INDEX.md' && f !== 'index.md');
+      for (const fileName of files) {
+        const id = fileName.replace(/\.md$/, '');
+        let title = id;
+        try {
+          const parsed = this.read(category, id);
+          if (parsed?.title) title = parsed.title;
+        } catch {
+          // Fall back to filename-derived title.
+        }
+        entries.push({ title, relPath: `${category}/${fileName}` });
+      }
+    }
+    entries.sort((a, b) => a.relPath.localeCompare(b.relPath));
+    const lines = entries.map(e => `- [${e.title}](${e.relPath})`);
+    return `# Wiki\n\nAuto-maintained canonical index. Regenerated by mdocs index.sync.\n\n${lines.join('\n') || 'No entries yet.'}\n`;
+  }
+
+  private writeLowercaseCanonicalIndex(): void {
+    const content = this.generateLowercaseCanonicalIndex();
+    fs.writeFileSync(path.join(this.dir, 'index.md'), content, 'utf8');
+    this.writeIndexMeta();
+  }
+
+  /**
+   * Serialize the minimal root-file frontmatter shape used by the harness-owned
+   * compiled views (overview.md, log.md). Mirrors the JSON-serialized style of
+   * `toFrontmatter` (key: <JSON>) so the files pass `validate()` root-file
+   * checks and parse cleanly via `readRoot`.
+   */
+  private serializeCompiledViewFrontmatter(id: string, title: string, date: string): string {
+    const front: Record<string, any> = {
+      id,
+      title,
+      category: '',
+      created: date,
+      updated: date,
+      related_initiatives: [],
+      tags: []
+    };
+    return `---\n${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('\n')}\n---\n\n`;
+  }
+
+  /**
+   * Idempotently set one named H2 section of wiki/overview.md. Creates the file
+   * (frontmatter + '# Overview') if absent. If the section exists, replaces its
+   * body in place preserving all other sections byte-for-byte; if absent, appends
+   * a new section at the end. Bumps the frontmatter `updated` date.
+   * No-op (returns null) outside directory-v2 (canonical-lowercase) mode.
+   * Never writes wiki/index.md directly.
+   */
+  updateOverviewSection(section: string, body: string): string | null {
+    if (this.contract.wikiIndexMode !== 'canonical-lowercase') return null;
+    const filePath = path.join(this.dir, 'overview.md');
+    const today = new Date().toISOString().split('T')[0];
+    const trimmedBody = body.trim();
+
+    if (!fs.existsSync(filePath)) {
+      const frontmatter = this.serializeCompiledViewFrontmatter('overview', 'Overview', today);
+      const content = `${frontmatter}# Overview\n\n## ${section}\n\n${trimmedBody}\n`;
+      fs.writeFileSync(filePath, content, 'utf8');
+      this.updateIndices();
+      return filePath;
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const frontmatterMatch = raw.match(/---\n[\s\S]*?\n---/);
+    const frontmatterBlock = frontmatterMatch ? frontmatterMatch[0] : '';
+    let bodyText = frontmatterMatch ? raw.slice(frontmatterMatch[0].length) : raw;
+    // Drop exactly one leading pair of newlines that `toFrontmatter` style emits.
+    bodyText = bodyText.replace(/^\r?\n\r?\n/, '');
+
+    // Split the body into the H1 preamble (everything before the first `## `)
+    // and a list of {name, body} sections. A section body runs from the line
+    // after its heading up to (but not including) the next `^## ` line or EOF.
+    const lines = bodyText.split('\n');
+    const preambleLines: string[] = [];
+    const sections: { name: string; body: string }[] = [];
+    let current: { name: string; bodyLines: string[] } | null = null;
+    let sawHeading = false;
+    for (const line of lines) {
+      const headingMatch = /^## (.+)$/.exec(line);
+      if (headingMatch) {
+        sawHeading = true;
+        if (current) sections.push({ name: current.name, body: current.bodyLines.join('\n').replace(/^\r?\n\r?\n/, '').replace(/\n+$/, '') });
+        current = { name: headingMatch[1].trim(), bodyLines: [] };
+      } else if (current) {
+        current.bodyLines.push(line);
+      } else {
+        preambleLines.push(line);
+      }
+    }
+    if (current) sections.push({ name: current.name, body: current.bodyLines.join('\n').replace(/^\r?\n\r?\n/, '').replace(/\n+$/, '') });
+    const preamble = sawHeading ? preambleLines.join('\n').replace(/^\r?\n+/, '').replace(/\n+$/, '') : bodyText.trim();
+
+    let found = false;
+    for (const s of sections) {
+      if (s.name === section) {
+        s.body = trimmedBody;
+        found = true;
+        break;
+      }
+    }
+    if (!found) sections.push({ name: section, body: trimmedBody });
+
+    // Reassemble. Preserve the H1 preamble (everything before the first `## `).
+    const h1Preamble = preamble ? `${preamble}\n\n` : '# Overview\n\n';
+    const sectionsText = sections.map(s => `## ${s.name}\n\n${s.body}`).join('\n\n');
+    const assembledBody = `${h1Preamble}${sectionsText}\n`;
+
+    // Bump the `updated:` line in the preserved frontmatter; fall back to a
+    // freshly serialized block if the file had no frontmatter.
+    let newFrontmatter: string;
+    if (frontmatterBlock) {
+      newFrontmatter = frontmatterBlock.replace(/^updated:.*$/m, `updated: ${JSON.stringify(today)}`);
+    } else {
+      newFrontmatter = this.serializeCompiledViewFrontmatter('overview', 'Overview', today).replace(/\n\n$/, '');
+    }
+
+    fs.writeFileSync(filePath, `${newFrontmatter}\n\n${assembledBody}`, 'utf8');
+    this.updateIndices();
+    return filePath;
+  }
+
+  /**
+   * Append one timestamped block to wiki/log.md. Creates the file (frontmatter +
+   * '# Log') if absent. The timestamp defaults to new Date().toISOString(); the
+   * content is caller-supplied (entry.content, or entry if a string is passed).
+   * Existing entries are preserved and never reordered.
+   * No-op (returns null) outside directory-v2 (canonical-lowercase) mode.
+   * Never writes wiki/index.md directly.
+   */
+  appendLog(entry: { timestamp?: string; content: string } | string): string | null {
+    if (this.contract.wikiIndexMode !== 'canonical-lowercase') return null;
+    const filePath = path.join(this.dir, 'log.md');
+    const today = new Date().toISOString().split('T')[0];
+    const content = typeof entry === 'string' ? entry : entry.content;
+    const timestamp = (typeof entry !== 'string' && entry.timestamp) || new Date().toISOString();
+    const trimmedContent = content.trim();
+
+    if (!fs.existsSync(filePath)) {
+      const frontmatter = this.serializeCompiledViewFrontmatter('log', 'Log', today);
+      const fileContent = `${frontmatter}# Log\n\n## ${timestamp}\n\n${trimmedContent}\n`;
+      fs.writeFileSync(filePath, fileContent, 'utf8');
+      this.updateIndices();
+      return filePath;
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const frontmatterMatch = raw.match(/---\n[\s\S]*?\n---/);
+    const frontmatterBlock = frontmatterMatch ? frontmatterMatch[0] : '';
+    let bodyText = frontmatterMatch ? raw.slice(frontmatterMatch[0].length) : raw;
+    bodyText = bodyText.replace(/^\r?\n\r?\n/, '').replace(/\n+$/, '\n');
+
+    let newFrontmatter: string;
+    if (frontmatterBlock) {
+      newFrontmatter = frontmatterBlock.replace(/^updated:.*$/m, `updated: ${JSON.stringify(today)}`);
+    } else {
+      newFrontmatter = this.serializeCompiledViewFrontmatter('log', 'Log', today).replace(/\n\n$/, '');
+    }
+
+    const appendedBlock = `\n## ${timestamp}\n\n${trimmedContent}\n`;
+    fs.writeFileSync(filePath, `${newFrontmatter}\n\n${bodyText}${appendedBlock}`, 'utf8');
+    this.updateIndices();
+    return filePath;
   }
 }

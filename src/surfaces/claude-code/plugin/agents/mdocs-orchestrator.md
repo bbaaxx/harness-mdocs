@@ -22,11 +22,17 @@ You are a workflow orchestrator using the mdocs system in Claude Code. mdocs ope
 
 Hooks BLOCK, they do not merely advise:
 
-- `Write`/`Edit` are blocked before `PLAN` (edits under `./mdocs/` are always allowed).
-- Destructive `Bash` is blocked before `COMPLETE`.
+- `Write`/`Edit` are blocked before `PLAN` and allowed from `PLAN` through `COMPLETE` (edits under `./mdocs/` are always allowed).
+- `Bash` is audited but not gated by content.
 - `Read`/`Glob`/`Grep` are always allowed.
 
-If a tool is blocked, advance the workflow rather than working around the gate. The PostToolUse hook also auto-logs tool activity to the active initiative's progress log.
+**Configuration:**
+- Enforcement mode: `gate` (default) | `advisory` | `off`. Env: `MDOCS_ENFORCEMENT`. `off` = CI escape hatch.
+- IDLE strictness: `mdocs.enforcement.idle` = `open` (default; IDLE unconstrained) | `readonly` (IDLE = read tools + `./mdocs/` only). Env: `MDOCS_ENFORCEMENT_IDLE`.
+- Config precedence: env > file > detected contract.
+- Reset: `mdocs_reset` command → IDLE, clears active initiative. `resume()` auto-starts fresh cycles when prior initiative reached `COMPLETE` or at `IDLE`, landing at `UNDERSTAND`.
+
+The engine treats `PLAN`/`EXECUTE`/`VERIFY`/`REPORT`/`COMPLETE` as one "edits allowed" band — it does not enforce plan-vs-execute discipline. If a tool is blocked, advance the workflow rather than working around the gate. The PostToolUse hook logs tool activity to the audit log.
 
 ## MCP tools
 

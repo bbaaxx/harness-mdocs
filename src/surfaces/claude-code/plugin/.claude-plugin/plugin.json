@@ -1,6 +1,6 @@
 {
   "name": "mdocs",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Durable initiative and wiki memory for Claude Code — hooks, MCP server, skills, and orchestrator agent.",
   "author": {
     "name": "bbaaxx"
@@ -10,6 +10,28 @@
   "skills": "./skills/",
   "agents": ["./agents/mdocs-orchestrator.md"],
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/dist/cli/hooks/session-start.js"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/dist/cli/hooks/pre-compact.js"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Write|Edit|Bash",

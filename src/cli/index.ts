@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createMdocsCore } from '../core';
-import { status, lookup, resume, dispatch, indexCheck, advance } from '../core/operations';
+import { status, lookup, resume, dispatch, indexCheck, advance, reset } from '../core/operations';
 
 export interface CliResult {
   exitCode: number;
@@ -59,6 +59,14 @@ function commandHelp(commandName?: string): string {
       '  Changed fields go at the top level after category and id. Do not use an updates wrapper.',
       '  Example:',
       '    mdocs command wiki.update --json \'{"category":"testing","id":"cli-help","content":"Updated learning.","lifecycle":"stable","sourceInitiatives":["add-auth"]}\''
+    ],
+    'wiki.ingest': [
+      'wiki.ingest',
+      '  Payload: { operations: WikiIngestOp[], note?: string }',
+      '  Applies a caller-supplied batch atomically under a lock. Never auto-generates prose.',
+      '  Op types: createPage, updatePage, updateOverviewSection, appendLog, link.',
+      '  Example:',
+      '    mdocs command wiki.ingest --json \'{"note":"ship d1","operations":[{"type":"createPage","category":"decisions","id":"d1","title":"D1","content":"decide X"},{"type":"updateOverviewSection","section":"Status","body":"green"},{"type":"appendLog","entry":"shipped d1"}]}\''
     ]
   };
 
@@ -85,7 +93,7 @@ function commandHelp(commandName?: string): string {
     '',
     ...examples['wiki.update'],
     '',
-    'Other commands: initiative.done, initiative.delete, initiative.archive, wiki.stub, wiki.delete, wiki.list, wiki.link, wiki.xref, validate, index.sync'
+    'Other commands: initiative.done, initiative.delete, initiative.archive, wiki.ingest, wiki.stub, wiki.delete, wiki.list, wiki.link, wiki.xref, lifecycle.graduate, validate, index.sync'
   ].join('\n');
 }
 
@@ -141,6 +149,10 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
       return ok(resume(core, subcommand));
     }
 
+    if (command === 'reset') {
+      return ok(reset(core));
+    }
+
     if (command === 'dispatch') {
       const result = dispatch(core, subcommand);
       return result.error ? fail(result.error) : ok(result);
@@ -172,7 +184,7 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
       return result.error ? { exitCode: 1, stdout: json(result), stderr: '' } : ok(result);
     }
 
-    return fail('Usage: mdocs init | status | validate | resume [initiative-id] | lookup <query> | search <query> | dispatch [initiative-id] | index check | index repair | mcp | step <step> | command <name> --json <args-json>');
+    return fail('Usage: mdocs init | status | validate | resume [initiative-id] | reset | lookup <query> | search <query> | dispatch [initiative-id] | index check | index repair | mcp | step <step> | command <name> --json <args-json>');
   } catch (error: any) {
     return fail(error.message || String(error));
   }

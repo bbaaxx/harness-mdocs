@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { detectMdocsContract, MdocsCompatibilityConfig, MdocsContract } from '../contract';
 import { InitiativeStore, normalizeInitiativeStatus } from '../initiative-store';
-import { Initiative, PlanItem, PlanItemStatus, parseFrontmatter } from '../types';
+import { Initiative, isCompleted, PlanItem, PlanItemStatus, parseFrontmatter } from '../types';
 
 export interface InitiativeManagerOptions {
   compatibility?: MdocsCompatibilityConfig;
@@ -51,6 +51,14 @@ function parsePlanSection(content: string): { description: string; status: PlanI
   return section.split('\n')
     .filter(line => line.trim().startsWith('- '))
     .map(line => parsePlanItem(line));
+}
+
+const ALLOWED_EXPECTED_DURATIONS = new Set(['normal', 'long', 'suppress']);
+
+function coerceExpectedDuration(raw: any): 'normal' | 'long' | 'suppress' | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const value = raw.toLowerCase();
+  return ALLOWED_EXPECTED_DURATIONS.has(value) ? (value as 'normal' | 'long' | 'suppress') : undefined;
 }
 
 function isSafePathSegment(segment: string): boolean {
@@ -113,6 +121,8 @@ export class InitiativeManager {
     if (initiative.openQuestions && initiative.openQuestions.length > 0) front.open_questions = initiative.openQuestions;
     if (initiative.blockers && initiative.blockers.length > 0) front.blockers = initiative.blockers;
     if (initiative.nextAction) front.next_action = initiative.nextAction;
+    if (initiative.expectedDuration) front.expected_duration = initiative.expectedDuration;
+    if (initiative.graduated) front.graduated = initiative.graduated;
     return `---\n${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('\n')}\n---\n\n`;
   }
 
@@ -137,7 +147,7 @@ export class InitiativeManager {
   }
 
   assertWriteSupported(operation: string): void {
-    const directoryNativeWrites = new Set(['initiative.create', 'initiative.update', 'initiative.done', 'initiative.delete', 'initiative.archive', 'wiki.link']);
+    const directoryNativeWrites = new Set(['initiative.create', 'initiative.update', 'initiative.done', 'initiative.delete', 'initiative.archive', 'lifecycle.graduate', 'wiki.link']);
     if (this.contract.initiativeMode === 'directory' && !directoryNativeWrites.has(operation)) {
       throw new Error(`${operation} is not supported for directory-v2 initiatives; write support is read-only to prevent accidental flat-file writes.`);
     }
@@ -206,7 +216,9 @@ export class InitiativeManager {
       handoffSummary: front.handoff_summary || undefined,
       openQuestions: Array.isArray(front.open_questions) ? front.open_questions : undefined,
       blockers: Array.isArray(front.blockers) ? front.blockers : undefined,
-      nextAction: front.next_action || undefined
+      nextAction: front.next_action || undefined,
+      expectedDuration: coerceExpectedDuration(front.expected_duration || front.expectedDuration),
+      graduated: front.graduated || undefined
     };
   }
 
@@ -294,7 +306,7 @@ export class InitiativeManager {
     if (!fs.existsSync(sourcePath)) throw new Error(`Initiative file not found: ${sanitized}`);
     const initiative = this.read(sanitized);
     if (!initiative) throw new Error(`Initiative file not found: ${sanitized}`);
-    if (initiative.status !== 'done') throw new Error(`Only done initiatives can be archived: ${initiative.id}`);
+    if (!isCompleted(initiative.status)) throw new Error(`Only completed initiatives can be archived: ${initiative.id}`);
 
     const archiveDir = path.join(this.dir, 'archive');
     fs.mkdirSync(archiveDir, { recursive: true });
@@ -344,7 +356,7 @@ export class InitiativeManager {
       if (!i.dependsOn || i.dependsOn.length === 0) return false;
       return i.dependsOn.some(depId => {
         const dep = all.find(d => d.id === depId);
-        return dep && dep.status !== 'done';
+        return dep && !isCompleted(dep.status);
       });
     });
   }
@@ -352,7 +364,7 @@ export class InitiativeManager {
   findOverdue(): Initiative[] {
     const today = new Date().toISOString().split('T')[0];
     return this.listAll().filter(i => {
-      if (!i.dueDate || i.status === 'done') return false;
+      if (!i.dueDate || isCompleted(i.status)) return false;
       return i.dueDate < today;
     });
   }

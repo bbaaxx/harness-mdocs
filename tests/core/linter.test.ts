@@ -31,6 +31,7 @@ updated: 2025-05-24
 owner: test
 tags: [test]
 related_wiki: []
+expected_duration: suppress
 ---
 
 ## Objective

@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { EnforcementMode, IdleStrictness } from './workflow/engine';
+
 export type InitiativeMode = 'flat' | 'directory' | 'auto';
 export type WikiIndexMode = 'generated-uppercase' | 'canonical-lowercase' | 'none' | 'auto';
 export type ArchiveDirMode = 'archive' | '_archive' | 'auto';
@@ -9,9 +11,28 @@ export type IndexOwner = 'harness' | 'external' | 'none';
 export interface MdocsCompatibilityConfig {
   initiativeMode?: InitiativeMode;
   wikiIndexMode?: WikiIndexMode;
+  /**
+   * Optional override for who owns the wiki index. For directory-v2
+   * (canonical-lowercase), the safe default is `'external'` (no-op on
+   * sync). Set `wikiIndexOwner: 'harness'` to opt into harness maintaining
+   * the lowercase `wiki/index.md`. Ignored where inapplicable.
+   */
+  wikiIndexOwner?: IndexOwner;
   archiveDir?: ArchiveDirMode;
   legacyFlatFiles?: boolean | 'auto';
   obsidianRefreshCommand?: string | string[] | null;
+  /**
+   * Workflow enforcement mode. `gate` (default) blocks Write/Edit before
+   * PLAN; `advisory` allows writes but still audits; `off` disables
+   * enforcement entirely (CI escape hatch). Precedence: env > file > default.
+   */
+  enforcementMode?: EnforcementMode;
+  /**
+   * IDLE strictness. `open` (default) allows every tool at IDLE (0.4.2
+   * behaviour); `readonly` blocks Write/Edit/Bash at IDLE until the workflow
+   * advances. Precedence: env > file > default.
+   */
+  idle?: IdleStrictness;
 }
 
 export interface MdocsContract {
@@ -23,6 +44,8 @@ export interface MdocsContract {
   obsidianVisibilityLayer: boolean;
   obsidianDir?: string;
   obsidianRefreshCommand?: string | string[] | null;
+  enforcementMode: EnforcementMode;
+  idle: IdleStrictness;
 }
 
 function safeExists(filePath: string): boolean {
@@ -31,6 +54,19 @@ function safeExists(filePath: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Validate an explicit `wikiIndexOwner` override against the resolved mode.
+ * `'harness'` is permitted for both generated-uppercase (default) and
+ * canonical-lowercase (opt-in). `'external'` is only meaningful for
+ * canonical-lowercase. `'none'` applies when there is no index.
+ */
+function isValidOwnerForMode(owner: IndexOwner, mode: Exclude<WikiIndexMode, 'auto'>): boolean {
+  if (owner === 'harness') return mode === 'generated-uppercase' || mode === 'canonical-lowercase';
+  if (owner === 'external') return mode === 'canonical-lowercase';
+  if (owner === 'none') return mode === 'none';
+  return false;
 }
 
 function hasExactChild(parentDir: string, childName: string): boolean {
@@ -110,11 +146,20 @@ export function detectMdocsContract(mdocsRoot: string, config: MdocsCompatibilit
     ? flatInitiatives
     : config.legacyFlatFiles;
 
-  const wikiIndexOwner: IndexOwner = wikiIndexMode === 'generated-uppercase'
+  // Wiki index owner. Defaults are safe: harness owns generated-uppercase,
+  // external owns canonical-lowercase (directory-v2), none when there is no
+  // index. The `wikiIndexOwner` config is an explicit opt-in/override and is
+  // validated against the resolved mode so nonsense combinations fall back to
+  // the safe default rather than silently clobbering an external index.
+  const defaultWikiIndexOwner: IndexOwner = wikiIndexMode === 'generated-uppercase'
     ? 'harness'
     : wikiIndexMode === 'canonical-lowercase'
       ? 'external'
       : 'none';
+  const configuredOwner = config.wikiIndexOwner;
+  const wikiIndexOwner: IndexOwner = configuredOwner && isValidOwnerForMode(configuredOwner, wikiIndexMode)
+    ? configuredOwner
+    : defaultWikiIndexOwner;
 
   return {
     initiativeMode,
@@ -124,8 +169,32 @@ export function detectMdocsContract(mdocsRoot: string, config: MdocsCompatibilit
     wikiIndexOwner,
     obsidianVisibilityLayer,
     obsidianDir: obsidianVisibilityLayer ? obsidianDir : undefined,
-    obsidianRefreshCommand: config.obsidianRefreshCommand ?? null
+    obsidianRefreshCommand: config.obsidianRefreshCommand ?? null,
+    enforcementMode: resolveEnforcementMode(config.enforcementMode),
+    idle: resolveIdleStrictness(config.idle)
   };
+}
+
+/**
+ * Resolve the enforcement mode with precedence: env > file/config > default.
+ * `MDOCS_ENFORCEMENT` is the CI escape hatch (`off` disables the gate
+ * entirely); `gate` is the default.
+ */
+function resolveEnforcementMode(configValue?: EnforcementMode): EnforcementMode {
+  const envValue = typeof process !== 'undefined' && process.env?.MDOCS_ENFORCEMENT;
+  if (envValue === 'gate' || envValue === 'advisory' || envValue === 'off') return envValue;
+  return configValue ?? 'gate';
+}
+
+/**
+ * Resolve IDLE strictness with precedence: env > file/config > default.
+ * `MDOCS_ENFORCEMENT_IDLE=readonly` tightens IDLE to read-only; `open` is
+ * the 0.4.2 default.
+ */
+function resolveIdleStrictness(configValue?: IdleStrictness): IdleStrictness {
+  const envValue = typeof process !== 'undefined' && process.env?.MDOCS_ENFORCEMENT_IDLE;
+  if (envValue === 'readonly' || envValue === 'open') return envValue;
+  return configValue ?? 'open';
 }
 
 function isDirectory(filePath: string): boolean {

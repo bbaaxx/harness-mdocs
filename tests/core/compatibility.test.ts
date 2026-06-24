@@ -119,7 +119,9 @@ test('directory-v2 initiatives are readable by lookup, search, and aliases', () 
   const core = createMdocsCore(projectDir);
 
   expect(core.managers.initiatives.findById('example-active')?.title).toBe('Example Active');
-  expect(core.managers.initiatives.findById('example-complete')?.status).toBe('done');
+  // Directory-v2 surfaces `complete` distinctly (G4 Slice A); the on-disk
+  // _status.md value `complete` is no longer collapsed to `done`.
+  expect(core.managers.initiatives.findById('example-complete')?.status).toBe('complete');
   expect(core.managers.initiatives.findById('legacy-flat')?.title).toBe('Legacy Flat');
   expect(core.managers.initiatives.findById('example-archived')).toBeNull();
   expect(core.managers.initiatives.list(true).some(initiative => initiative.id === 'example-archived')).toBe(true);
@@ -265,7 +267,9 @@ test('directory-v2 initiative.done updates status file without flat-file side ef
   expect(status).toContain('completed:');
   expect(status).toContain('Marked done via mdocs command');
   expect(status).toContain('Example directory-v2 initiative.');
-  expect(core.managers.initiatives.findById('example-active')?.status).toBe('done');
+  // markDone writes status: complete to disk for directory-v2 (G4 Slice A),
+  // and the store now surfaces that value distinctly instead of collapsing to done.
+  expect(core.managers.initiatives.findById('example-active')?.status).toBe('complete');
   expect(fs.readdirSync(initiativesDir).filter(file => file.endsWith('.md')).sort()).toEqual(beforeFiles);
 });
 
@@ -311,7 +315,7 @@ test('directory-v2 initiative.archive rejects active initiatives without moving 
 
   const result = await core.commands.execute('initiative.archive', { id: 'example-active' });
 
-  expect(result).toMatchObject({ error: 'Only done initiatives can be archived: example-active' });
+  expect(result).toMatchObject({ error: 'Only completed initiatives can be archived: example-active' });
   expect(fs.existsSync(path.join(initiativesDir, 'example-active', '_status.md'))).toBe(true);
   expect(fs.existsSync(path.join(initiativesDir, '_archive', 'example-active'))).toBe(false);
 });

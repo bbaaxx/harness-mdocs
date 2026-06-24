@@ -4,19 +4,25 @@
  *
  * Design rules (see 03-mcp-server.md):
  *   - create core PER TOOL CALL (state files mutate between calls)
- *   - project root from MDOCS_PROJECT_DIR, else process.cwd()
+ *   - project root via shared resolveProjectRoot (MDOCS_PROJECT_DIR > walk-up to nearest mdocs/ > process.cwd())
  *   - every handler returns toMcpResult/toMcpError; never throws past the boundary
  *   - stdout is the JSON-RPC channel — diagnostics go to stderr only
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createMdocsCore, MdocsCore } from '../../core';
+import { createMdocsCore, MdocsCore, resolveProjectRoot } from '../../core';
 import * as ops from '../../core/operations';
 import { toMcpResult, toMcpError, McpToolResult } from './result';
 
+/**
+ * Resolve the project root via the shared helper so the MCP server agrees
+ * with the PreToolUse / PostToolUse hooks on the same mdocs root. The helper
+ * honors MDOCS_PROJECT_DIR internally, walks up from cwd to a `mdocs/`
+ * ancestor, and falls back to process.cwd().
+ */
 function resolveProjectDir(): string {
-  return process.env.MDOCS_PROJECT_DIR || process.cwd();
+  return resolveProjectRoot(process.cwd());
 }
 
 /** Fresh core per call so workflow/initiative state is never stale. */
@@ -89,9 +95,17 @@ export function buildMcpServer(): McpServer {
     { initiativeId: z.string().optional() },
     async ({ initiativeId }) => guard(c => ops.resume(c, initiativeId)));
 
-  server.tool('mdocs_advance', 'Advance the workflow to the next step (UNDERSTAND, DISCOVER, CONTEXT, PLAN, EXECUTE, VERIFY, REPORT, COMPLETE). Drives the gates that block Write/Edit before PLAN and destructive Bash before COMPLETE.',
+  server.tool('mdocs_reset', 'Reset the workflow to IDLE and clear the active initiative (full clean slate). Use to abandon an initiative mid-flight, force-reset for testing, or begin a fresh initiative cycle after COMPLETE.',
+    async () => guard(c => ops.reset(c)));
+
+  server.tool('mdocs_advance', 'Advance the workflow to the next step (UNDERSTAND, DISCOVER, CONTEXT, PLAN, EXECUTE, VERIFY, REPORT, COMPLETE). Drives the gates that block Write/Edit before PLAN.',
     { step: z.string().describe('Next workflow step, e.g. PLAN') },
     async ({ step }) => guard(c => c.commands.execute('workflow.advance', { step })));
+
+  server.tool('mdocs_ingest',
+    'Batch-compose wiki pages + compiled views (overview.md/log.md) from caller-supplied operations. Records only what the caller supplies — never auto-generates prose. Composes wiki.* atomically under a lock.',
+    { operations: z.array(z.record(z.string(), z.any())), note: z.string().optional() },
+    async ({ operations, note }) => guard(c => c.commands.execute('wiki.ingest', { operations, note })));
 
   return server;
 }
