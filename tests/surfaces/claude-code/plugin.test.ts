@@ -118,12 +118,11 @@ describe('Claude Code plugin', () => {
   });
 
   describe('MCP server', () => {
-    test('declares mdocs MCP server running dist/cli/index.js mcp', () => {
+    test('declares mdocs MCP server running bundled standalone entrypoint', () => {
       const mcp = pluginJson.mcpServers.mdocs;
       expect(mcp).toBeDefined();
       expect(mcp.command).toBe('node');
-      expect(mcp.args).toContain('${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js');
-      expect(mcp.args).toContain('mcp');
+      expect(mcp.args).toEqual(['${CLAUDE_PLUGIN_ROOT}/dist/cli/mcp-server.js']);
     });
 
     test('sets MDOCS_PROJECT_DIR via CLAUDE_PROJECT_DIR', () => {
@@ -167,8 +166,19 @@ describe('Claude Code plugin', () => {
       expect(fs.existsSync(path.join(hooksDir, 'post-tool-use.js'))).toBe(true);
     });
 
-    test('dist/cli/index.js exists (MCP entrypoint)', () => {
+    test('dist/cli/index.js exists (CLI entrypoint)', () => {
       expect(fs.existsSync(path.join(PLUGIN_DIR, 'dist/cli/index.js'))).toBe(true);
+    });
+
+    test('dist/cli/mcp-server.js is bundled without external MCP runtime requires', () => {
+      const bundledMcp = path.join(PLUGIN_DIR, 'dist/cli/mcp-server.js');
+      expect(fs.existsSync(bundledMcp)).toBe(true);
+
+      const contents = fs.readFileSync(bundledMcp, 'utf8');
+      expect(contents).not.toContain('require("@modelcontextprotocol/sdk');
+      expect(contents).not.toContain("require('@modelcontextprotocol/sdk");
+      expect(contents).not.toContain('require("zod")');
+      expect(contents).not.toContain("require('zod')");
     });
   });
 });

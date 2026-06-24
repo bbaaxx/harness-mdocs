@@ -1,6 +1,6 @@
 {
   "name": "mdocs",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Durable initiative and wiki memory for Claude Code — hooks, MCP server, skills, and orchestrator agent.",
   "author": {
     "name": "bbaaxx"
@@ -58,7 +58,7 @@
   "mcpServers": {
     "mdocs": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js", "mcp"],
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/cli/mcp-server.js"],
       "env": {
         "MDOCS_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
       }

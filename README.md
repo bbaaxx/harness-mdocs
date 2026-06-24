@@ -170,7 +170,7 @@ Install from the bundled marketplace with two commands:
 
 This registers the MCP server, hooks, skills, and orchestrator agent automatically — no manual `.claude/settings.json` editing required.
 
-The plugin bundles the compiled `dist/` so no separate `npm install` is needed at runtime. Hooks use direct `node` paths (not `npx`) for fast per-tool-call execution.
+The plugin bundles the compiled `dist/` and a standalone MCP server so no separate `npm install` is needed at runtime. Hooks use direct `node` paths (not `npx`) for fast per-tool-call execution.
 
 To update:
 

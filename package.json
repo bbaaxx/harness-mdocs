@@ -1,6 +1,6 @@
 {
   "name": "harness-mdocs",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Surface-neutral initiative and wiki memory for AI coding harnesses.",
   "license": "MIT",
   "author": "bbaaxx",
@@ -72,6 +72,7 @@
     "quality": "npm run build:claude-plugin && npm run lint && npm test && npm run coverage && npm run mdocs:validate",
     "release:check": "npm run quality && npm run pack:check",
     "build:claude-plugin": "bash scripts/build-claude-plugin.sh",
+    "build:claude-plugin:mcp": "esbuild src/surfaces/claude-code/mcp-server.ts --bundle --platform=node --target=node18 --format=cjs --sourcemap --outfile=src/surfaces/claude-code/plugin/dist/cli/mcp-server.js",
     "prepare": "npm run build",
     "prepack": "npm run build && npm run build:claude-plugin"
   },
@@ -90,6 +91,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
+    "esbuild": "^0.28.1",
     "jest": "^30.4.2",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.0.0",

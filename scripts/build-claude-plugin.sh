@@ -19,6 +19,9 @@ cp -R "$REPO_ROOT/dist/core"         "$PLUGIN_DIR/dist/core"
 mkdir -p "$PLUGIN_DIR/dist/surfaces"
 cp -R "$REPO_ROOT/dist/surfaces/claude-code" "$PLUGIN_DIR/dist/surfaces/claude-code"
 
+echo "Bundling standalone MCP server for Claude plugin cache..."
+npm run build:claude-plugin:mcp
+
 echo "Syncing skill and agent files from assets/..."
 # Skills
 for skill in mdocs-workflow mdocs-initiative mdocs-orchestrator; do
