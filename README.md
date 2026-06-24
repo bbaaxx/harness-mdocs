@@ -234,7 +234,7 @@ Workflow enforcement blocks `Write`/`Edit` before the `PLAN` step and allows the
 **Configuration:**
 - Enforcement mode: `gate` (default) | `advisory` | `off`. Env: `MDOCS_ENFORCEMENT`. `off` = CI escape hatch.
 - IDLE strictness: `mdocs.enforcement.idle` = `open` (default; IDLE unconstrained) | `readonly` (IDLE = read tools + `./mdocs/` only). Env: `MDOCS_ENFORCEMENT_IDLE`.
-- Config precedence: env > file > detected contract.
+- Config precedence: env > `.mdocs.json` file > detected contract.
 - Reset: `mdocs_reset` command → IDLE, clears active initiative. `resume()` auto-starts fresh cycles when prior initiative reached `COMPLETE` or at `IDLE`, landing at `UNDERSTAND`.
 
 The engine treats `PLAN`/`EXECUTE`/`VERIFY`/`REPORT`/`COMPLETE` as one "edits allowed" band — it does not enforce plan-vs-execute discipline.
@@ -247,6 +247,27 @@ Notes:
   2. else the nearest ancestor (walking up from `cwd`, inclusive) that contains a `mdocs/` dir;
   3. else the effective `cwd` itself (preserves `process.cwd()` behavior).
 - Multi-project switching within one session is not supported — a session resolves a single root. Run separate sessions (or restart the MCP server after `cd`) to switch projects.
+
+## Consumer Schema Compatibility
+
+Some consumer workspaces use a thinner schema than harness-mdocs authors by default: a metadata-only initiative `_status.md` (lifecycle frontmatter + prose, artifacts in sibling files) and wiki pages with path-style `id` (`systems/foo`), singular `category` (`system`), and a hyphenated `expected-duration`. harness-mdocs honors these **without any consumer data migration** — every behavior is opt-in via a `.mdocs.json` config file in the mdocs root, and the defaults reproduce today's behavior exactly.
+
+`.mdocs.json` (recognized keys: `compatibility`, `standaloneCategories`, `mdocsDirName`):
+
+```json
+{
+  "compatibility": {
+    "initiativeRecordMode": "metadata-only",
+    "enforcementMode": "advisory"
+  },
+  "standaloneCategories": ["repos", "systems", "glossary"]
+}
+```
+
+- `initiativeRecordMode: "metadata-only"` — treat `_status.md` as thin lifecycle metadata: rewrite only lifecycle keys (status/updated/completed/graduated) in place, never inject `## Objective`/`## Plan`/`## Progress Log`, never add structural frontmatter keys, preserve inline `tags: [a, b]` formatting. PostToolUse records audit only (no progress-log mutation). The linter relaxes initiative body-section and required-field checks while keeping lifecycle telemetry.
+- Wiki identity resolves by filename stem + parent-directory category, so path-style `id` and singular `category` produce correct backlinks; `appendLog` can emit the consumer heading `## [YYYY-MM-DD] {operation} | {subject}`.
+
+Config precedence: env > `.mdocs.json` file > detected contract. See [docs/consumer-layering.md](docs/consumer-layering.md).
 
 ## First Run
 

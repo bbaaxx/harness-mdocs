@@ -33,6 +33,15 @@ export interface MdocsCompatibilityConfig {
    * advances. Precedence: env > file > default.
    */
   idle?: IdleStrictness;
+  /**
+   * How initiative `_status.md` files are written. `full` (default) keeps the
+   * harness-authored Objective/Plan/Progress Log body and full frontmatter.
+   * `metadata-only` treats the file as thin lifecycle metadata: surgical
+   * lifecycle-key updates only, no body-section injection, and no new
+   * frontmatter keys — for consumer trees that keep artifacts in sibling
+   * files. Opt-in via `.mdocs.json`; defaults to current (`full`) behavior.
+   */
+  initiativeRecordMode?: 'full' | 'metadata-only';
 }
 
 export interface MdocsContract {
@@ -46,6 +55,7 @@ export interface MdocsContract {
   obsidianRefreshCommand?: string | string[] | null;
   enforcementMode: EnforcementMode;
   idle: IdleStrictness;
+  initiativeRecordMode: 'full' | 'metadata-only';
 }
 
 function safeExists(filePath: string): boolean {
@@ -171,7 +181,8 @@ export function detectMdocsContract(mdocsRoot: string, config: MdocsCompatibilit
     obsidianDir: obsidianVisibilityLayer ? obsidianDir : undefined,
     obsidianRefreshCommand: config.obsidianRefreshCommand ?? null,
     enforcementMode: resolveEnforcementMode(config.enforcementMode),
-    idle: resolveIdleStrictness(config.idle)
+    idle: resolveIdleStrictness(config.idle),
+    initiativeRecordMode: config.initiativeRecordMode ?? 'full'
   };
 }
 

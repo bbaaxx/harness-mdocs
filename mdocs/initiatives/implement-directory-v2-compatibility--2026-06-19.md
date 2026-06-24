@@ -13,7 +13,7 @@ next_action: "Run final review, document remaining limitations, then consider ma
 ---
 
 ## Objective
-Make harness-mdocs contract-aware so it supports both existing flat-v1 projects and agents-workspace-style directory-v2 mdocs without clobbering canonical lowercase wiki indexes or directory initiative structure. Source request: https://gist.github.com/EdM-WAG/7ef35c6102ced034864e0c77abb592ec
+Make harness-mdocs contract-aware so it supports both existing flat-v1 projects and agents-workspace-style directory-v2 mdocs without clobbering canonical lowercase wiki indexes or directory initiative structure.
 
 ## Plan
 - [ ] Add mdocs contract detection and explicit compatibility config overrides.

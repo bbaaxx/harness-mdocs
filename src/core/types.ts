@@ -127,7 +127,7 @@ export type WikiIngestOp =
   | { type: 'createPage'; category: string; id: string; title: string; content?: string; tags?: string[]; relatedInitiatives?: string[]; lifecycle?: WikiEntry['lifecycle']; knowledgeType?: WikiEntry['knowledgeType']; confidence?: WikiEntry['confidence'] }
   | { type: 'updatePage'; category: string; id: string; content?: string; lifecycle?: WikiEntry['lifecycle']; tags?: string[]; relatedInitiatives?: string[] }
   | { type: 'updateOverviewSection'; section: string; body: string }
-  | { type: 'appendLog'; entry: { timestamp?: string; content: string } | string }
+  | { type: 'appendLog'; entry: { timestamp?: string; date?: string; operation?: string; subject?: string; content: string } | string }
   | { type: 'link'; initiativeId: string; wikiSlug: string };
 
 export interface AuditEvent {
@@ -188,4 +188,16 @@ export function parseFrontmatter(content: string): Record<string, any> {
     }
   }
   return front;
+}
+
+/**
+ * Read an initiative's expected-duration frontmatter value across the
+ * supported key spellings: snake_case `expected_duration`, camelCase
+ * `expectedDuration`, and the hyphenated consumer form `expected-duration`.
+ * Returns `undefined` when none are present. Centralized so lifecycle and lint
+ * logic honors the consumer schema without each caller re-implementing the
+ * lookup.
+ */
+export function readExpectedDurationRaw(front: Record<string, any>): any {
+  return front.expected_duration ?? front.expectedDuration ?? front['expected-duration'];
 }

@@ -643,3 +643,162 @@ related_wiki: []
     expect(result.consistent).toBe(false);
   });
 });
+
+// Metadata-only mode (cc1): a consumer `_status.md` is thin lifecycle metadata.
+// Update/markDone/graduate-stamp must rewrite only existing lifecycle keys in
+// place, never inject body sections, never add frontmatter keys, and preserve
+// inline array formatting like `tags: [a, b]`.
+describe('InitiativeManager metadata-only mode', () => {
+  const metaDir = path.join(__dirname, 'test-initiatives-metadata-only');
+
+  beforeEach(() => {
+    if (fs.existsSync(metaDir)) fs.rmSync(metaDir, { recursive: true });
+    fs.mkdirSync(metaDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(metaDir)) fs.rmSync(metaDir, { recursive: true, force: true });
+  });
+
+  // Seed a consumer-style thin _status.md: frontmatter with inline tags, a
+  // couple of non-lifecycle keys, and one prose paragraph (no body sections).
+  function seedThinStatus(): string {
+    const dir = path.join(metaDir, 'initiatives', 'consumer-init');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, '_status.md');
+    fs.writeFileSync(filePath, [
+      '---',
+      'id: consumer-init',
+      'title: Consumer Init',
+      'status: active',
+      'started: 2026-06-24',
+      'updated: 2026-06-24',
+      'owner: consumer',
+      'tags: [a, b]',
+      'priority: high',
+      '---',
+      '',
+      'This is a prose-only consumer body with no sections.',
+      ''
+    ].join('\n'), 'utf8');
+    return filePath;
+  }
+
+  function readStatus(filePath: string): string {
+    return fs.readFileSync(filePath, 'utf8');
+  }
+
+  test('update preserves shape, inline tags, and adds no sections or keys', () => {
+    const filePath = seedThinStatus();
+    const manager = new InitiativeManager(metaDir, {
+      compatibility: { initiativeMode: 'directory', initiativeRecordMode: 'metadata-only' }
+    });
+
+    const before = readStatus(filePath);
+    const initiative = manager.read('consumer-init');
+    expect(initiative).not.toBeNull();
+    if (!initiative) return;
+
+    // Simulate a consumer-driven lifecycle refresh.
+    initiative.updated = '2026-07-01';
+    initiative.status = 'paused';
+    initiative.nextAction = 'review';
+    manager.update('consumer-init', initiative);
+
+    const after = readStatus(filePath);
+
+    // No injected body sections.
+    expect(after).not.toContain('## Objective');
+    expect(after).not.toContain('## Plan');
+    expect(after).not.toContain('## Progress Log');
+    expect(after).not.toContain('## Artifacts');
+
+    // Prose body preserved verbatim.
+    expect(after).toContain('This is a prose-only consumer body with no sections.');
+
+    // Inline tags formatting preserved (not JSON-stringified).
+    expect(after).toContain('tags: [a, b]');
+    expect(after).not.toContain('tags: ["a","b"]');
+
+    // Lifecycle keys rewritten in place.
+    expect(after).toContain('updated: 2026-07-01');
+    // normalizeInitiativeStatus maps 'paused' through unchanged.
+    expect(after).toMatch(/status: paused/);
+
+    // No new frontmatter keys introduced (id/title/owner/tags/priority
+    // unchanged; next_action added only because it was a lifecycle key in the
+    // update payload, but it was NOT present originally so it must NOT appear).
+    expect(after).not.toContain('next_action:');
+
+    // Frontmatter key set unchanged aside from lifecycle value edits.
+    const beforeKeys = before.split('---')[1].split('\n').filter(l => l.trim() && l.includes(':')).map(l => l.split(':')[0].trim()).sort();
+    const afterKeys = after.split('---')[1].split('\n').filter(l => l.trim() && l.includes(':')).map(l => l.split(':')[0].trim()).sort();
+    expect(afterKeys).toEqual(beforeKeys);
+  });
+
+  test('markDone rewrites status/updated/completed without injecting sections', () => {
+    const filePath = seedThinStatus();
+    const manager = new InitiativeManager(metaDir, {
+      compatibility: { initiativeMode: 'directory', initiativeRecordMode: 'metadata-only' }
+    });
+
+    manager.markDone('consumer-init');
+
+    const after = readStatus(filePath);
+
+    expect(after).not.toContain('## Progress Log');
+    expect(after).not.toContain('Marked done via mdocs command');
+    expect(after).toContain('This is a prose-only consumer body with no sections.');
+    expect(after).toContain('tags: [a, b]');
+    // completed is a lifecycle key added by markDone; status maps to complete.
+    expect(after).toMatch(/status: complete/);
+    expect(after).toContain('completed:');
+  });
+
+  test('graduate-stamp rewrites graduated (existing key) without body mutation', () => {
+    const filePath = seedThinStatus();
+    // Add a graduated key so the stamp can rewrite it in place.
+    const seeded = readStatus(filePath).replace('priority: high', 'priority: high\ngraduated: ');
+    fs.writeFileSync(filePath, seeded, 'utf8');
+
+    const manager = new InitiativeManager(metaDir, {
+      compatibility: { initiativeMode: 'directory', initiativeRecordMode: 'metadata-only' }
+    });
+
+    // Mark done first so graduate's isCompleted gate passes.
+    manager.markDone('consumer-init');
+    const initiative = manager.read('consumer-init');
+    expect(initiative).not.toBeNull();
+    if (!initiative) return;
+
+    // The graduate command stamps `graduated` via initiative.update; emulate
+    // that single-key lifecycle stamp directly through update.
+    initiative.graduated = '2026-07-02';
+    manager.update('consumer-init', initiative);
+
+    const after = readStatus(filePath);
+
+    expect(after).not.toContain('## Objective');
+    expect(after).not.toContain('## Progress Log');
+    expect(after).toContain('graduated: 2026-07-02');
+    expect(after).toContain('tags: [a, b]');
+    expect(after).toContain('This is a prose-only consumer body with no sections.');
+  });
+
+  test('default full mode still injects Progress Log on update (regression guard)', () => {
+    const filePath = seedThinStatus();
+    const manager = new InitiativeManager(metaDir, {
+      compatibility: { initiativeMode: 'directory', initiativeRecordMode: 'full' }
+    });
+
+    const initiative = manager.read('consumer-init');
+    expect(initiative).not.toBeNull();
+    if (!initiative) return;
+    initiative.progressLog.push('[2026-07-01] note');
+    manager.update('consumer-init', initiative);
+
+    const after = readStatus(filePath);
+    expect(after).toContain('## Progress Log');
+    expect(after).toContain('[2026-07-01] note');
+  });
+});
