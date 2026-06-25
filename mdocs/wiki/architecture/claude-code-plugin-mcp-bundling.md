@@ -6,6 +6,7 @@ created: "2026-06-24"
 updated: "2026-06-24"
 related_initiatives: ["fix-claude-code-mcp-dependency-bundling"]
 tags: ["claude-code","mcp","plugin","packaging"]
+lifecycle: "stable"
 ---
 
 # Claude Code plugin MCP bundling

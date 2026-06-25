@@ -3,10 +3,10 @@ id: "prepare-release-0-5-1"
 title: "Prepare release 0.5.1"
 status: "done"
 created: "2026-06-24"
-updated: "2026-06-24"
+updated: "2026-06-25"
 owner: ""
 tags: ["release","0.5.1","consumer-schema","compat"]
-related_wiki: ["reference/consumer-schema-compat"]
+related_wiki: ["reference/consumer-schema-compat","release/harness-mdocs-0-5-1"]
 priority: "high"
 next_action: "Merge PR #5 to main, then tag v0.5.1 + push (triggers publish.yml)"
 ---
@@ -25,5 +25,6 @@ Cut 0.5.1 to ship the consumer-schema-compat work (parent initiative consumer-sc
 ## Progress Log
 - [2026-06-24] Version bumped 0.5.0 -> 0.5.1 in package.json, .claude-plugin/marketplace.json, src/surfaces/claude-code/plugin/.claude-plugin/plugin.json; package-lock.json synced via `npm install --package-lock-only`. Codex plugin.json untouched (0.1.1, separately versioned). Consumer-schema-compat work (cc0..cc4) is on feat/consumer-schema-compat in PR #5 (414 tests green, coverage >=80%, mdocs_validate valid:true). Awaiting release:check, then merge + tag handoff.
 - [2026-06-24T16:05:28.491Z] Marked done via mdocs command
+- [2026-06-25] State healed: linked release initiative to consumer-schema compatibility and 0.5.1 release wiki.
 
 ## Artifacts
