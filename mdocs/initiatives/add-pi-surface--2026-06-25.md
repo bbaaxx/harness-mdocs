@@ -1,12 +1,12 @@
 ---
 id: "add-pi-surface"
 title: "Add pi surface"
-status: "active"
+status: "done"
 created: "2026-06-25"
 updated: "2026-06-25"
 owner: ""
 tags: ["surface","pi","extension","packaging","harness"]
-related_wiki: []
+related_wiki: ["reference/pi-surface"]
 priority: "high"
 next_action: "Advance to VERIFY/REPORT/COMPLETE; commit docs; final release:check"
 ---
@@ -83,5 +83,6 @@ Add a first-class surface for [pi](https://pi.dev) so that pi users can install 
 - Implemented pi surface runtime: extension.ts (tool_call gate, tool_result audit+progress, before_agent_start orientation, session_start notify, fail-open), adapter, tools (13 tools w/ TypeBox schemas + promptSnippet/promptGuidelines), result, translate, orientation, skills, index. Added skill assets (mdocs-workflow/initiative/orchestrator) + pi-agents-md-snippet template. Wired package.json (./pi export, pi manifest, peer deps, files, devDeps, test:pi). Added tests (mock, adapter, extension, tools, result) — 44 pi tests pass, full suite 459 pass, coverage above thresholds.
 - [2026-06-25T08:17:31.186Z] mdocs_status executed at step EXECUTE
 - Added docs/pi-surface.md; updated README surface table + pi Usage section + Entry Points; updated docs/packaging-strategy.md (pi entrypoint, tarball check, pi dogfood). Smoke-tested with pi -e ./: mdocs_status returns real state, all 3 mdocs skills appear, write blocked at UNDERSTAND with correct reason. Build/test/coverage/mdocs:validate/pack:check all green; dist/surfaces/pi + src/surfaces/pi in tarball.
+- [2026-06-25T08:19:21.702Z] Marked done via mdocs command
 
 ## Artifacts

@@ -2,7 +2,7 @@
 
 - **Add GitHub Actions CI** (done) — add-github-actions-ci--2026-06-19.md — 2026-06-19 — [ci, github-actions, quality, coverage, automation]
 - **Add local quality tooling** (done) — add-local-quality-tooling--2026-06-19.md — 2026-06-19 — [tooling, lint, tests, coverage, quality]
-- **Add pi surface** (active) — add-pi-surface--2026-06-25.md — 2026-06-25 — [surface, pi, extension, packaging, harness]
+- **Add pi surface** (done) — add-pi-surface--2026-06-25.md — 2026-06-25 — [surface, pi, extension, packaging, harness]
 - **Add tag based npm publishing** (done) — add-tag-based-npm-publishing--2026-06-19.md — 2026-06-19 — [ci, publishing, npm, release, github-actions]
 - **cc0 config-file loader + initiativeRecordMode contract flag + shared helpers** (active) — cc0-config-and-contract-foundation--2026-06-24.md — 2026-06-24 — [core, config, contract, compat, foundation]
 - **cc1 metadata-only initiative writes (store + manager + PostToolUse)** (active) — cc1-metadata-only-initiative--2026-06-24.md — 2026-06-24 — [core, initiative, compat, hooks]
