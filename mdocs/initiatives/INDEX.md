@@ -1,5 +1,6 @@
 # Initiatives
 
+- **Add pi surface** (active) — add-pi-surface--2026-06-25.md — 2026-06-25 — [surface, pi, extension, packaging, harness]
 - **Close harness-mdocs 0.4.3 / 0.5.0 gaps** (active) — close-harness-mdocs-gaps--2026-06-23.md — 2026-06-23 — [orchestrator, release, 0.4.3, 0.5.0, gap-closure]
 - **Prepare release 0.4.2** (done) — prepare-release-0-4-2--2026-06-22.md — 2026-06-22 — [release, 0.4.2, claude-code]
 - **End-to-end enforcement dogfood on a real multi-step initiative** (done) — dogfood-enforcement-end-to-end--2026-06-23.md — 2026-06-23 — [claude-code, workflow, enforcement, dogfood, verification, 0.4.3]
