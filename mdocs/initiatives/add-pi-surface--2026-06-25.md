@@ -119,6 +119,13 @@ Add a first-class surface for [pi](https://pi.dev) so that pi users can install 
 - **System-prompt noise.** Orientation is appended every turn via `before_agent_start`. Keep the banner under ~1 KB; if it becomes noisy, switch to `session_start` notification only or cache the banner per session.
 - **Trust model.** The extension loads as a package extension (global after `pi install`), not a project-local extension, so it does not depend on project trust. This is consistent with OpenCode/Claude Code packaging.
 
+## Future versions
+
+- **Native-ish subagent delegation.** Pi has no built-in subagent primitive, but the extension API supports it via `ctx.newSession`/`ctx.fork` and commands. A future version should add:
+  - `/mdocs-subagent [initiative-id]` command that calls `mdocs_dispatch`, seeds a new session with the assembled context, and sends a kickoff prompt.
+  - Optional `mdocs_subagent` tool that returns context immediately and queues the command as a follow-up, letting the model trigger delegation in one turn.
+  - This is intentionally out of scope for the initial pi surface to keep the first release focused on tools, enforcement, audit, orientation, and skills.
+
 ## Acceptance Criteria
 - `src/surfaces/pi/` exists with extension, adapter, tools, result, orientation, translate, skills, and assets.
 - Every custom tool carries `promptSnippet` and `promptGuidelines`.
@@ -131,5 +138,6 @@ Add a first-class surface for [pi](https://pi.dev) so that pi users can install 
 ## Progress Log
 - [2026-06-25] Created initiative plan.
 - [2026-06-25] Reviewed for handoff: added constraints, fail-open notes, pi tool shape details, `promptSnippet`/`promptGuidelines` requirement, orientation helper, mock guidance, package.json peer-dep snippets, and risks section.
+- [2026-06-25] Scoped subagent support to future version: documented `/mdocs-subagent` command and `mdocs_subagent` tool as out-of-scope for initial surface.
 
 ## Artifacts
