@@ -12,6 +12,8 @@
 - `harness-mdocs/api` — public API helpers.
 - `harness-mdocs/core` — surface-neutral core managers and workflow primitives.
 - `harness-mdocs/codex` — Codex v1 surface metadata and packaging.
+- `harness-mdocs/claude-code` — Claude Code surface: MCP server, hooks, skills, capability declaration.
+- `harness-mdocs/pi` — pi surface: extension factory, custom tools, event handlers, orientation, skills, capability declaration. The `pi` manifest in `package.json` loads `./dist/surfaces/pi/extension.js` and `./src/surfaces/pi/assets/skills`.
 - `mdocs` — CLI command for surfaces without native tool hooks.
 
 ## CLI availability
@@ -66,11 +68,21 @@ Phase 2 will add actual npm publishing on version tags after release checks and 
 Before publish:
 
 1. Run `npm run release:check` locally or confirm the GitHub `release` environment check passed.
-2. Inspect the dry-run tarball contents for `dist`, `agents`, `skills`, `prompts`, `templates`, README, and LICENSE.
-3. Confirm the package metadata still includes `bin.mdocs`.
+2. Inspect the dry-run tarball contents for `dist`, `agents`, `skills`, `prompts`, `templates`, `src/surfaces/pi`, README, and LICENSE.
+3. Confirm the package metadata still includes `bin.mdocs` and the `pi` manifest points at `./dist/surfaces/pi/extension.js`.
 
 After publish and replacement in a consuming folder:
 
 1. Update `.opencode/opencode.json` from `opencode-mdocs@1.3.2` to `harness-mdocs` or `harness-mdocs/opencode`.
 2. Restart OpenCode.
 3. Verify mdocs custom tools, the `mdocs-orchestrator` agent, bundled skills, and existing `./mdocs` data load correctly.
+
+### pi dogfood
+
+After publish, install the published package and smoke-test the pi surface:
+
+1. `pi install npm:harness-mdocs` (or `pi -e ./` from a built checkout).
+2. Confirm the `mdocs_status` tool is callable and returns orientation.
+3. Confirm the three `mdocs-*` skills appear in `/skill:` completion.
+4. Confirm `write` is blocked before `PLAN` (advance with `mdocs_advance` to `PLAN` to unblock).
+5. `pi remove npm:harness-mdocs` to uninstall.
