@@ -2,12 +2,13 @@
 
 Surface-neutral initiative and wiki memory for AI coding harnesses.
 
-`harness-mdocs` packages the shared mdocs core plus adapters for host tools such as OpenCode, Codex, and Claude Code. The core owns durable initiative files, wiki entries, workflow state, validation, search, audit logging, and command behavior. Surfaces translate that core into the capabilities each host can actually provide.
+`harness-mdocs` packages the shared mdocs core plus adapters for host tools such as OpenCode, Codex, Claude Code, and pi. The core owns durable initiative files, wiki entries, workflow state, validation, search, audit logging, and command behavior. Surfaces translate that core into the capabilities each host can actually provide.
 
 | Surface | Command access | Workflow enforcement | Audit | Subagent dispatch |
 | --- | --- | --- | --- | --- |
 | OpenCode | native custom tools | enforced (hooks) | enforced (hooks) | native |
 | Claude Code | MCP tools (+ CLI fallback) | enforced (PreToolUse hook) | enforced (PostToolUse hook) | native (`Task`) |
+| pi | extension custom tools | enforced (`tool_call` event) | enforced (`tool_result` event) | prompted |
 | Codex v1 | `mdocs` CLI | advisory (instructions) | command-level | prompted |
 
 ## What It Does
@@ -16,7 +17,7 @@ mdocs brings durable structure to AI-assisted development:
 
 1. **Tracks work as initiatives** - persistent task files with objective, plan, progress, blockers, and handoff state.
 2. **Builds a project wiki** - stable knowledge that survives thread restarts and can be linked back to initiatives.
-3. **Shares one memory model across harnesses** - OpenCode, Codex, and future surfaces use the same file formats and command registry.
+3. **Shares one memory model across harnesses** - OpenCode, Codex, pi, and future surfaces use the same file formats and command registry.
 4. **Validates the graph** - checks initiatives, wiki entries, backlinks, completion gates, and stable learning requirements.
 5. **Assembles handoff context** - combines initiative state, related wiki, search-ranked memory, and recent audit events for subagents or new sessions.
 
@@ -170,7 +171,7 @@ Install from the bundled marketplace with two commands:
 
 This registers the MCP server, hooks, skills, and orchestrator agent automatically — no manual `.claude/settings.json` editing required.
 
-The plugin bundles the compiled `dist/` so no separate `npm install` is needed at runtime. Hooks use direct `node` paths (not `npx`) for fast per-tool-call execution.
+The plugin bundles the compiled `dist/` and a standalone MCP server so no separate `npm install` is needed at runtime. Hooks use direct `node` paths (not `npx`) for fast per-tool-call execution.
 
 To update:
 
@@ -227,6 +228,41 @@ What the Claude Code surface provides:
 
 For guidance on layering workspace-specific conventions over harness-mdocs (sibling knowledge bases, external task lists, consumer SessionStart hooks, and CLAUDE.md composition), see [docs/consumer-layering.md](docs/consumer-layering.md).
 
+## pi Usage
+
+pi is a Tier 3 surface — full host-level enforcement, on par with OpenCode and Claude Code. It integrates through a pi package extension that registers custom tools, event handlers, and bundled skills. See [docs/pi-surface.md](docs/pi-surface.md) for the full guide.
+
+Install the package as a pi package:
+
+```bash
+pi install npm:harness-mdocs
+```
+
+Or try it without installing for the current run:
+
+```bash
+pi -e ./path/to/harness-mdocs
+```
+
+When dogfooding this repo, build first then load the compiled extension:
+
+```bash
+npm run build
+pi -e ./
+```
+
+The `pi` manifest in `package.json` points the extension at `./dist/surfaces/pi/extension.js` and the skills at `./src/surfaces/pi/assets/skills`, so `npm run build` (run by `prepare`/`prepack`) is required before the extension loads from a git or local-path checkout.
+
+What the pi surface provides:
+
+- **Extension custom tools**: `mdocs`, `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_ingest`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`, `mdocs_advance`, `mdocs_reset`. Every tool carries `promptSnippet` and `promptGuidelines` so the model discovers it in the system prompt.
+- **`tool_call` event** that blocks `write`/`edit` before the `PLAN` step (edits under `./mdocs/` are always allowed). `bash` is audited but not gated by content. The handler fails open — an error never wedges the session.
+- **`tool_result` event** that records audit events and, in full initiative mode, appends a progress-log entry under a lock (skipped in `metadata-only` mode). Audit append is unlocked and safe under pi's parallel tool execution.
+- **`before_agent_start` event** that appends a compact mdocs orientation banner to the system prompt each turn, plus a `session_start` user notification.
+- **Skills** (`mdocs-workflow`, `mdocs-initiative`, `mdocs-orchestrator`) adapted for pi and an `AGENTS.md`/`CLAUDE.md` snippet template.
+
+pi has no native subagent primitive, so `mdocs_dispatch` returns an assembled context bundle to carry forward manually (paste into a new session or another invocation). A future version may add a `/mdocs-subagent` command that automates the session handoff.
+
 ## Enforcement
 
 Workflow enforcement blocks `Write`/`Edit` before the `PLAN` step and allows them from `PLAN` through `COMPLETE`. `Bash` is audited but not gated by content. Edits under `./mdocs/` are always allowed.
@@ -234,7 +270,7 @@ Workflow enforcement blocks `Write`/`Edit` before the `PLAN` step and allows the
 **Configuration:**
 - Enforcement mode: `gate` (default) | `advisory` | `off`. Env: `MDOCS_ENFORCEMENT`. `off` = CI escape hatch.
 - IDLE strictness: `mdocs.enforcement.idle` = `open` (default; IDLE unconstrained) | `readonly` (IDLE = read tools + `./mdocs/` only). Env: `MDOCS_ENFORCEMENT_IDLE`.
-- Config precedence: env > file > detected contract.
+- Config precedence: env > `.mdocs.json` file > detected contract.
 - Reset: `mdocs_reset` command → IDLE, clears active initiative. `resume()` auto-starts fresh cycles when prior initiative reached `COMPLETE` or at `IDLE`, landing at `UNDERSTAND`.
 
 The engine treats `PLAN`/`EXECUTE`/`VERIFY`/`REPORT`/`COMPLETE` as one "edits allowed" band — it does not enforce plan-vs-execute discipline.
@@ -247,6 +283,27 @@ Notes:
   2. else the nearest ancestor (walking up from `cwd`, inclusive) that contains a `mdocs/` dir;
   3. else the effective `cwd` itself (preserves `process.cwd()` behavior).
 - Multi-project switching within one session is not supported — a session resolves a single root. Run separate sessions (or restart the MCP server after `cd`) to switch projects.
+
+## Consumer Schema Compatibility
+
+Some consumer workspaces use a thinner schema than harness-mdocs authors by default: a metadata-only initiative `_status.md` (lifecycle frontmatter + prose, artifacts in sibling files) and wiki pages with path-style `id` (`systems/foo`), singular `category` (`system`), and a hyphenated `expected-duration`. harness-mdocs honors these **without any consumer data migration** — every behavior is opt-in via a `.mdocs.json` config file in the mdocs root, and the defaults reproduce today's behavior exactly.
+
+`.mdocs.json` (recognized keys: `compatibility`, `standaloneCategories`, `mdocsDirName`):
+
+```json
+{
+  "compatibility": {
+    "initiativeRecordMode": "metadata-only",
+    "enforcementMode": "advisory"
+  },
+  "standaloneCategories": ["repos", "systems", "glossary"]
+}
+```
+
+- `initiativeRecordMode: "metadata-only"` — treat `_status.md` as thin lifecycle metadata: rewrite only lifecycle keys (status/updated/completed/graduated) in place, never inject `## Objective`/`## Plan`/`## Progress Log`, never add structural frontmatter keys, preserve inline `tags: [a, b]` formatting. PostToolUse records audit only (no progress-log mutation). The linter relaxes initiative body-section and required-field checks while keeping lifecycle telemetry.
+- Wiki identity resolves by filename stem + parent-directory category, so path-style `id` and singular `category` produce correct backlinks; `appendLog` can emit the consumer heading `## [YYYY-MM-DD] {operation} | {subject}`.
+
+Config precedence: env > `.mdocs.json` file > detected contract. See [docs/consumer-layering.md](docs/consumer-layering.md).
 
 ## First Run
 
@@ -275,6 +332,7 @@ mdocs init
 - `harness-mdocs/core` - surface-neutral managers, workflow, command registry, validation, search, audit, and dispatch.
 - `harness-mdocs/codex` - Codex v1 surface metadata and plugin packaging.
 - `harness-mdocs/claude-code` - Claude Code surface: MCP server, hooks, translation, capability declaration.
+- `harness-mdocs/pi` - pi surface: extension factory, tools, orientation, skills, capability declaration. The pi package manifest (`package.json#pi`) loads the compiled extension at `./dist/surfaces/pi/extension.js`.
 - `mdocs` - CLI command for surfaces that do not expose native tools.
 - `mdocs mcp` - starts the Claude Code MCP server over stdio.
 

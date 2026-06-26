@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { detectMdocsContract, MdocsCompatibilityConfig, MdocsContract } from '../contract';
 import { InitiativeStore, normalizeInitiativeStatus } from '../initiative-store';
-import { Initiative, isCompleted, PlanItem, PlanItemStatus, parseFrontmatter } from '../types';
+import { Initiative, isCompleted, PlanItem, PlanItemStatus, parseFrontmatter, readExpectedDurationRaw } from '../types';
 
 export interface InitiativeManagerOptions {
   compatibility?: MdocsCompatibilityConfig;
@@ -217,7 +217,7 @@ export class InitiativeManager {
       openQuestions: Array.isArray(front.open_questions) ? front.open_questions : undefined,
       blockers: Array.isArray(front.blockers) ? front.blockers : undefined,
       nextAction: front.next_action || undefined,
-      expectedDuration: coerceExpectedDuration(front.expected_duration || front.expectedDuration),
+      expectedDuration: coerceExpectedDuration(readExpectedDurationRaw(front)),
       graduated: front.graduated || undefined
     };
   }

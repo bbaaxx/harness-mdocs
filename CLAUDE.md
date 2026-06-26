@@ -17,7 +17,7 @@ Workflow enforcement is active via hooks. `Write`/`Edit` are blocked before the 
 **Configuration:**
 - Enforcement mode: `gate` (default) | `advisory` | `off`. Env: `MDOCS_ENFORCEMENT`. `off` = CI escape hatch.
 - IDLE strictness: `mdocs.enforcement.idle` = `open` (default; IDLE unconstrained) | `readonly` (IDLE = read tools + `./mdocs/` only). Env: `MDOCS_ENFORCEMENT_IDLE`.
-- Config precedence: env > file > detected contract.
+- Config precedence: env > `.mdocs.json` file > detected contract. A `.mdocs.json` in the mdocs root sets `compatibility` (e.g. `initiativeRecordMode: "metadata-only"` to treat a consumer `_status.md` as thin lifecycle metadata — lifecycle keys only, no body-section injection), `standaloneCategories`, and `mdocsDirName`.
 - Reset: `mdocs_reset` command → IDLE, clears active initiative. `resume()` auto-starts fresh cycles when prior initiative reached `COMPLETE` or at `IDLE`, landing at `UNDERSTAND`.
 
 The engine treats `PLAN`/`EXECUTE`/`VERIFY`/`REPORT`/`COMPLETE` as one "edits allowed" band — it does not enforce plan-vs-execute discipline.

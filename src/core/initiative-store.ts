@@ -1,7 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { MdocsContract } from './contract';
-import { Initiative, isCompleted, parseFrontmatter, PlanItemStatus, Status } from './types';
+import { Initiative, isCompleted, parseFrontmatter, PlanItemStatus, readExpectedDurationRaw, Status } from './types';
+
+// Lifecycle keys honored under metadata-only mode. Core bookkeeping keys
+// (status/updated/completed/graduated) are added-or-updated so lifecycle
+// events (markDone, graduate) still record their metadata on a thin consumer
+// file. Optional descriptive keys (next_action) are rewritten only when
+// already present, never injected. Structural identity keys
+// (id/title/owner/related_wiki/tags) are never added and preserved verbatim.
+const METADATA_ONLY_CORE_LIFECYCLE_KEYS = new Set([
+  'status',
+  'updated',
+  'completed',
+  'graduated'
+]);
+const METADATA_ONLY_OPTIONAL_LIFECYCLE_KEYS = new Set([
+  'next_action'
+]);
 
 function parseSection(content: string, sectionName: string): string {
   const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -242,7 +258,7 @@ export class InitiativeStore {
       openQuestions: Array.isArray(front.open_questions) ? front.open_questions : undefined,
       blockers: Array.isArray(front.blockers) ? front.blockers : undefined,
       nextAction: front.next_action || undefined,
-      expectedDuration: coerceExpectedDuration(front.expected_duration || front.expectedDuration),
+      expectedDuration: coerceExpectedDuration(readExpectedDurationRaw(front)),
       graduated: front.graduated || undefined
     };
     return { key, filePath, sourceKind, archived, rawFrontmatter: front, initiative };
@@ -301,6 +317,29 @@ export class InitiativeStore {
     if (!match) throw new Error(`Invalid initiative status format: ${filePath}`);
     const newline = content.includes('\r\n') ? '\r\n' : '\n';
     const lines = match[1].split(/\r?\n/);
+
+    if (this.contract.initiativeRecordMode === 'metadata-only') {
+      // Metadata-only: rewrite only existing lifecycle keys in place. Never add
+      // new frontmatter keys, never mutate the body, never inject sections, and
+      // ignore progress notes. Preserves consumer prose and inline array
+      // formatting verbatim.
+      for (const [key, value] of Object.entries(updates)) {
+        const isCore = METADATA_ONLY_CORE_LIFECYCLE_KEYS.has(key);
+        if (!isCore && !METADATA_ONLY_OPTIONAL_LIFECYCLE_KEYS.has(key)) continue;
+        const index = lines.findIndex(line => line.match(new RegExp(`^${key}:`)));
+        if (index >= 0) {
+          lines[index] = `${key}: ${value}`;
+        } else if (isCore) {
+          // Lifecycle events (markDone/graduate) may introduce core
+          // bookkeeping keys; optional keys are never injected.
+          lines.push(`${key}: ${value}`);
+        }
+      }
+      const body = match[3] || '';
+      fs.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${newline}${body.replace(/^\r?\n/, '')}`, 'utf8');
+      return;
+    }
+
     for (const [key, value] of Object.entries(updates)) {
       const index = lines.findIndex(line => line.match(new RegExp(`^${key}:`)));
       const nextLine = `${key}: ${value}`;

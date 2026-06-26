@@ -16,7 +16,7 @@ Verified against official docs at `code.claude.com/docs/en/plugins-reference` an
 
 ### Decision: committed dist
 
-The marketplace installs from this git repo (relative path source). Plugins are copied to cache, so `dist/` must be present inside the plugin directory in git. Build script `npm run build:claude-plugin` copies `dist/` + syncs skill/agent files from assets.
+The marketplace installs from this git repo (relative path source). Plugins are copied to cache, so `dist/` must be present inside the plugin directory in git. Build script `npm run build:claude-plugin` copies `dist/`, bundles a standalone MCP server at `dist/cli/mcp-server.js`, and syncs skill/agent files from assets.
 
 ### Note on `${CLAUDE_PROJECT_DIR}`
 
@@ -39,4 +39,4 @@ See the [main README](../../../../README.md) for the manual `.claude/settings.js
 npm run build:claude-plugin
 ```
 
-This runs `npm run build`, copies the needed `dist/` subset into this plugin directory, and syncs skill/agent files from `assets/`.
+This runs `npm run build`, copies the needed `dist/` subset into this plugin directory, bundles the dependency-free MCP entrypoint, and syncs skill/agent files from `assets/`.

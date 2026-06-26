@@ -114,6 +114,43 @@ describe('WikiManager.updateOverviewSection / appendLog (compiled views)', () =>
     expect(content).toMatch(/^## \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/m);
   });
 
+  test('appendLog emits the consumer heading when operation+subject are supplied', () => {
+    const manager = new WikiManager(projectDir, { compatibility: { wikiIndexMode: 'canonical-lowercase' } });
+    const filePath = manager.appendLog({
+      date: '2026-06-24',
+      operation: 'ship',
+      subject: 'd1',
+      content: 'shipped decision d1'
+    }) as string;
+    const content = fs.readFileSync(filePath, 'utf8');
+    expect(content).toContain('## [2026-06-24] ship | d1');
+    expect(content).toContain('shipped decision d1');
+  });
+
+  test('appendLog consumer heading falls back to today when date is absent', () => {
+    const manager = new WikiManager(projectDir, { compatibility: { wikiIndexMode: 'canonical-lowercase' } });
+    const filePath = manager.appendLog({
+      operation: 'note',
+      subject: 'x',
+      content: 'body'
+    }) as string;
+    const content = fs.readFileSync(filePath, 'utf8');
+    const today = new Date().toISOString().split('T')[0];
+    expect(content).toContain(`## [${today}] note | x`);
+  });
+
+  test('appendLog preserves legacy timestamp form when only operation is supplied', () => {
+    const manager = new WikiManager(projectDir, { compatibility: { wikiIndexMode: 'canonical-lowercase' } });
+    const filePath = manager.appendLog({
+      timestamp: '2026-06-23T10:00:00.000Z',
+      operation: 'ship',
+      content: 'partial'
+    }) as string;
+    const content = fs.readFileSync(filePath, 'utf8');
+    expect(content).toContain('## 2026-06-23T10:00:00.000Z');
+    expect(content).not.toMatch(/^## \[/m);
+  });
+
   test('both helpers return null and write NO file under a non-directory-v2 mode', () => {
     const flatDir = makeDir();
     try {

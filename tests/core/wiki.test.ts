@@ -742,6 +742,86 @@ related_wiki: ["architecture/referenced-by-test", "other/cat"]
     expect(refs).toContain('init-beta');
   });
 
+  test('getReferencedBy resolves a path-style frontmatter id and singular category backlink', () => {
+    const manager = new WikiManager(testDir);
+    // Page on disk at wiki/systems/foo.md but with consumer frontmatter:
+    // path-style id ("systems/foo") and singular category ("system").
+    fs.mkdirSync(path.join(testDir, 'wiki', 'systems'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'wiki', 'systems', 'foo.md'), `---
+id: "systems/foo"
+title: "Foo System"
+category: "system"
+created: "2026-06-24"
+updated: "2026-06-24"
+related_initiatives: []
+tags: []
+---
+
+# Foo System
+
+Body.
+`, 'utf8');
+
+    const initiativesDir = path.join(testDir, 'initiatives');
+    fs.mkdirSync(initiativesDir, { recursive: true });
+    fs.writeFileSync(path.join(initiativesDir, 'init-path.md'), `---
+id: "init-path"
+title: "Init Path"
+status: "active"
+created: "2026-06-24"
+related_wiki: ["systems/foo"]
+---
+`, 'utf8');
+
+    // Caller asks with the canonical (plural) category + stem id.
+    expect(manager.getReferencedBy('systems', 'foo')).toContain('init-path');
+    // Caller asks with the singular category variant as well.
+    expect(manager.getReferencedBy('system', 'foo')).toContain('init-path');
+  });
+
+  test('parseWikiEntry normalizes path-style id to stem and prefers on-disk plural category', () => {
+    const manager = new WikiManager(testDir);
+    fs.mkdirSync(path.join(testDir, 'wiki', 'systems'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'wiki', 'systems', 'bar.md'), `---
+id: "systems/bar"
+title: "Bar"
+category: "system"
+created: "2026-06-24"
+updated: "2026-06-24"
+related_initiatives: []
+tags: []
+---
+
+Body.
+`, 'utf8');
+
+    const entry = manager.read('systems', 'bar');
+    expect(entry).not.toBeNull();
+    expect(entry!.id).toBe('bar');
+    expect(entry!.category).toBe('systems');
+  });
+
+  test('refFor returns canonical category/stem for a path-style id', () => {
+    const manager = new WikiManager(testDir);
+    fs.mkdirSync(path.join(testDir, 'wiki', 'systems'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'wiki', 'systems', 'baz.md'), `---
+id: "systems/baz"
+title: "Baz"
+category: "system"
+created: "2026-06-24"
+updated: "2026-06-24"
+related_initiatives: []
+tags: []
+---
+
+Body.
+`, 'utf8');
+
+    const entry = manager.read('systems', 'baz');
+    expect(entry).not.toBeNull();
+    expect(manager.refFor(entry!)).toBe('systems/baz');
+  });
+
   test('addWikiCrossRef creates wiki-to-wiki link', () => {
     const manager = new WikiManager(testDir);
     manager.create({

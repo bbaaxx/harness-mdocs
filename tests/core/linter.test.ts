@@ -442,4 +442,139 @@ Root-level learning from done initiative.
       expect.stringContaining('missing backlink to initiative done-source')
     ]));
   });
+
+  // ---------- metadata-only initiative tolerance (cc2) ----------
+
+  test('metadata-only mode passes a thin _status.md with no body sections', () => {
+    // _status.md lives in a subdirectory of initiatives/.
+    const initDir = path.join(testDir, 'initiatives', 'consumer-status');
+    fs.mkdirSync(initDir, { recursive: true });
+    const statusPath = path.join(initDir, '_status.md');
+    // Only minimal metadata; no Objective/Plan/Context/Acceptance/Progress Log,
+    // and even required frontmatter fields like tags/created are absent.
+    fs.writeFileSync(statusPath, `---
+id: consumer-status
+status: active
+updated: 2026-06-24
+---
+
+Thin consumer status file.
+`, 'utf8');
+
+    const linter = new MdocsLinter(testDir, { initiativeRecordMode: 'metadata-only' });
+    const result = linter.lintFile(statusPath);
+
+    expect(result.type).toBe('initiative');
+    expect(result.passed).toBe(true);
+    expect(result.score).toBe(5);
+    // No body-section or required-field errors should fire.
+    expect(result.issues.some(i => i.message.includes('Objective'))).toBe(false);
+    expect(result.issues.some(i => i.message.includes('Plan section'))).toBe(false);
+    expect(result.issues.some(i => i.message.includes('No file paths'))).toBe(false);
+    expect(result.issues.some(i => i.message.includes('Missing required frontmatter field'))).toBe(false);
+  });
+
+  test('full mode still flags the same thin _status.md (default unchanged)', () => {
+    const initDir = path.join(testDir, 'initiatives', 'consumer-status-full');
+    fs.mkdirSync(initDir, { recursive: true });
+    const statusPath = path.join(initDir, '_status.md');
+    fs.writeFileSync(statusPath, `---
+id: consumer-status-full
+status: active
+updated: 2026-06-24
+---
+
+Thin consumer status file.
+`, 'utf8');
+
+    const linter = new MdocsLinter(testDir);
+    const result = linter.lintFile(statusPath);
+
+    expect(result.passed).toBe(false);
+    expect(result.issues.some(i => i.severity === 'error')).toBe(true);
+  });
+
+  // ---------- wiki consumer tolerance (cc2) ----------
+
+  test('wiki category singular matches plural directory and missing created is fine', () => {
+    // dir is `systems`; frontmatter category is the singular `system`.
+    const systemsDir = path.join(testDir, 'wiki', 'systems');
+    fs.mkdirSync(systemsDir, { recursive: true });
+    const wikiPath = path.join(systemsDir, 'sys-design.md');
+    fs.writeFileSync(wikiPath, `---
+id: sys-design
+title: System Design
+category: system
+updated: 2026-06-24
+related_initiatives: []
+---
+
+This is a comprehensive wiki entry that describes the system design in enough
+detail to clear the minimum word count threshold enforced by the linter. It
+covers the major subsystems, the contracts between them, how data flows across
+the runtime boundary, and the error handling strategy used for recovery when a
+downstream component is unavailable or returns an unexpected payload shape.
+`, 'utf8');
+
+    const linter = new MdocsLinter(testDir);
+    const result = linter.lintFile(wikiPath);
+
+    expect(result.type).toBe('wiki');
+    expect(result.passed).toBe(true);
+    expect(result.score).toBe(5);
+    expect(result.issues.some(i => i.message.includes('does not match directory'))).toBe(false);
+    // `created` absent, `updated` present => no error.
+    expect(result.issues.some(i => i.message.includes('created'))).toBe(false);
+    // missing `tags` is informational only, not an error.
+    expect(result.issues.some(i => i.severity === 'error' && i.message.includes('tags'))).toBe(false);
+  });
+
+  test('wiki missing tags is informational and does not deduct score', () => {
+    const wikiPath = path.join(testDir, 'wiki', 'architecture', 'no-tags.md');
+    fs.writeFileSync(wikiPath, `---
+id: no-tags
+title: No Tags Entry
+category: architecture
+created: 2026-06-24
+updated: 2026-06-24
+related_initiatives: []
+---
+
+This is a comprehensive wiki entry that has enough words to pass the minimum
+content length check even though it carries no tags in its frontmatter block.
+The body deliberately spans several sentences so the word count comfortably
+exceeds the recommended floor and the entry scores cleanly on every quality
+dimension the linter evaluates for a wiki page in this repository.
+`, 'utf8');
+
+    const linter = new MdocsLinter(testDir);
+    const result = linter.lintFile(wikiPath);
+
+    expect(result.passed).toBe(true);
+    expect(result.score).toBe(5);
+    // tags absence surfaces as info, never as an error.
+    expect(result.issues.some(i => i.severity === 'error' && i.message.includes('tags'))).toBe(false);
+    expect(result.issues.some(i => i.severity === 'info' && i.message.includes('tags'))).toBe(true);
+  });
+
+  test('wiki missing both created and updated still errors', () => {
+    const wikiPath = path.join(testDir, 'wiki', 'architecture', 'no-dates.md');
+    fs.writeFileSync(wikiPath, `---
+id: no-dates
+title: No Dates
+category: architecture
+related_initiatives: []
+tags: [test]
+---
+
+This is a wiki entry with no created or updated date fields to verify the
+fallback rule still produces an error when neither date is present at all.
+`, 'utf8');
+
+    const linter = new MdocsLinter(testDir);
+    const result = linter.lintFile(wikiPath);
+
+    expect(result.passed).toBe(false);
+    expect(result.issues.some(i => i.severity === 'error' && i.message.includes('created'))).toBe(true);
+  });
 });

@@ -338,3 +338,61 @@ describe('warnings clear after remediation', () => {
     expect(hasWarning(lint(projectDir, filePath).issues.map(i => i.message), 'stale-complete')).toBe(false);
   });
 });
+
+// ---------- 6. hyphenated expected-duration (cc2 consumer schema) ----------
+
+describe('expected-duration consumer spellings', () => {
+  test('long-running-active honors hyphenated expected-duration:long threshold', () => {
+    const projectDir = makeProjectDir('harness-mdocs-lifecycle-lint-hyphen-long-');
+    // Build a consumer-schema initiative manually: body is intentionally thin
+    // because a metadata-only linter never reaches the body-section checks.
+    const lines = [
+      '---',
+      'id: hyphen-long',
+      'status: active',
+      `created: ${isoDaysAgo(40)}`,
+      'expected-duration: long',
+      '---',
+      '',
+      'Thin consumer record.',
+    ];
+    const filePath = path.join(projectDir, 'mdocs', 'initiatives', 'hyphen-long.md');
+    fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
+
+    const result = new MdocsLinter(path.join(projectDir, 'mdocs'), {
+      initiativeRecordMode: 'metadata-only',
+    }).lintFile(filePath);
+    const messages = result.issues.map(i => i.message);
+
+    // 40 days is under the 60-day `long` window, so the warning must NOT fire.
+    expect(hasWarning(messages, 'long-running-active')).toBe(false);
+    // And the metadata-only record still passes despite no body sections.
+    expect(result.passed).toBe(true);
+  });
+
+  test('long-running-active fires past the default window with hyphenated expected-duration absent', () => {
+    const projectDir = makeProjectDir('harness-mdocs-lifecycle-lint-hyphen-fire-');
+    const lines = [
+      '---',
+      'id: hyphen-fire',
+      'status: active',
+      `created: ${isoDaysAgo(40)}`,
+      '---',
+      '',
+      'Thin consumer record.',
+    ];
+    const filePath = path.join(projectDir, 'mdocs', 'initiatives', 'hyphen-fire.md');
+    fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
+
+    const result = new MdocsLinter(path.join(projectDir, 'mdocs'), {
+      initiativeRecordMode: 'metadata-only',
+    }).lintFile(filePath);
+    const messages = result.issues.map(i => i.message);
+
+    // No expected-duration key at all -> default 14-day threshold -> 40 days fires.
+    expect(hasWarning(messages, 'long-running-active')).toBe(true);
+    // Lifecycle warnings carry no score deduction.
+    expect(result.score).toBe(5);
+    expect(result.passed).toBe(true);
+  });
+});
