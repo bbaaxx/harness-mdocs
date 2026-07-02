@@ -43,4 +43,5 @@
 - **Codex Dogfood End To End** (done) — codex-dogfood-end-to-end--2026-06-10.md — 2026-06-10 — [codex, dogfood, plugin]
 - **Workflow state machine has no driver — enforcement is inert** (done) — workflow-state-machine-has-no-driver--2026-06-22.md — 2026-06-22 — [claude-code, surface, workflow, enforcement, hooks, bug]
 - **Document OpenCode plugin version pinning** (done) — document-opencode-plugin-version-pinning--2026-06-19.md — 2026-06-19 — [docs, readme, opencode, migration]
+- **Prepare release 0.6.0** (active) — prepare-release-0-6-0--2026-06-26.md — 2026-06-26 — [release, 0.6.0, packaging, pi]
 - **SessionStart orientation hook (+ PreCompact)** (done) — claude-code-sessionstart-orientation--2026-06-23.md — 2026-06-23 — [claude-code, surface, hooks, orientation, sessionstart, 0.4.3]
