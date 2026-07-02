@@ -4,7 +4,7 @@ title: "harness-mdocs 0.5.1"
 category: "release"
 created: "2026-06-24"
 updated: "2026-06-24"
-related_initiatives: []
+related_initiatives: ["consumer-schema-compat","prepare-release-0-5-1"]
 tags: ["release","0.5.1","consumer-schema","compat"]
 ---
 

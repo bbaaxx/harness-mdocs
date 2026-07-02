@@ -4,7 +4,7 @@ title: "Consumer Schema Compatibility"
 category: "reference"
 created: "2026-06-24"
 updated: "2026-06-24"
-related_initiatives: []
+related_initiatives: ["consumer-schema-compat","cc0-config-and-contract-foundation","cc1-metadata-only-initiative","cc2-linter-consumer-tolerance","cc3-wiki-id-and-emitters","cc4-docs-and-dogfood","prepare-release-0-5-1"]
 tags: ["compat","contract","consumer-schema","config"]
 lifecycle: "stable"
 ---

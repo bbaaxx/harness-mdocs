@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "run_dir": "/Users/bbaaxx/Code/projects/openagent-mdocs/harness-mdocs/.codex-pet-runs/mindex",
+  "spritesheet": "/Users/bbaaxx/Code/projects/openagent-mdocs/harness-mdocs/.codex-pet-runs/mindex/final/spritesheet.webp",
+  "validation": "/Users/bbaaxx/Code/projects/openagent-mdocs/harness-mdocs/.codex-pet-runs/mindex/final/validation.json",
+  "contact_sheet": "/Users/bbaaxx/Code/projects/openagent-mdocs/harness-mdocs/.codex-pet-runs/mindex/qa/contact-sheet.png",
+  "review": "/Users/bbaaxx/Code/projects/openagent-mdocs/harness-mdocs/.codex-pet-runs/mindex/qa/review.json",
+  "package": "/Users/bbaaxx/.codex/pets/mindex"
+}

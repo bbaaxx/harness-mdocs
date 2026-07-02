@@ -3,10 +3,10 @@ id: "close-harness-mdocs-gaps"
 title: "Close harness-mdocs 0.4.3 / 0.5.0 gaps"
 status: "active"
 created: "2026-06-23"
-updated: "2026-06-23"
+updated: "2026-06-25"
 owner: ""
 tags: ["orchestrator","release","0.4.3","0.5.0","gap-closure"]
-related_wiki: ["docs/gap-closure-orchestrator-prompt"]
+related_wiki: ["docs/gap-closure-orchestrator-prompt","session-log/release-0-4-3-gap-closure"]
 priority: "medium"
 ---
 
@@ -25,5 +25,6 @@ Orchestrate the closure of all nine gap initiatives for the 0.4.3 patch and 0.5.
 ## Progress Log
 - [2026-06-23T03:51:59.905Z] Created initiative via mdocs command
 - Created orchestrator initiative and saved the master agent prompt to wiki docs/gap-closure-orchestrator-prompt.md.
+- [2026-06-25] State healed: linked 0.4.3 gap-closure session log.
 
 ## Artifacts

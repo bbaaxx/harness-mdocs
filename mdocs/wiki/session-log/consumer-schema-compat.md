@@ -4,7 +4,7 @@ title: "consumer-schema-compat release session"
 category: "session-log"
 created: "2026-06-24"
 updated: "2026-06-24"
-related_initiatives: []
+related_initiatives: ["consumer-schema-compat"]
 tags: ["session-log","consumer-schema","release"]
 ---
 

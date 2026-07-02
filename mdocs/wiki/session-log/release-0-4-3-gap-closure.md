@@ -4,7 +4,7 @@ title: "0.4.3 gap-closure milestone"
 category: "session-log"
 created: "2026-06-23"
 updated: "2026-06-23"
-related_initiatives: []
+related_initiatives: ["close-harness-mdocs-gaps"]
 tags: ["session-log","release","0.4.3","gap-closure"]
 ---
 
