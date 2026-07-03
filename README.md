@@ -40,6 +40,11 @@ npm install --save-dev harness-mdocs
 
 Node.js 18 or newer is required.
 
+For hosts that load plugins (OpenCode, Claude Code, Codex/pi package surfaces),
+installing into a running session does not retroactively register tools, hooks,
+or the SessionStart banner. Start a fresh session after install/update; missing
+`mdocs_*` MCP tools before restart is expected.
+
 The package publishes a `mdocs` binary. When installed as a project dependency,
 run it through the package manager unless `node_modules/.bin` is already on
 your shell `PATH`:
@@ -165,11 +170,26 @@ Claude Code is a Tier 3 surface — full host-level enforcement, on par with Ope
 Install from the bundled marketplace with two commands:
 
 ```
-/plugin marketplace add <owner>/harness-mdocs
+/plugin marketplace add https://github.com/bbaaxx/harness-mdocs
 /plugin install mdocs@harness-mdocs
 ```
 
 This registers the MCP server, hooks, skills, and orchestrator agent automatically — no manual `.claude/settings.json` editing required.
+
+Use the full HTTPS URL in HTTPS-only environments. Shorthand repository names
+may resolve to SSH (`git@github.com:...`) depending on host configuration.
+
+Choose install scope intentionally:
+
+- `--scope local` writes git-ignored per-machine settings. Best for trials,
+  devcontainers, and one host at a time.
+- `--scope project` writes tracked project settings. Install/cache the plugin on
+  every machine first, then promote scope, otherwise another machine can start
+  with “plugin not found”.
+- user/default scope is per-user; good for personal machines, not shared repo
+  policy.
+
+After install or scope changes, restart Claude Code / start a fresh session.
 
 The plugin bundles the compiled `dist/` and a standalone MCP server so no separate `npm install` is needed at runtime. Hooks use direct `node` paths (not `npx`) for fast per-tool-call execution.
 
@@ -184,6 +204,9 @@ To update:
 Claude Code reads project-scoped MCP servers from `.mcp.json` (repo root) and
 hooks from `.claude/settings.json` — they are **two separate files**. Templates
 ship in the package under `src/surfaces/claude-code/assets/templates/`.
+
+If you need consumer compatibility, create `mdocs/.mdocs.json` before the first
+mdocs tool run so metadata-only/advisory behavior is active from the start.
 
 Create `.mcp.json` at the project root (`mcp.json` template):
 
@@ -270,6 +293,9 @@ Workflow enforcement blocks `Write`/`Edit` before the `PLAN` step and allows the
 **Configuration:**
 - Enforcement mode: `gate` (default) | `advisory` | `off`. Env: `MDOCS_ENFORCEMENT`. `off` = CI escape hatch.
 - IDLE strictness: `mdocs.enforcement.idle` = `open` (default; IDLE unconstrained) | `readonly` (IDLE = read tools + `./mdocs/` only). Env: `MDOCS_ENFORCEMENT_IDLE`.
+- Audit: `.mdocs.json` supports `audit.level` (`full` | `metadata` | `off`),
+  `audit.maxBytes`, and `audit.maxBackups`. Env overrides: `MDOCS_AUDIT_LEVEL`,
+  `MDOCS_AUDIT_MAX_BYTES`, `MDOCS_AUDIT_MAX_BACKUPS`.
 - Config precedence: env > `.mdocs.json` file > detected contract.
 - Reset: `mdocs_reset` command → IDLE, clears active initiative. `resume()` auto-starts fresh cycles when prior initiative reached `COMPLETE` or at `IDLE`, landing at `UNDERSTAND`.
 
@@ -288,7 +314,7 @@ Notes:
 
 Some consumer workspaces use a thinner schema than harness-mdocs authors by default: a metadata-only initiative `_status.md` (lifecycle frontmatter + prose, artifacts in sibling files) and wiki pages with path-style `id` (`systems/foo`), singular `category` (`system`), and a hyphenated `expected-duration`. harness-mdocs honors these **without any consumer data migration** — every behavior is opt-in via a `.mdocs.json` config file in the mdocs root, and the defaults reproduce today's behavior exactly.
 
-`.mdocs.json` (recognized keys: `compatibility`, `standaloneCategories`, `mdocsDirName`):
+`.mdocs.json` (recognized keys: `compatibility`, `standaloneCategories`, `mdocsDirName`, `audit`):
 
 ```json
 {
@@ -296,7 +322,8 @@ Some consumer workspaces use a thinner schema than harness-mdocs authors by defa
     "initiativeRecordMode": "metadata-only",
     "enforcementMode": "advisory"
   },
-  "standaloneCategories": ["repos", "systems", "glossary"]
+  "standaloneCategories": ["repos", "systems", "glossary"],
+  "audit": { "level": "metadata", "maxBytes": 10485760, "maxBackups": 3 }
 }
 ```
 
@@ -321,7 +348,20 @@ OpenCode initializes this automatically through its config hook. Other surfaces 
 
 ```bash
 mdocs init
+mdocs status
+mdocs validate --human
 ```
+
+For Claude plugin installs, you can validate before restarting by running the
+compiled CLI directly from the plugin cache:
+
+```bash
+CLAUDE_PROJECT_DIR=<repo> MDOCS_PROJECT_DIR=<repo> \
+  node ~/.claude/plugins/cache/harness-mdocs/mdocs/<ver>/dist/cli/index.js validate --human
+```
+
+`valid=true` is the pass/fail field. `clean=false` means warnings exist but no
+errors. Use `mdocs validate` without `--human` for machine-readable JSON.
 
 ## Entry Points
 
@@ -352,6 +392,10 @@ For an existing OpenCode project:
 2. Update `opencode.json` to use `harness-mdocs` or `harness-mdocs/opencode`.
 3. Restart OpenCode.
 4. Verify that the mdocs tools, `mdocs-orchestrator` agent, bundled skills, and existing `./mdocs` data load correctly.
+
+When migrating from a hand-rolled setup, also remove stale SessionStart or
+PreCompact hooks to avoid double banners. Ignore old `wiki_*`/OMC tools unless
+that separate system is still intentionally installed.
 
 See [docs/packaging-strategy.md](docs/packaging-strategy.md) for the release and migration checklist.
 
@@ -466,6 +510,11 @@ Token exchange and session lifecycle details.
 
 Stable wiki learning matters for completed initiatives. `mdocs validate` warns when a done initiative has no linked stable learning.
 
+Renamed or merged initiatives can carry `aliases: [old-id]` in initiative
+frontmatter. Graph validation resolves alias references and reports an info note
+with the canonical id instead of warning as missing; nearby misspellings include
+best-effort “did you mean …?” hints.
+
 For directory-v2 repositories, stable wiki pages can record provenance with `source_initiatives` or `sources`; these satisfy completed-initiative learning gates without requiring the initiative to own a `related_wiki` link.
 
 `mdocs/_obsidian/` is treated only as an optional human-facing visibility/export layer. It is detected for compatibility metadata but is never scanned as canonical initiatives or wiki knowledge. Optional refresh commands can be passed through compatibility config as `obsidianRefreshCommand`; harness-mdocs does not auto-run shell refreshes during read, search, or validation.
@@ -495,6 +544,7 @@ mdocs search <query>
 mdocs dispatch [initiative-id]
 mdocs step <step>
 mdocs validate
+mdocs validate --human
 mdocs index check
 mdocs index repair
 mdocs command --help
@@ -511,6 +561,11 @@ mdocs command initiative.done --json '{"id":"add-auth"}'
 ```
 
 `initiative.update` supports metadata changes under an `updates` object. `wiki.update` uses changed fields at the top level after `category` and `id`; do not wrap wiki fields in `updates`.
+
+`mdocs validate --human` prints a summary first, for example
+`mdocs validate: valid=true clean=false errors=0 warnings=19`. JSON output keeps
+top-level `valid`, `errorCount`, `warningCount`, and `clean` plus per-section
+counts for CI.
 
 ## OpenCode Custom Tools
 

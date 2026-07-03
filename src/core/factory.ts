@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { AuditLog } from './audit';
+import { AuditLog, AuditLogOptions } from './audit';
 import { MdocsCommandRegistry } from './commands/registry';
 import { MdocsCompatibilityConfig, MdocsContract, detectMdocsContract } from './contract';
 import { loadProjectConfig } from './config';
@@ -18,6 +18,7 @@ export interface MdocsCoreOptions {
   compatibility?: MdocsCompatibilityConfig;
   wiki?: WikiManagerOptions;
   bootstrap?: MdocsLifecycleOptions;
+  audit?: AuditLogOptions;
 }
 
 export interface MdocsCore {
@@ -66,7 +67,7 @@ export function createMdocsCore(projectDir: string, options: MdocsCoreOptions = 
     idle: contract.idle
   });
   const search = new SearchEngine(mdocsRoot);
-  const audit = new AuditLog(mdocsRoot);
+  const audit = new AuditLog(mdocsRoot, merged.audit);
   const linter = new MdocsLinter(mdocsRoot, { initiativeRecordMode: contract.initiativeRecordMode });
   const dispatch = new SubagentAssembler();
   const lifecycle = new MdocsLifecycleService(mdocs, initiatives, merged.bootstrap);
@@ -105,6 +106,9 @@ function mergeOptions(file: MdocsCoreOptions, explicit: MdocsCoreOptions): Mdocs
   }
   if (file.wiki || explicit.wiki) {
     merged.wiki = { ...(file.wiki || {}), ...(explicit.wiki || {}) };
+  }
+  if (file.audit || explicit.audit) {
+    merged.audit = { ...(file.audit || {}), ...(explicit.audit || {}) };
   }
   return merged;
 }

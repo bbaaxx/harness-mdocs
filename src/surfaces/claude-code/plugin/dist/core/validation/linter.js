@@ -52,6 +52,23 @@ function categoryMatchesDir(category, dir) {
     const dirS = dir.endsWith('s') ? dir.slice(0, -1) : dir;
     return catS === dirS || category === dirS + 's' || dir === catS + 's';
 }
+function slugify(value) {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+function levenshtein(a, b) {
+    const dp = Array.from({ length: a.length + 1 }, (_, i) => Array(b.length + 1).fill(0));
+    for (let i = 0; i <= a.length; i++)
+        dp[i][0] = i;
+    for (let j = 0; j <= b.length; j++)
+        dp[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+        }
+    }
+    return dp[a.length][b.length];
+}
 class MdocsLinter {
     baseDir;
     initiativeRecordMode;
@@ -120,6 +137,7 @@ class MdocsLinter {
                 initiativeData.push({
                     id: front.id || slug,
                     slug,
+                    aliases: Array.isArray(front.aliases) ? front.aliases : [],
                     status: (0, initiative_store_1.normalizeInitiativeStatus)(front.status),
                     relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
                     filePath: relativePath
@@ -168,7 +186,15 @@ class MdocsLinter {
                 }
             }
         }
-        const initiativeIds = new Set(initiativeData.flatMap(i => [i.id, i.slug]));
+        const canonicalInitiatives = new Set(initiativeData.flatMap(i => [i.id, i.slug]));
+        const initiativeAliases = new Map();
+        for (const init of initiativeData) {
+            for (const alias of init.aliases) {
+                initiativeAliases.set(alias, init.id);
+                initiativeAliases.set(slugify(alias), init.id);
+            }
+        }
+        const initiativeIds = new Set([...canonicalInitiatives, ...initiativeAliases.keys()]);
         const wikiRefs = new Set(wikiData.flatMap(w => [w.category ? `${w.category}/${w.id}` : w.id, w.id]));
         // Check initiative related_wiki
         for (const init of initiativeData) {
@@ -202,17 +228,31 @@ class MdocsLinter {
             // Broken initiative reference
             for (const initRef of wiki.relatedInitiatives) {
                 if (!initiativeIds.has(initRef)) {
+                    const suggestion = this.suggest(initRef, Array.from(initiativeIds));
                     issues.push({
                         severity: 'warning',
-                        message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}`
+                        message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}${suggestion ? ` (did you mean ${suggestion}?)` : ''}`
+                    });
+                }
+                else if (!canonicalInitiatives.has(initRef) && initiativeAliases.has(initRef)) {
+                    issues.push({
+                        severity: 'info',
+                        message: `Wiki ${wiki.category}/${wiki.id} references initiative alias ${initRef}; canonical id is ${initiativeAliases.get(initRef)}`
                     });
                 }
             }
             for (const initRef of wiki.sourceInitiatives) {
                 if (!initiativeIds.has(initRef)) {
+                    const suggestion = this.suggest(initRef, Array.from(initiativeIds));
                     issues.push({
                         severity: 'warning',
-                        message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}`
+                        message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}${suggestion ? ` (did you mean ${suggestion}?)` : ''}`
+                    });
+                }
+                else if (!canonicalInitiatives.has(initRef) && initiativeAliases.has(initRef)) {
+                    issues.push({
+                        severity: 'info',
+                        message: `Wiki ${wiki.category}/${wiki.id} references initiative alias ${initRef}; canonical id is ${initiativeAliases.get(initRef)}`
                     });
                 }
             }
@@ -256,6 +296,19 @@ class MdocsLinter {
             }
         }
         return files;
+    }
+    suggest(value, choices) {
+        const normalized = value.toLowerCase();
+        const prefix = choices.find(choice => choice.toLowerCase().startsWith(normalized.slice(0, 6)) || normalized.startsWith(choice.toLowerCase().slice(0, 6)));
+        if (prefix)
+            return prefix;
+        let best = null;
+        for (const choice of choices) {
+            const distance = levenshtein(normalized, choice.toLowerCase());
+            if (!best || distance < best.distance)
+                best = { choice, distance };
+        }
+        return best && best.distance <= Math.max(3, Math.floor(normalized.length / 3)) ? best.choice : null;
     }
     rootWikiFiles() {
         const wikiDir = path.join(this.baseDir, 'wiki');

@@ -198,6 +198,55 @@ describe('AuditLog', () => {
     expect(fs.existsSync(path.join(testDir, 'audit.log.2'))).toBe(true);
     expect(fs.existsSync(path.join(testDir, 'audit.log.3'))).toBe(true);
   });
+
+  test('supports configurable rotation, metadata, and off levels', () => {
+    const rotated = new AuditLog(testDir, { maxBytes: 80, maxBackups: 1 });
+    for (let i = 0; i < 3; i++) {
+      rotated.append({
+        timestamp: `2025-05-24T10:0${i}:00Z`,
+        type: 'tool',
+        details: { toolName: 'write', args: { payload: 'x'.repeat(120) } }
+      });
+    }
+    expect(fs.existsSync(path.join(testDir, 'audit.log.1'))).toBe(true);
+    expect(fs.existsSync(path.join(testDir, 'audit.log.2'))).toBe(false);
+
+    fs.rmSync(path.join(testDir, 'audit.log'), { force: true });
+    fs.rmSync(path.join(testDir, 'audit.log.1'), { force: true });
+
+    const metadata = new AuditLog(testDir, { level: 'metadata' });
+    metadata.append({
+      timestamp: '2025-05-24T10:00:00Z',
+      type: 'tool',
+      details: { toolName: 'write', args: { secret: 'redacted' } }
+    });
+    const event = JSON.parse(fs.readFileSync(path.join(testDir, 'audit.log'), 'utf8').trim());
+    expect(event.details).toEqual({ toolName: 'write' });
+
+    fs.rmSync(path.join(testDir, 'audit.log'), { force: true });
+    const off = new AuditLog(testDir, { level: 'off' });
+    off.append({ timestamp: '2025-05-24T10:00:00Z', type: 'tool', details: { toolName: 'write' } });
+    expect(fs.existsSync(path.join(testDir, 'audit.log'))).toBe(false);
+  });
+
+  test('supports zero backups and environment overrides', () => {
+    process.env.MDOCS_AUDIT_MAX_BYTES = '1';
+    process.env.MDOCS_AUDIT_MAX_BACKUPS = '0';
+    process.env.MDOCS_AUDIT_LEVEL = 'metadata';
+    try {
+      const audit = new AuditLog(testDir, { level: 'full', maxBytes: 100000, maxBackups: 3 });
+      audit.append({ timestamp: '2025-05-24T10:00:00Z', type: 'tool', details: { toolName: 'write', args: { payload: 'x' } } });
+      audit.append({ timestamp: '2025-05-24T10:01:00Z', type: 'tool', details: { toolName: 'write', args: { payload: 'x' } } });
+
+      expect(fs.existsSync(path.join(testDir, 'audit.log.1'))).toBe(false);
+      const event = JSON.parse(fs.readFileSync(path.join(testDir, 'audit.log'), 'utf8').trim());
+      expect(event.details).toEqual({ toolName: 'write' });
+    } finally {
+      delete process.env.MDOCS_AUDIT_MAX_BYTES;
+      delete process.env.MDOCS_AUDIT_MAX_BACKUPS;
+      delete process.env.MDOCS_AUDIT_LEVEL;
+    }
+  });
 });
 
 // Need to expose MAX_LOG_SIZE for tests

@@ -40,8 +40,14 @@ const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_BACKUPS = 3;
 class AuditLog {
     logPath;
-    constructor(baseDir) {
+    level;
+    maxBytes;
+    maxBackups;
+    constructor(baseDir, options = {}) {
         this.logPath = path.join(baseDir, 'audit.log');
+        this.level = envAuditLevel() ?? options.level ?? 'full';
+        this.maxBytes = positiveInt(process.env.MDOCS_AUDIT_MAX_BYTES) ?? options.maxBytes ?? MAX_LOG_SIZE;
+        this.maxBackups = positiveInt(process.env.MDOCS_AUDIT_MAX_BACKUPS) ?? options.maxBackups ?? MAX_BACKUPS;
         // Ensure directory exists
         const dir = path.dirname(this.logPath);
         if (!fs.existsSync(dir)) {
@@ -52,15 +58,19 @@ class AuditLog {
         if (!fs.existsSync(this.logPath))
             return;
         const stats = fs.statSync(this.logPath);
-        if (stats.size < MAX_LOG_SIZE)
+        if (stats.size < this.maxBytes)
             return;
         // Remove oldest backup if at max
-        const oldestBackup = `${this.logPath}.${MAX_BACKUPS}`;
+        if (this.maxBackups <= 0) {
+            fs.unlinkSync(this.logPath);
+            return;
+        }
+        const oldestBackup = `${this.logPath}.${this.maxBackups}`;
         if (fs.existsSync(oldestBackup)) {
             fs.unlinkSync(oldestBackup);
         }
         // Shift existing backups up
-        for (let i = MAX_BACKUPS - 1; i >= 1; i--) {
+        for (let i = this.maxBackups - 1; i >= 1; i--) {
             const backupPath = `${this.logPath}.${i}`;
             const nextPath = `${this.logPath}.${i + 1}`;
             if (fs.existsSync(backupPath)) {
@@ -71,9 +81,23 @@ class AuditLog {
         fs.renameSync(this.logPath, `${this.logPath}.1`);
     }
     append(event) {
+        if (this.level === 'off')
+            return;
         this.rotateIfNeeded();
-        const line = JSON.stringify(event) + '\n';
+        const line = JSON.stringify(this.level === 'metadata' ? this.metadataOnly(event) : event) + '\n';
         fs.appendFileSync(this.logPath, line, 'utf8');
+    }
+    metadataOnly(event) {
+        const details = event.details || {};
+        return {
+            ...event,
+            details: {
+                toolName: details.toolName,
+                eventType: details.eventType,
+                operation: details.operation,
+                command: details.command
+            }
+        };
     }
     query(options = {}) {
         if (!fs.existsSync(this.logPath))
@@ -107,4 +131,14 @@ class AuditLog {
     }
 }
 exports.AuditLog = AuditLog;
+function positiveInt(value) {
+    if (!value)
+        return undefined;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+function envAuditLevel() {
+    const value = process.env.MDOCS_AUDIT_LEVEL;
+    return value === 'full' || value === 'metadata' || value === 'off' ? value : undefined;
+}
 //# sourceMappingURL=audit.js.map

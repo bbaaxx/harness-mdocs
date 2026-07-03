@@ -32,6 +32,26 @@ function text(value: string): CliResult {
   return { exitCode: 0, stdout: value, stderr: '' };
 }
 
+function formatValidateHuman(result: any): string {
+  const lines = [
+    `mdocs validate: valid=${result.valid} clean=${result.clean} errors=${result.errorCount ?? 0} warnings=${result.warningCount ?? 0} info=${result.infoCount ?? 0}`,
+    `initiatives: valid=${result.initiatives?.valid} errors=${result.initiatives?.errorCount ?? result.initiatives?.errors?.length ?? 0} warnings=${result.initiatives?.warningCount ?? result.initiatives?.warnings?.length ?? 0}`,
+    `wiki: valid=${result.wiki?.valid} errors=${result.wiki?.errorCount ?? result.wiki?.errors?.length ?? 0} warnings=${result.wiki?.warningCount ?? result.wiki?.warnings?.length ?? 0}`,
+    `graph: valid=${result.graph?.valid} clean=${result.graph?.clean} errors=${result.graph?.errorCount ?? result.graph?.errors?.length ?? 0} warnings=${result.graph?.warningCount ?? result.graph?.warnings?.length ?? 0}`
+  ];
+  const sections = [
+    ['Errors', [...(result.initiatives?.errors || []), ...(result.wiki?.errors || []), ...(result.graph?.errors || [])]],
+    ['Warnings', [...(result.initiatives?.warnings || []), ...(result.wiki?.warnings || []), ...(result.graph?.warnings || [])]],
+    ['Info', [...(result.graph?.infos || [])]]
+  ] as const;
+  for (const [title, items] of sections) {
+    if (items.length === 0) continue;
+    lines.push('', `${title}:`);
+    for (const item of Array.from(new Set(items))) lines.push(`- ${item}`);
+  }
+  return lines.join('\n');
+}
+
 function commandHelp(commandName?: string): string {
   const examples = {
     'initiative.create': [
@@ -133,7 +153,8 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
     }
 
     if (command === 'validate') {
-      return ok(core.commands.validationResult());
+      const result = core.commands.validationResult();
+      return args.includes('--human') || args.includes('--summary') ? text(formatValidateHuman(result)) : ok(result);
     }
 
     if (command === 'lookup' && subcommand) {
@@ -184,7 +205,7 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
       return result.error ? { exitCode: 1, stdout: json(result), stderr: '' } : ok(result);
     }
 
-    return fail('Usage: mdocs init | status | validate | resume [initiative-id] | reset | lookup <query> | search <query> | dispatch [initiative-id] | index check | index repair | mcp | step <step> | command <name> --json <args-json>');
+    return fail('Usage: mdocs init | status | validate [--human|--summary] | resume [initiative-id] | reset | lookup <query> | search <query> | dispatch [initiative-id] | index check | index repair | mcp | step <step> | command <name> --json <args-json>');
   } catch (error: any) {
     return fail(error.message || String(error));
   }

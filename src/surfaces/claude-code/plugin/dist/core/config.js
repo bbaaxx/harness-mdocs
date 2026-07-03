@@ -40,8 +40,8 @@ const path = __importStar(require("path"));
  * Load the opt-in project-level `.mdocs.json` config file.
  *
  * Reads `<mdocsRoot>/.mdocs.json` and returns the parsed subset that maps to
- * {@link MdocsCoreOptions}: `mdocsDirName`, `standaloneCategories`,
- * `compatibility`, and the nested `wiki` options. Returns `{}` when the file
+  * {@link MdocsCoreOptions}: `mdocsDirName`, `standaloneCategories`,
+  * `compatibility`, `audit`, and the nested `wiki` options. Returns `{}` when the file
  * is missing or invalid — this loader NEVER throws, so a malformed config
  * degrades gracefully to defaults instead of breaking core construction.
  *
@@ -85,6 +85,18 @@ function loadProjectConfig(mdocsRoot) {
     }
     if (isPlainObject(source.wiki)) {
         config.wiki = source.wiki;
+    }
+    if (isPlainObject(source.audit)) {
+        config.audit = {};
+        if (source.audit.level === 'full' || source.audit.level === 'metadata' || source.audit.level === 'off') {
+            config.audit.level = source.audit.level;
+        }
+        if (Number.isInteger(source.audit.maxBytes) && source.audit.maxBytes >= 0) {
+            config.audit.maxBytes = source.audit.maxBytes;
+        }
+        if (Number.isInteger(source.audit.maxBackups) && source.audit.maxBackups >= 0) {
+            config.audit.maxBackups = source.audit.maxBackups;
+        }
     }
     return config;
 }

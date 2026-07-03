@@ -105,6 +105,7 @@ export class InitiativeManager {
       updated: initiative.updated,
       owner: initiative.owner,
       tags: initiative.tags,
+      ...(initiative.aliases && initiative.aliases.length > 0 ? { aliases: initiative.aliases } : {}),
       related_wiki: initiative.relatedWiki,
     };
     if (initiative.priority) {
@@ -204,6 +205,7 @@ export class InitiativeManager {
       updated: front.updated || '',
       owner: front.owner || '',
       tags: Array.isArray(front.tags) ? front.tags : [],
+      aliases: Array.isArray(front.aliases) ? front.aliases : [],
       relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
       // Parse markdown sections
       objective: parseSection(body, 'Objective'),
@@ -324,7 +326,7 @@ export class InitiativeManager {
   }
 
   findKeyById(id: string): string | null {
-    return this.store.findById(id, { includeArchived: true })?.key || null;
+    return this.store.findByReference(id, { includeArchived: true })?.key || null;
   }
 
   findByQuery(query: string): { initiative: Initiative; key: string } | null {

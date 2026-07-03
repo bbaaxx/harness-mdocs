@@ -3,8 +3,8 @@ import type { MdocsCoreOptions } from './factory';
  * Load the opt-in project-level `.mdocs.json` config file.
  *
  * Reads `<mdocsRoot>/.mdocs.json` and returns the parsed subset that maps to
- * {@link MdocsCoreOptions}: `mdocsDirName`, `standaloneCategories`,
- * `compatibility`, and the nested `wiki` options. Returns `{}` when the file
+  * {@link MdocsCoreOptions}: `mdocsDirName`, `standaloneCategories`,
+  * `compatibility`, `audit`, and the nested `wiki` options. Returns `{}` when the file
  * is missing or invalid — this loader NEVER throws, so a malformed config
  * degrades gracefully to defaults instead of breaking core construction.
  *

@@ -31041,6 +31041,18 @@ function loadProjectConfig(mdocsRoot) {
   if (isPlainObject3(source.wiki)) {
     config2.wiki = source.wiki;
   }
+  if (isPlainObject3(source.audit)) {
+    config2.audit = {};
+    if (source.audit.level === "full" || source.audit.level === "metadata" || source.audit.level === "off") {
+      config2.audit.level = source.audit.level;
+    }
+    if (Number.isInteger(source.audit.maxBytes) && source.audit.maxBytes >= 0) {
+      config2.audit.maxBytes = source.audit.maxBytes;
+    }
+    if (Number.isInteger(source.audit.maxBackups) && source.audit.maxBackups >= 0) {
+      config2.audit.maxBackups = source.audit.maxBackups;
+    }
+  }
   return config2;
 }
 function isPlainObject3(value) {
@@ -31135,8 +31147,14 @@ var MAX_LOG_SIZE = 10 * 1024 * 1024;
 var MAX_BACKUPS = 3;
 var AuditLog = class {
   logPath;
-  constructor(baseDir) {
+  level;
+  maxBytes;
+  maxBackups;
+  constructor(baseDir, options = {}) {
     this.logPath = path4.join(baseDir, "audit.log");
+    this.level = envAuditLevel() ?? options.level ?? "full";
+    this.maxBytes = positiveInt(process.env.MDOCS_AUDIT_MAX_BYTES) ?? options.maxBytes ?? MAX_LOG_SIZE;
+    this.maxBackups = positiveInt(process.env.MDOCS_AUDIT_MAX_BACKUPS) ?? options.maxBackups ?? MAX_BACKUPS;
     const dir = path4.dirname(this.logPath);
     if (!fs4.existsSync(dir)) {
       fs4.mkdirSync(dir, { recursive: true });
@@ -31145,12 +31163,16 @@ var AuditLog = class {
   rotateIfNeeded() {
     if (!fs4.existsSync(this.logPath)) return;
     const stats = fs4.statSync(this.logPath);
-    if (stats.size < MAX_LOG_SIZE) return;
-    const oldestBackup = `${this.logPath}.${MAX_BACKUPS}`;
+    if (stats.size < this.maxBytes) return;
+    if (this.maxBackups <= 0) {
+      fs4.unlinkSync(this.logPath);
+      return;
+    }
+    const oldestBackup = `${this.logPath}.${this.maxBackups}`;
     if (fs4.existsSync(oldestBackup)) {
       fs4.unlinkSync(oldestBackup);
     }
-    for (let i = MAX_BACKUPS - 1; i >= 1; i--) {
+    for (let i = this.maxBackups - 1; i >= 1; i--) {
       const backupPath = `${this.logPath}.${i}`;
       const nextPath = `${this.logPath}.${i + 1}`;
       if (fs4.existsSync(backupPath)) {
@@ -31160,9 +31182,22 @@ var AuditLog = class {
     fs4.renameSync(this.logPath, `${this.logPath}.1`);
   }
   append(event) {
+    if (this.level === "off") return;
     this.rotateIfNeeded();
-    const line = JSON.stringify(event) + "\n";
+    const line = JSON.stringify(this.level === "metadata" ? this.metadataOnly(event) : event) + "\n";
     fs4.appendFileSync(this.logPath, line, "utf8");
+  }
+  metadataOnly(event) {
+    const details = event.details || {};
+    return {
+      ...event,
+      details: {
+        toolName: details.toolName,
+        eventType: details.eventType,
+        operation: details.operation,
+        command: details.command
+      }
+    };
   }
   query(options = {}) {
     if (!fs4.existsSync(this.logPath)) return [];
@@ -31188,6 +31223,15 @@ var AuditLog = class {
     return this.query({ initiativeId });
   }
 };
+function positiveInt(value) {
+  if (!value) return void 0;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : void 0;
+}
+function envAuditLevel() {
+  const value = process.env.MDOCS_AUDIT_LEVEL;
+  return value === "full" || value === "metadata" || value === "off" ? value : void 0;
+}
 
 // src/core/commands/registry.ts
 var path6 = __toESM(require("path"));
@@ -31342,6 +31386,17 @@ function findInitiativeFilename(mdocsRoot, initiatives, id) {
 }
 
 // src/core/commands/registry.ts
+function unique(values) {
+  return Array.from(new Set(values));
+}
+function countIssues(errors, warnings, infos = []) {
+  return {
+    errorCount: errors.length,
+    warningCount: warnings.length,
+    infoCount: infos.length,
+    clean: errors.length === 0 && warnings.length === 0
+  };
+}
 var MdocsCommandRegistry = class {
   constructor(context) {
     this.context = context;
@@ -31516,13 +31571,30 @@ var MdocsCommandRegistry = class {
       (result) => result.issues.filter((issue2) => issue2.severity === "error").map((issue2) => `${result.file}: ${issue2.message}`)
     );
     const graphWarnings = graphResults.flatMap(
-      (result) => result.issues.filter((issue2) => issue2.severity !== "error").map((issue2) => `${result.file}: ${issue2.message}`)
+      (result) => result.issues.filter((issue2) => issue2.severity === "warning").map((issue2) => `${result.file}: ${issue2.message}`)
     );
+    const graphInfos = graphResults.flatMap(
+      (result) => result.issues.filter((issue2) => issue2.severity === "info").map((issue2) => `${result.file}: ${issue2.message}`)
+    );
+    const initiativeErrors = unique(initiativeValidation.errors);
+    const initiativeWarnings = unique(initiativeValidation.warnings);
+    const wikiErrors = unique(wikiValidation.errors);
+    const wikiWarnings = unique(wikiValidation.warnings);
+    const uniqueGraphErrors = unique(graphErrors);
+    const uniqueGraphWarnings = unique(graphWarnings);
+    const uniqueGraphInfos = unique(graphInfos);
+    const errorCount = initiativeErrors.length + wikiErrors.length + uniqueGraphErrors.length;
+    const warningCount = initiativeWarnings.length + wikiWarnings.length + uniqueGraphWarnings.length;
+    const infoCount = uniqueGraphInfos.length;
     return {
-      initiatives: initiativeValidation,
-      wiki: wikiValidation,
-      graph: { valid: graphErrors.length === 0, errors: graphErrors, warnings: graphWarnings, results: graphResults },
-      valid: initiativeValidation.valid && wikiValidation.valid && graphErrors.length === 0
+      initiatives: { ...initiativeValidation, errors: initiativeErrors, warnings: initiativeWarnings, ...countIssues(initiativeErrors, initiativeWarnings) },
+      wiki: { ...wikiValidation, errors: wikiErrors, warnings: wikiWarnings, ...countIssues(wikiErrors, wikiWarnings) },
+      graph: { valid: uniqueGraphErrors.length === 0, errors: uniqueGraphErrors, warnings: uniqueGraphWarnings, infos: uniqueGraphInfos, results: graphResults, ...countIssues(uniqueGraphErrors, uniqueGraphWarnings, uniqueGraphInfos) },
+      valid: initiativeValidation.valid && wikiValidation.valid && uniqueGraphErrors.length === 0,
+      errorCount,
+      warningCount,
+      infoCount,
+      clean: errorCount === 0 && warningCount === 0
     };
   }
   createInitiative(args) {
@@ -31538,6 +31610,7 @@ var MdocsCommandRegistry = class {
       updated: date5,
       owner: args.owner || "",
       tags: Array.isArray(args.tags) ? args.tags : [],
+      aliases: Array.isArray(args.aliases) ? args.aliases : [],
       relatedWiki: Array.isArray(args.relatedWiki) ? args.relatedWiki : [],
       objective: args.objective || "",
       plan: Array.isArray(args.plan) ? args.plan.map((item) => ({
@@ -31564,7 +31637,7 @@ var MdocsCommandRegistry = class {
     const initiative = this.context.initiatives.read(fileName);
     if (!initiative) return { error: `Initiative not found: ${args.id}` };
     const updates = args.updates || args;
-    for (const field of ["status", "tags", "priority", "dueDate", "dependsOn", "owner", "phase", "handoffSummary", "nextAction", "expectedDuration", "graduated"]) {
+    for (const field of ["status", "tags", "aliases", "relatedWiki", "priority", "dueDate", "dependsOn", "owner", "phase", "handoffSummary", "nextAction", "expectedDuration", "graduated"]) {
       if (updates[field] !== void 0) initiative[field] = updates[field];
     }
     if (updates.openQuestions !== void 0) initiative.openQuestions = Array.isArray(updates.openQuestions) ? updates.openQuestions : void 0;
@@ -32105,6 +32178,22 @@ var InitiativeStore = class {
   findById(id, options = {}) {
     return this.list(options).find((record2) => record2.initiative.id === id) || null;
   }
+  findByReference(query, options = {}) {
+    const querySlug = slugify3(query);
+    const records = this.list(options);
+    const exact = records.find((record2) => {
+      const initiative = record2.initiative;
+      const keySlug = slugify3(record2.key.replace(/\.md$/, "").replace(/--\d{4}-\d{2}-\d{2}$/, ""));
+      const idSlug = slugify3(initiative.id || "");
+      return initiative.id === query || idSlug === querySlug || record2.key === query || keySlug === querySlug;
+    });
+    if (exact) return exact;
+    return records.find((record2) => {
+      const aliases = Array.isArray(record2.rawFrontmatter.aliases) ? record2.rawFrontmatter.aliases : record2.initiative.aliases || [];
+      const aliasSlugs = aliases.map((alias) => slugify3(alias));
+      return aliases.includes(query) || aliasSlugs.includes(querySlug);
+    }) || null;
+  }
   findByQuery(query) {
     const normalizedQuery = query.toLowerCase();
     const querySlug = slugify3(query);
@@ -32113,7 +32202,8 @@ var InitiativeStore = class {
       const keySlug = slugify3(record2.key.replace(/\.md$/, "").replace(/--\d{4}-\d{2}-\d{2}$/, ""));
       const idSlug = slugify3(initiative.id || "");
       const titleSlug = slugify3(initiative.title || "");
-      return initiative.id === query || idSlug === querySlug || initiative.title.toLowerCase().includes(normalizedQuery) || titleSlug === querySlug || record2.key === query || keySlug === querySlug;
+      const aliasSlugs = (initiative.aliases || []).map((alias) => slugify3(alias));
+      return initiative.id === query || idSlug === querySlug || (initiative.aliases || []).includes(query) || aliasSlugs.includes(querySlug) || initiative.title.toLowerCase().includes(normalizedQuery) || titleSlug === querySlug || record2.key === query || keySlug === querySlug;
     }) || null;
   }
   listFlatRecords() {
@@ -32157,6 +32247,7 @@ var InitiativeStore = class {
       updated: front.updated || front.modified || created,
       owner: front.owner || "",
       tags: Array.isArray(front.tags) ? front.tags : [],
+      aliases: Array.isArray(front.aliases) ? front.aliases : [],
       relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
       objective,
       plan: parsePlanSection(body),
@@ -32207,6 +32298,7 @@ ${sections}
       related_wiki: JSON.stringify(initiative.relatedWiki || [])
     };
     if (initiative.priority) front.priority = initiative.priority;
+    front.aliases = JSON.stringify(initiative.aliases || []);
     if (initiative.dueDate) front.due_date = initiative.dueDate;
     if (initiative.dependsOn) front.depends_on = JSON.stringify(initiative.dependsOn);
     if (initiative.phase) front.phase = initiative.phase;
@@ -32349,6 +32441,7 @@ var InitiativeManager = class {
       updated: initiative.updated,
       owner: initiative.owner,
       tags: initiative.tags,
+      ...initiative.aliases && initiative.aliases.length > 0 ? { aliases: initiative.aliases } : {},
       related_wiki: initiative.relatedWiki
     };
     if (initiative.priority) {
@@ -32445,6 +32538,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
       updated: front.updated || "",
       owner: front.owner || "",
       tags: Array.isArray(front.tags) ? front.tags : [],
+      aliases: Array.isArray(front.aliases) ? front.aliases : [],
       relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
       // Parse markdown sections
       objective: parseSection2(body, "Objective"),
@@ -32556,7 +32650,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     return this.store.findById(id)?.initiative || null;
   }
   findKeyById(id) {
-    return this.store.findById(id, { includeArchived: true })?.key || null;
+    return this.store.findByReference(id, { includeArchived: true })?.key || null;
   }
   findByQuery(query) {
     const record2 = this.store.findByQuery(query);
@@ -33747,6 +33841,21 @@ function categoryMatchesDir(category, dir) {
   const dirS = dir.endsWith("s") ? dir.slice(0, -1) : dir;
   return catS === dirS || category === dirS + "s" || dir === catS + "s";
 }
+function slugify4(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+function levenshtein(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[a.length][b.length];
+}
 var MdocsLinter = class {
   baseDir;
   initiativeRecordMode;
@@ -33811,6 +33920,7 @@ var MdocsLinter = class {
         initiativeData.push({
           id: front.id || slug,
           slug,
+          aliases: Array.isArray(front.aliases) ? front.aliases : [],
           status: normalizeInitiativeStatus(front.status),
           relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
           filePath: relativePath
@@ -33858,7 +33968,15 @@ var MdocsLinter = class {
         }
       }
     }
-    const initiativeIds = new Set(initiativeData.flatMap((i) => [i.id, i.slug]));
+    const canonicalInitiatives = new Set(initiativeData.flatMap((i) => [i.id, i.slug]));
+    const initiativeAliases = /* @__PURE__ */ new Map();
+    for (const init of initiativeData) {
+      for (const alias of init.aliases) {
+        initiativeAliases.set(alias, init.id);
+        initiativeAliases.set(slugify4(alias), init.id);
+      }
+    }
+    const initiativeIds = /* @__PURE__ */ new Set([...canonicalInitiatives, ...initiativeAliases.keys()]);
     const wikiRefs = new Set(wikiData.flatMap((w) => [w.category ? `${w.category}/${w.id}` : w.id, w.id]));
     for (const init of initiativeData) {
       for (const wikiRef of init.relatedWiki) {
@@ -33887,17 +34005,29 @@ var MdocsLinter = class {
     for (const wiki of wikiData) {
       for (const initRef of wiki.relatedInitiatives) {
         if (!initiativeIds.has(initRef)) {
+          const suggestion = this.suggest(initRef, Array.from(initiativeIds));
           issues.push({
             severity: "warning",
-            message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}`
+            message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}${suggestion ? ` (did you mean ${suggestion}?)` : ""}`
+          });
+        } else if (!canonicalInitiatives.has(initRef) && initiativeAliases.has(initRef)) {
+          issues.push({
+            severity: "info",
+            message: `Wiki ${wiki.category}/${wiki.id} references initiative alias ${initRef}; canonical id is ${initiativeAliases.get(initRef)}`
           });
         }
       }
       for (const initRef of wiki.sourceInitiatives) {
         if (!initiativeIds.has(initRef)) {
+          const suggestion = this.suggest(initRef, Array.from(initiativeIds));
           issues.push({
             severity: "warning",
-            message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}`
+            message: `Wiki ${wiki.category}/${wiki.id} references missing initiative ${initRef}${suggestion ? ` (did you mean ${suggestion}?)` : ""}`
+          });
+        } else if (!canonicalInitiatives.has(initRef) && initiativeAliases.has(initRef)) {
+          issues.push({
+            severity: "info",
+            message: `Wiki ${wiki.category}/${wiki.id} references initiative alias ${initRef}; canonical id is ${initiativeAliases.get(initRef)}`
           });
         }
       }
@@ -33936,6 +34066,17 @@ var MdocsLinter = class {
       }
     }
     return files;
+  }
+  suggest(value, choices) {
+    const normalized = value.toLowerCase();
+    const prefix = choices.find((choice) => choice.toLowerCase().startsWith(normalized.slice(0, 6)) || normalized.startsWith(choice.toLowerCase().slice(0, 6)));
+    if (prefix) return prefix;
+    let best = null;
+    for (const choice of choices) {
+      const distance = levenshtein(normalized, choice.toLowerCase());
+      if (!best || distance < best.distance) best = { choice, distance };
+    }
+    return best && best.distance <= Math.max(3, Math.floor(normalized.length / 3)) ? best.choice : null;
   }
   rootWikiFiles() {
     const wikiDir = path12.join(this.baseDir, "wiki");
@@ -34361,7 +34502,7 @@ function createMdocsCore(projectDir, options = {}) {
     idle: contract.idle
   });
   const search = new SearchEngine(mdocsRoot);
-  const audit2 = new AuditLog(mdocsRoot);
+  const audit2 = new AuditLog(mdocsRoot, merged.audit);
   const linter = new MdocsLinter(mdocsRoot, { initiativeRecordMode: contract.initiativeRecordMode });
   const dispatch2 = new SubagentAssembler();
   const lifecycle = new MdocsLifecycleService(mdocs, initiatives, merged.bootstrap);
@@ -34392,6 +34533,9 @@ function mergeOptions(file2, explicit) {
   }
   if (file2.wiki || explicit.wiki) {
     merged.wiki = { ...file2.wiki || {}, ...explicit.wiki || {} };
+  }
+  if (file2.audit || explicit.audit) {
+    merged.audit = { ...file2.audit || {}, ...explicit.audit || {} };
   }
   return merged;
 }
@@ -34440,7 +34584,8 @@ function reset(core2) {
 function dispatch(core2, id) {
   const resolvedId = id || status(core2).activeInitiative;
   if (!resolvedId) return { error: "No initiativeId provided and no active initiative" };
-  const initiative = core2.managers.initiatives.findById(resolvedId);
+  const fileName = findInitiativeFilename(core2.mdocsRoot, core2.managers.initiatives, resolvedId);
+  const initiative = fileName ? core2.managers.initiatives.read(fileName) : null;
   if (!initiative) return { error: "Initiative not found" };
   const wikiEntries = [];
   for (const wikiRef of initiative.relatedWiki) {

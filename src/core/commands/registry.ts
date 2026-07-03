@@ -23,6 +23,19 @@ export interface MdocsCommandContext {
   dispatch: SubagentAssembler;
 }
 
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values));
+}
+
+function countIssues(errors: string[], warnings: string[], infos: string[] = []) {
+  return {
+    errorCount: errors.length,
+    warningCount: warnings.length,
+    infoCount: infos.length,
+    clean: errors.length === 0 && warnings.length === 0
+  };
+}
+
 export class MdocsCommandRegistry {
   readonly supportedCommands = [
     'initiative.create',
@@ -207,13 +220,30 @@ export class MdocsCommandRegistry {
       result.issues.filter(issue => issue.severity === 'error').map(issue => `${result.file}: ${issue.message}`)
     );
     const graphWarnings = graphResults.flatMap(result =>
-      result.issues.filter(issue => issue.severity !== 'error').map(issue => `${result.file}: ${issue.message}`)
+      result.issues.filter(issue => issue.severity === 'warning').map(issue => `${result.file}: ${issue.message}`)
     );
+    const graphInfos = graphResults.flatMap(result =>
+      result.issues.filter(issue => issue.severity === 'info').map(issue => `${result.file}: ${issue.message}`)
+    );
+    const initiativeErrors = unique(initiativeValidation.errors);
+    const initiativeWarnings = unique(initiativeValidation.warnings);
+    const wikiErrors = unique(wikiValidation.errors);
+    const wikiWarnings = unique(wikiValidation.warnings);
+    const uniqueGraphErrors = unique(graphErrors);
+    const uniqueGraphWarnings = unique(graphWarnings);
+    const uniqueGraphInfos = unique(graphInfos);
+    const errorCount = initiativeErrors.length + wikiErrors.length + uniqueGraphErrors.length;
+    const warningCount = initiativeWarnings.length + wikiWarnings.length + uniqueGraphWarnings.length;
+    const infoCount = uniqueGraphInfos.length;
     return {
-      initiatives: initiativeValidation,
-      wiki: wikiValidation,
-      graph: { valid: graphErrors.length === 0, errors: graphErrors, warnings: graphWarnings, results: graphResults },
-      valid: initiativeValidation.valid && wikiValidation.valid && graphErrors.length === 0
+      initiatives: { ...initiativeValidation, errors: initiativeErrors, warnings: initiativeWarnings, ...countIssues(initiativeErrors, initiativeWarnings) },
+      wiki: { ...wikiValidation, errors: wikiErrors, warnings: wikiWarnings, ...countIssues(wikiErrors, wikiWarnings) },
+      graph: { valid: uniqueGraphErrors.length === 0, errors: uniqueGraphErrors, warnings: uniqueGraphWarnings, infos: uniqueGraphInfos, results: graphResults, ...countIssues(uniqueGraphErrors, uniqueGraphWarnings, uniqueGraphInfos) },
+      valid: initiativeValidation.valid && wikiValidation.valid && uniqueGraphErrors.length === 0,
+      errorCount,
+      warningCount,
+      infoCount,
+      clean: errorCount === 0 && warningCount === 0
     };
   }
 
@@ -230,6 +260,7 @@ export class MdocsCommandRegistry {
       updated: date,
       owner: args.owner || '',
       tags: Array.isArray(args.tags) ? args.tags : [],
+      aliases: Array.isArray(args.aliases) ? args.aliases : [],
       relatedWiki: Array.isArray(args.relatedWiki) ? args.relatedWiki : [],
       objective: args.objective || '',
       plan: Array.isArray(args.plan)
@@ -261,7 +292,7 @@ export class MdocsCommandRegistry {
     const initiative = this.context.initiatives.read(fileName);
     if (!initiative) return { error: `Initiative not found: ${args.id}` };
     const updates = args.updates || args;
-    for (const field of ['status', 'tags', 'priority', 'dueDate', 'dependsOn', 'owner', 'phase', 'handoffSummary', 'nextAction', 'expectedDuration', 'graduated']) {
+    for (const field of ['status', 'tags', 'aliases', 'relatedWiki', 'priority', 'dueDate', 'dependsOn', 'owner', 'phase', 'handoffSummary', 'nextAction', 'expectedDuration', 'graduated']) {
       if (updates[field] !== undefined) (initiative as any)[field] = updates[field];
     }
     if (updates.openQuestions !== undefined) initiative.openQuestions = Array.isArray(updates.openQuestions) ? updates.openQuestions : undefined;

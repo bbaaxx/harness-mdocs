@@ -62,6 +62,126 @@ This is a perfectly clear and detailed objective that explains exactly what need
     expect(result.issues).toEqual([]);
   });
 
+  test('graph resolves initiative aliases and suggests close ids', () => {
+    const linter = new MdocsLinter(testDir);
+    fs.writeFileSync(path.join(testDir, 'initiatives', 'canonical--2025-05-24.md'), `---
+id: canonical-work
+title: Canonical Work
+status: active
+created: 2025-05-24
+updated: 2025-05-24
+owner: test
+tags: [test]
+aliases: [Old Work]
+related_wiki: []
+---
+
+## Objective
+This objective has enough detail to pass the linter for alias validation coverage.
+
+## Plan
+- [ ] Implement alias validation in src/core/validation/linter.ts
+
+## Progress Log
+- Created
+
+## Artifacts
+- src/core/validation/linter.ts
+
+## Acceptance Criteria
+- Alias resolves
+`, 'utf8');
+    fs.writeFileSync(path.join(testDir, 'wiki', 'architecture', 'alias.md'), `---
+id: alias
+title: Alias
+category: architecture
+created: 2025-05-24
+updated: 2025-05-24
+related_initiatives: [old-work, canonica-work]
+tags: [test]
+---
+
+Alias note.
+`, 'utf8');
+
+    const graph = linter.lintAll().find(result => result.file === 'GRAPH');
+    const messages = graph?.issues.map(issue => issue.message).join('\n') || '';
+    expect(messages).toContain('references initiative alias old-work; canonical id is canonical-work');
+    expect(messages).toContain('did you mean canonical-work?');
+  });
+
+  test('graph treats canonical ids as canonical even when another initiative has matching alias', () => {
+    const linter = new MdocsLinter(testDir);
+    fs.writeFileSync(path.join(testDir, 'initiatives', 'alias-owner--2025-05-24.md'), `---
+id: alias-owner
+title: Alias Owner
+status: active
+created: 2025-05-24
+updated: 2025-05-24
+owner: test
+tags: [test]
+aliases: [canonical-ref]
+related_wiki: []
+---
+
+## Objective
+This objective has enough detail for a canonical collision validation test.
+
+## Plan
+- [ ] Implement check in src/core/validation/linter.ts
+
+## Progress Log
+- Created
+
+## Artifacts
+- src/core/validation/linter.ts
+
+## Acceptance Criteria
+- Canonical wins
+`, 'utf8');
+    fs.writeFileSync(path.join(testDir, 'initiatives', 'canonical-ref--2025-05-24.md'), `---
+id: canonical-ref
+title: Canonical Ref
+status: active
+created: 2025-05-24
+updated: 2025-05-24
+owner: test
+tags: [test]
+related_wiki: []
+---
+
+## Objective
+This objective has enough detail for a canonical reference validation test.
+
+## Plan
+- [ ] Implement check in src/core/validation/linter.ts
+
+## Progress Log
+- Created
+
+## Artifacts
+- src/core/validation/linter.ts
+
+## Acceptance Criteria
+- Canonical wins
+`, 'utf8');
+    fs.writeFileSync(path.join(testDir, 'wiki', 'architecture', 'canonical.md'), `---
+id: canonical
+title: Canonical
+category: architecture
+created: 2025-05-24
+updated: 2025-05-24
+related_initiatives: [canonical-ref]
+tags: [test]
+---
+
+Canonical note.
+`, 'utf8');
+
+    const messages = linter.lintAll().find(result => result.file === 'GRAPH')?.issues.map(issue => issue.message).join('\n') || '';
+    expect(messages).not.toContain('references initiative alias canonical-ref');
+  });
+
   test('initiative missing objective scores low', () => {
     const linter = new MdocsLinter(testDir);
     const content = `---

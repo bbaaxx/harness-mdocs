@@ -39,6 +39,7 @@
 - **Prepare release 0.5.1** (done) — prepare-release-0-5-1--2026-06-24.md — 2026-06-24 — [release, 0.5.1, consumer-schema, compat]
 - **Fresh Codex Thread Plugin Smoke Test** (done) — fresh-codex-thread-plugin-smoke-test--2026-06-10.md — 2026-06-10 — [codex, plugin, smoke-test]
 - **Workspace-glue / layering documentation** (done) — consumer-layering-docs--2026-06-23.md — 2026-06-23 — [docs, integration, layering, 0.4.3]
+- **Address installer feedback on validate UX, docs, aliases, and audit hygiene** (active) — installer-feedback-validate-docs-aliases-audit--2026-07-02.md — 2026-07-02 — [installer-feedback, docs, validation, audit, aliases, claude-code]
 - **Maintained lowercase index.md/log.md in directory-v2 (opt-in)** (done) — directory-v2-maintained-index-optin--2026-06-23.md — 2026-06-23 — [core, wiki, index, directory-v2, contract, 0.4.3]
 - **Codex Dogfood End To End** (done) — codex-dogfood-end-to-end--2026-06-10.md — 2026-06-10 — [codex, dogfood, plugin]
 - **Workflow state machine has no driver — enforcement is inert** (done) — workflow-state-machine-has-no-driver--2026-06-22.md — 2026-06-22 — [claude-code, surface, workflow, enforcement, hooks, bug]
