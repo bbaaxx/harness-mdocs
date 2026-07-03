@@ -1,4 +1,4 @@
-import { AuditLog } from './audit';
+import { AuditLog, AuditLogOptions } from './audit';
 import { MdocsCommandRegistry } from './commands/registry';
 import { MdocsCompatibilityConfig, MdocsContract } from './contract';
 import { MdocsLifecycleOptions, MdocsLifecycleService } from './lifecycle';
@@ -15,6 +15,7 @@ export interface MdocsCoreOptions {
     compatibility?: MdocsCompatibilityConfig;
     wiki?: WikiManagerOptions;
     bootstrap?: MdocsLifecycleOptions;
+    audit?: AuditLogOptions;
 }
 export interface MdocsCore {
     projectDir: string;

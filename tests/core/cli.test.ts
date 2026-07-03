@@ -76,6 +76,40 @@ describe('mdocs CLI', () => {
     expect(result.stderr).toContain('reset');
   });
 
+  test('validate exposes summary counts in JSON and human output', async () => {
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+
+    const raw = await runMdocsCli(['validate'], projectDir);
+    expect(raw.exitCode).toBe(0);
+    expect(JSON.parse(raw.stdout)).toMatchObject({
+      valid: true,
+      errorCount: 0,
+      warningCount: expect.any(Number),
+      clean: expect.any(Boolean),
+      graph: { errorCount: 0, warningCount: expect.any(Number), clean: expect.any(Boolean) }
+    });
+
+    const human = await runMdocsCli(['validate', '--human'], projectDir);
+    expect(human.exitCode).toBe(0);
+    expect(human.stdout).toContain('mdocs validate: valid=true');
+    expect(human.stdout).toContain('errors=0');
+  });
+
+  test('validate human output lists warnings once', async () => {
+    const projectDir = tempProject();
+    await runMdocsCli(['init'], projectDir);
+    await runMdocsCli(
+      ['command', 'initiative.create', '--json', '{"id":"warn-me","title":"Warn Me","objective":"Exercise warning output","relatedWiki":["missing/wiki"]}'],
+      projectDir
+    );
+
+    const human = await runMdocsCli(['validate', '--summary'], projectDir);
+    expect(human.exitCode).toBe(0);
+    expect(human.stdout).toContain('Warnings:');
+    expect(human.stdout).toContain('missing/wiki');
+  });
+
   test('command help documents payload shapes and examples', async () => {
     const result = await runMdocsCli(['command', '--help'], tempProject());
 
@@ -120,7 +154,7 @@ describe('mdocs CLI', () => {
         'command',
         'initiative.create',
         '--json',
-        '{"id":"cli-work","title":"CLI Work","objective":"Exercise CLI","tags":["cli"],"relatedWiki":[]}'
+        '{"id":"cli-work","title":"CLI Work","objective":"Exercise CLI","tags":["cli"],"aliases":["old-cli-work"],"relatedWiki":[]}'
       ],
       projectDir
     );
@@ -128,7 +162,7 @@ describe('mdocs CLI', () => {
     const lookup = await runMdocsCli(['lookup', 'cli-work'], projectDir);
     const search = await runMdocsCli(['search', 'Exercise'], projectDir);
     const resume = await runMdocsCli(['resume', 'cli-work'], projectDir);
-    const dispatch = await runMdocsCli(['dispatch', 'cli-work'], projectDir);
+    const dispatch = await runMdocsCli(['dispatch', 'old-cli-work'], projectDir);
     const check = await runMdocsCli(['index', 'check'], projectDir);
     const repair = await runMdocsCli(['index', 'repair'], projectDir);
 

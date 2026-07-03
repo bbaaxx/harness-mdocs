@@ -39,22 +39,39 @@ export declare class MdocsCommandRegistry {
     private graduateInitiative;
     validationResult(): {
         initiatives: {
-            valid: boolean;
+            errorCount: number;
+            warningCount: number;
+            infoCount: number;
+            clean: boolean;
             errors: string[];
             warnings: string[];
+            valid: boolean;
         };
         wiki: {
-            valid: boolean;
+            errorCount: number;
+            warningCount: number;
+            infoCount: number;
+            clean: boolean;
             errors: string[];
             warnings: string[];
+            valid: boolean;
         };
         graph: {
+            errorCount: number;
+            warningCount: number;
+            infoCount: number;
+            clean: boolean;
             valid: boolean;
             errors: string[];
             warnings: string[];
+            infos: string[];
             results: import("../types").LintResult[];
         };
         valid: boolean;
+        errorCount: number;
+        warningCount: number;
+        infoCount: number;
+        clean: boolean;
     };
     private createInitiative;
     private updateInitiative;

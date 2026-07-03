@@ -28,6 +28,47 @@ describe('MdocsCommandRegistry', () => {
     expect(fs.existsSync(path.join(projectDir, 'mdocs', 'initiatives', `cmd-created--${today}.md`))).toBe(true);
   });
 
+  test('write commands resolve exact ids and aliases, not title substrings', async () => {
+    const projectDir = tempProject();
+    const core = createMdocsCore(projectDir);
+    core.lifecycle.ensureInitialized();
+    await core.commands.execute('initiative.create', { id: 'target-work', title: 'Target Work', objective: 'Create target', aliases: ['old-target'] });
+    await core.commands.execute('initiative.create', { id: 'other-work', title: 'Other Target Work', objective: 'Create other target' });
+    await core.commands.execute('initiative.create', { id: 'old-target', title: 'Old Target Exact', objective: 'Create exact collision' });
+
+    const aliasUpdate = await core.commands.execute('initiative.update', {
+      id: 'old-target',
+      updates: { nextAction: 'Resolved through alias' }
+    });
+    expect(aliasUpdate).toMatchObject({ success: true, id: 'old-target' });
+    expect(core.managers.initiatives.findById('old-target')?.nextAction).toBe('Resolved through alias');
+    expect(core.managers.initiatives.findById('target-work')?.nextAction).toBeUndefined();
+
+    const uniqueAlias = await core.commands.execute('initiative.update', {
+      id: 'old-target-unique',
+      updates: { aliases: ['old-target-unique'], nextAction: 'Resolved through unique alias' }
+    });
+    expect(uniqueAlias.error).toBe('Initiative not found: old-target-unique');
+
+    await core.commands.execute('initiative.update', {
+      id: 'target-work',
+      updates: { aliases: ['old-target-unique'] }
+    });
+    const aliasOnly = await core.commands.execute('initiative.update', {
+      id: 'old-target-unique',
+      updates: { nextAction: 'Resolved through unique alias' }
+    });
+    expect(aliasOnly).toMatchObject({ success: true, id: 'target-work' });
+    expect(core.managers.initiatives.findById('target-work')?.nextAction).toBe('Resolved through unique alias');
+
+    const substringUpdate = await core.commands.execute('initiative.update', {
+      id: 'Target',
+      updates: { nextAction: 'Should not match title substring' }
+    });
+    expect(substringUpdate.error).toBe('Initiative not found: Target');
+    expect(core.managers.initiatives.findById('other-work')?.nextAction).toBeUndefined();
+  });
+
   test('returns supported commands for unsupported command names', async () => {
     const projectDir = tempProject();
     const core = createMdocsCore(projectDir);

@@ -44,6 +44,7 @@ export interface Initiative {
   updated: string;
   owner: string;
   tags: string[];
+  aliases?: string[];
   relatedWiki: string[];
   objective: string;
   plan: PlanItem[];

@@ -69,7 +69,8 @@ export function dispatch(core: MdocsCore, id?: string) {
   const resolvedId = id || status(core).activeInitiative;
   if (!resolvedId) return { error: 'No initiativeId provided and no active initiative' };
 
-  const initiative = core.managers.initiatives.findById(resolvedId);
+  const fileName = findInitiativeFilename(core.mdocsRoot, core.managers.initiatives, resolvedId);
+  const initiative = fileName ? core.managers.initiatives.read(fileName) : null;
   if (!initiative) return { error: 'Initiative not found' };
 
   const wikiEntries = [];

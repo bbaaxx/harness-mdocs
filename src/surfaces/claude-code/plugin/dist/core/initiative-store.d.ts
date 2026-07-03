@@ -44,6 +44,9 @@ export declare class InitiativeStore {
     findById(id: string, options?: {
         includeArchived?: boolean;
     }): InitiativeRecord | null;
+    findByReference(query: string, options?: {
+        includeArchived?: boolean;
+    }): InitiativeRecord | null;
     findByQuery(query: string): InitiativeRecord | null;
     private listFlatRecords;
     private listDirectoryRecords;

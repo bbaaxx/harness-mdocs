@@ -15,6 +15,7 @@ export declare class MdocsLinter {
     lintAll(): LintResult[];
     private lintGraph;
     private listInitiativeFiles;
+    private suggest;
     private rootWikiFiles;
     private lintInitiative;
     /**

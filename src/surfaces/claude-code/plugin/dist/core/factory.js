@@ -69,7 +69,7 @@ function createMdocsCore(projectDir, options = {}) {
         idle: contract.idle
     });
     const search = new search_1.SearchEngine(mdocsRoot);
-    const audit = new audit_1.AuditLog(mdocsRoot);
+    const audit = new audit_1.AuditLog(mdocsRoot, merged.audit);
     const linter = new linter_1.MdocsLinter(mdocsRoot, { initiativeRecordMode: contract.initiativeRecordMode });
     const dispatch = new subagent_1.SubagentAssembler();
     const lifecycle = new lifecycle_1.MdocsLifecycleService(mdocs, initiatives, merged.bootstrap);
@@ -106,6 +106,9 @@ function mergeOptions(file, explicit) {
     }
     if (file.wiki || explicit.wiki) {
         merged.wiki = { ...(file.wiki || {}), ...(explicit.wiki || {}) };
+    }
+    if (file.audit || explicit.audit) {
+        merged.audit = { ...(file.audit || {}), ...(explicit.audit || {}) };
     }
     return merged;
 }

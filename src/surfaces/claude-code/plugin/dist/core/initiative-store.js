@@ -208,6 +208,27 @@ class InitiativeStore {
     findById(id, options = {}) {
         return this.list(options).find(record => record.initiative.id === id) || null;
     }
+    findByReference(query, options = {}) {
+        const querySlug = slugify(query);
+        const records = this.list(options);
+        const exact = records.find(record => {
+            const initiative = record.initiative;
+            const keySlug = slugify(record.key.replace(/\.md$/, '').replace(/--\d{4}-\d{2}-\d{2}$/, ''));
+            const idSlug = slugify(initiative.id || '');
+            return initiative.id === query ||
+                idSlug === querySlug ||
+                record.key === query ||
+                keySlug === querySlug;
+        });
+        if (exact)
+            return exact;
+        return records.find(record => {
+            const aliases = Array.isArray(record.rawFrontmatter.aliases) ? record.rawFrontmatter.aliases : (record.initiative.aliases || []);
+            const aliasSlugs = aliases.map(alias => slugify(alias));
+            return aliases.includes(query) ||
+                aliasSlugs.includes(querySlug);
+        }) || null;
+    }
     findByQuery(query) {
         const normalizedQuery = query.toLowerCase();
         const querySlug = slugify(query);
@@ -216,8 +237,11 @@ class InitiativeStore {
             const keySlug = slugify(record.key.replace(/\.md$/, '').replace(/--\d{4}-\d{2}-\d{2}$/, ''));
             const idSlug = slugify(initiative.id || '');
             const titleSlug = slugify(initiative.title || '');
+            const aliasSlugs = (initiative.aliases || []).map(alias => slugify(alias));
             return initiative.id === query ||
                 idSlug === querySlug ||
+                (initiative.aliases || []).includes(query) ||
+                aliasSlugs.includes(querySlug) ||
                 initiative.title.toLowerCase().includes(normalizedQuery) ||
                 titleSlug === querySlug ||
                 record.key === query ||
@@ -275,6 +299,7 @@ class InitiativeStore {
             updated: front.updated || front.modified || created,
             owner: front.owner || '',
             tags: Array.isArray(front.tags) ? front.tags : [],
+            aliases: Array.isArray(front.aliases) ? front.aliases : [],
             relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
             objective,
             plan: parsePlanSection(body),
@@ -319,6 +344,7 @@ class InitiativeStore {
         };
         if (initiative.priority)
             front.priority = initiative.priority;
+        front.aliases = JSON.stringify(initiative.aliases || []);
         if (initiative.dueDate)
             front.due_date = initiative.dueDate;
         if (initiative.dependsOn)
