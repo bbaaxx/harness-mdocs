@@ -1,7 +1,7 @@
 ---
 id: "fix-initiative-index-validation-false-positive"
 title: "Fix initiative INDEX validation false positives for markdown filenames in titles"
-status: "active"
+status: "done"
 created: "2026-06-25"
 updated: "2026-07-03"
 owner: ""
@@ -27,5 +27,47 @@ Fix the initiative INDEX validator so it only validates actual initiative filena
 - [2026-07-03] Handoff context added. Root cause located in `src/core/managers/initiative.ts:462-471`: INDEX validation scans every `.md` token in the entire INDEX via `/[\w.-]+\.md/g`, so title text such as `overview.md`, `log.md`, and `index.md` becomes a fake listed initiative file. Current repo symptom is `mdocs_validate` valid:true with exactly these three initiative warnings. Desired fix is to parse only actual filename fields from INDEX rows while preserving warnings for genuine missing listed files.
 - [2026-07-03T19:30:03.234Z] read executed at step COMPLETE
 - [2026-07-03T19:30:16.522Z] apply_patch executed at step COMPLETE
+- [2026-07-03T19:30:27.532Z] bash executed at step COMPLETE
+- [2026-07-03T19:32:03.794Z] skill executed at step COMPLETE
+- [2026-07-03T19:32:07.413Z] mdocs_status executed at step COMPLETE
+- [2026-07-03T19:32:07.555Z] mdocs_lookup executed at step COMPLETE
+- [2026-07-03T19:32:13.230Z] todowrite executed at step COMPLETE
+- [2026-07-03T19:32:19.793Z] mdocs_resume executed at step COMPLETE
+- [2026-07-03T19:32:19.996Z] mdocs_dispatch executed at step COMPLETE
+- [2026-07-03T19:32:20.056Z] glob executed at step COMPLETE
+- [2026-07-03T19:32:20.065Z] glob executed at step COMPLETE
+- [2026-07-03T19:32:25.754Z] read executed at step COMPLETE
+- [2026-07-03T19:32:25.786Z] read executed at step COMPLETE
+- [2026-07-03T19:32:28.970Z] read executed at step COMPLETE
+- [2026-07-03T19:32:34.932Z] skill executed at step COMPLETE
+- [2026-07-03T19:32:40.368Z] todowrite executed at step COMPLETE
+- [2026-07-03T19:32:59.194Z] mdocs_status executed at step COMPLETE
+- [2026-07-03T19:33:07.039Z] read executed at step COMPLETE
+- [2026-07-03T19:33:07.058Z] read executed at step COMPLETE
+- [2026-07-03T19:33:16.186Z] read executed at step COMPLETE
+- [2026-07-03T19:33:47.158Z] apply_patch executed at step COMPLETE
+- [2026-07-03T19:33:52.898Z] read executed at step COMPLETE
+- [2026-07-03T19:33:52.922Z] read executed at step COMPLETE
+- [2026-07-03T19:34:07.371Z] apply_patch executed at step COMPLETE
+- [2026-07-03T19:34:13.897Z] read executed at step COMPLETE
+- [2026-07-03T19:34:13.917Z] read executed at step COMPLETE
+- [2026-07-03T19:34:18.553Z] task executed at step COMPLETE
+- [2026-07-03T19:34:24.115Z] read executed at step COMPLETE
+- [2026-07-03T19:34:24.187Z] read executed at step COMPLETE
+- [2026-07-03T19:34:31.508Z] todowrite executed at step COMPLETE
+- [2026-07-03T19:34:41.088Z] bash executed at step COMPLETE
+- [2026-07-03T19:34:47.084Z] bash executed at step COMPLETE
+- [2026-07-03T19:34:49.089Z] bash executed at step COMPLETE
+- [2026-07-03T19:34:56.547Z] bash executed at step COMPLETE
+- [2026-07-03T19:35:03.623Z] mdocs_validate executed at step COMPLETE
+- [2026-07-03T19:35:03.674Z] bash executed at step COMPLETE
+- [2026-07-03T19:35:14.052Z] bash executed at step COMPLETE
+- Implemented INDEX filename-field parsing in InitiativeManager.validate(); added regression coverage for markdown filenames in INDEX row titles and for genuinely missing filename fields. Verification passed: npm test -- tests/core/initiative.test.ts; npm run typecheck; npm run build && node dist/cli/index.js validate --human. Built CLI validation no longer reports overview.md/log.md/index.md false positives; it reports one unrelated existing warning for workflow-state-machine-has-no-driver--2026-06-22.md missing from INDEX.
+- [2026-07-03T19:35:34.078Z] mdocs executed at step COMPLETE
+- [2026-07-03T19:35:39.651Z] mdocs_status executed at step COMPLETE
+- [2026-07-03T19:35:39.701Z] bash executed at step COMPLETE
+- [2026-07-03T19:37:20.737Z] skill executed at step COMPLETE
+- [2026-07-03T19:37:24.409Z] todowrite executed at step COMPLETE
+- [2026-07-03T19:37:30.835Z] Marked done via mdocs command
 
 ## Artifacts

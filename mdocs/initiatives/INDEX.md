@@ -33,7 +33,7 @@
 - **cc4 docs (.mdocs.json + initiativeRecordMode) and package dogfood** (done) — cc4-docs-and-dogfood--2026-06-24.md — 2026-06-24 — [docs, dogfood, compat, release]
 - **Fix Claude Code MCP package dependency bundling** (done) — fix-claude-code-mcp-dependency-bundling--2026-06-24.md — 2026-06-24 — [claude-code, mcp, packaging, dependencies, 0.5.3]
 - **wiki.ingest command + overview/repos/systems modeling** (done) — wiki-ingest-and-compiled-knowledge-model--2026-06-23.md — 2026-06-23 — [core, wiki, ingest, overview, compiled-knowledge, 0.5.0]
-- **Fix initiative INDEX validation false positives for markdown filenames in titles** (active) — fix-initiative-index-validation-false-positive--2026-06-25.md — 2026-06-25 — [validation, initiatives, index, bug, mdocs]
+- **Fix initiative INDEX validation false positives for markdown filenames in titles** (done) — fix-initiative-index-validation-false-positive--2026-06-25.md — 2026-06-25 — [validation, initiatives, index, bug, mdocs]
 - **Sync GitHub Releases with npm publishing** (done) — sync-github-releases-with-npm-publishing--2026-06-21.md — 2026-06-21 — [release, github-actions, github-releases, npm, publishing]
 - **Add tag based npm publishing** (done) — add-tag-based-npm-publishing--2026-06-19.md — 2026-06-19 — [ci, publishing, npm, release, github-actions]
 - **Prepare release 0.5.1** (done) — prepare-release-0-5-1--2026-06-24.md — 2026-06-24 — [release, 0.5.1, consumer-schema, compat]

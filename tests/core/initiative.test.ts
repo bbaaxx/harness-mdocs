@@ -402,7 +402,7 @@ related_wiki: ["architecture/missing"]
 
 ## Artifacts
 `, 'utf8');
-    fs.writeFileSync(path.join(initiativesDir, 'INDEX.md'), '# Initiatives\n\n- **One** (active) — one.md — 2026-05-29 — []\n- ghost.md', 'utf8');
+    fs.writeFileSync(path.join(initiativesDir, 'INDEX.md'), '# Initiatives\n\n- **One** (active) — one.md — 2026-05-29 — []\n- **Ghost** (active) — ghost.md — 2026-05-29 — []', 'utf8');
 
     const result = manager.validate();
 
@@ -417,6 +417,47 @@ related_wiki: ["architecture/missing"]
       expect.stringContaining('two.md references missing wiki entry: architecture/missing'),
       expect.stringContaining('INDEX.md lists missing initiative file: ghost.md'),
       expect.stringContaining('INDEX.md missing initiative file: two.md')
+    ]));
+  });
+
+  test('validate ignores markdown filenames in INDEX row titles', () => {
+    const manager = new InitiativeManager(testDir);
+    const initiativesDir = path.join(testDir, 'initiatives');
+    fs.writeFileSync(path.join(initiativesDir, 'real--2026-01-01.md'), `---
+id: "real"
+title: "Real"
+status: "active"
+created: "2026-01-01"
+---
+
+## Objective
+
+## Plan
+
+## Progress Log
+
+## Artifacts
+`, 'utf8');
+    fs.writeFileSync(path.join(initiativesDir, 'INDEX.md'), '# Initiatives\n\n- **overview.md log.md index.md** (active) — real--2026-01-01.md — 2026-01-01 — []', 'utf8');
+
+    const result = manager.validate();
+
+    expect(result.warnings).not.toEqual(expect.arrayContaining([
+      'INDEX.md lists missing initiative file: overview.md',
+      'INDEX.md lists missing initiative file: log.md',
+      'INDEX.md lists missing initiative file: index.md'
+    ]));
+  });
+
+  test('validate still warns for missing INDEX filename fields', () => {
+    const manager = new InitiativeManager(testDir);
+    const initiativesDir = path.join(testDir, 'initiatives');
+    fs.writeFileSync(path.join(initiativesDir, 'INDEX.md'), '# Initiatives\n\n- **Missing** (active) — missing--2026-01-01.md — 2026-01-01 — []', 'utf8');
+
+    const result = manager.validate();
+
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      'INDEX.md lists missing initiative file: missing--2026-01-01.md'
     ]));
   });
 
