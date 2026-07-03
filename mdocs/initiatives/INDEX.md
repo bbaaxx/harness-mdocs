@@ -1,6 +1,6 @@
 # Initiatives
 
-- **Close harness-mdocs 0.4.3 / 0.5.0 gaps** (active) — close-harness-mdocs-gaps--2026-06-23.md — 2026-06-23 — [orchestrator, release, 0.4.3, 0.5.0, gap-closure]
+- **Close harness-mdocs 0.4.3 / 0.5.0 gaps** (done) — close-harness-mdocs-gaps--2026-06-23.md — 2026-06-23 — [orchestrator, release, 0.4.3, 0.5.0, gap-closure]
 - **Prepare release 0.4.2** (done) — prepare-release-0-4-2--2026-06-22.md — 2026-06-22 — [release, 0.4.2, claude-code]
 - **End-to-end enforcement dogfood on a real multi-step initiative** (done) — dogfood-enforcement-end-to-end--2026-06-23.md — 2026-06-23 — [claude-code, workflow, enforcement, dogfood, verification, 0.4.3]
 - **Enforcement opt-in config + git-gating reconsidered** (done) — configurable-workflow-enforcement--2026-06-23.md — 2026-06-23 — [claude-code, workflow, enforcement, config, hooks, 0.4.3]
@@ -39,10 +39,10 @@
 - **Prepare release 0.5.1** (done) — prepare-release-0-5-1--2026-06-24.md — 2026-06-24 — [release, 0.5.1, consumer-schema, compat]
 - **Fresh Codex Thread Plugin Smoke Test** (done) — fresh-codex-thread-plugin-smoke-test--2026-06-10.md — 2026-06-10 — [codex, plugin, smoke-test]
 - **Workspace-glue / layering documentation** (done) — consumer-layering-docs--2026-06-23.md — 2026-06-23 — [docs, integration, layering, 0.4.3]
-- **Address installer feedback on validate UX, docs, aliases, and audit hygiene** (active) — installer-feedback-validate-docs-aliases-audit--2026-07-02.md — 2026-07-02 — [installer-feedback, docs, validation, audit, aliases, claude-code]
+- **Address installer feedback on validate UX, docs, aliases, and audit hygiene** (done) — installer-feedback-validate-docs-aliases-audit--2026-07-02.md — 2026-07-02 — [installer-feedback, docs, validation, audit, aliases, claude-code]
 - **Maintained lowercase index.md/log.md in directory-v2 (opt-in)** (done) — directory-v2-maintained-index-optin--2026-06-23.md — 2026-06-23 — [core, wiki, index, directory-v2, contract, 0.4.3]
 - **Codex Dogfood End To End** (done) — codex-dogfood-end-to-end--2026-06-10.md — 2026-06-10 — [codex, dogfood, plugin]
 - **Workflow state machine has no driver — enforcement is inert** (done) — workflow-state-machine-has-no-driver--2026-06-22.md — 2026-06-22 — [claude-code, surface, workflow, enforcement, hooks, bug]
 - **Document OpenCode plugin version pinning** (done) — document-opencode-plugin-version-pinning--2026-06-19.md — 2026-06-19 — [docs, readme, opencode, migration]
-- **Prepare release 0.6.0** (active) — prepare-release-0-6-0--2026-06-26.md — 2026-06-26 — [release, 0.6.0, packaging, pi]
+- **Prepare release 0.6.0** (done) — prepare-release-0-6-0--2026-06-26.md — 2026-06-26 — [release, 0.6.0, packaging, pi]
 - **SessionStart orientation hook (+ PreCompact)** (done) — claude-code-sessionstart-orientation--2026-06-23.md — 2026-06-23 — [claude-code, surface, hooks, orientation, sessionstart, 0.4.3]

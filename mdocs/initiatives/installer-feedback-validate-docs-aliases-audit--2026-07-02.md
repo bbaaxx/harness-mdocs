@@ -1,7 +1,7 @@
 ---
 id: "installer-feedback-validate-docs-aliases-audit"
 title: "Address installer feedback on validate UX, docs, aliases, and audit hygiene"
-status: "active"
+status: "done"
 created: "2026-07-02"
 updated: "2026-07-03"
 owner: ""
@@ -404,5 +404,6 @@ Turn user installer feedback into prioritized docs and product improvements: cla
 - [2026-07-03T06:34:07.438Z] bash executed at step COMPLETE
 - [2026-07-03T06:34:15.198Z] bash executed at step COMPLETE
 - [2026-07-03T06:34:15.260Z] bash executed at step COMPLETE
+- [2026-07-03T19:12:27.845Z] Marked done via mdocs command
 
 ## Artifacts

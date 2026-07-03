@@ -3,9 +3,12 @@ id: "harness-mdocs-0-7-0"
 title: "harness-mdocs 0.7.0"
 category: "release"
 created: "2026-07-02"
-updated: "2026-07-02"
+updated: "2026-07-03"
 related_initiatives: ["installer-feedback-validate-docs-aliases-audit"]
 tags: ["release","0.7.0","installer-feedback","validation","audit","aliases","docs"]
+lifecycle: "stable"
+knowledge_type: "note"
+confidence: "high"
 ---
 
 # harness-mdocs 0.7.0
