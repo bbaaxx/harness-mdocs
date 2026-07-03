@@ -4,6 +4,7 @@
 - [OpenCode plugin version pinning](opencode-plugin-version-pinning.md)
 - [Compiled-knowledge overview.md / log.md grammar](compiled-knowledge-overview-log-grammar.md)
 - [repos/systems entity stub templates (G2c)](repo-system-entity-templates.md)
+- [OpenCode local plugin dogfood config](opencode-local-plugin-dogfood-config.md)
 - [Lifecycle parity: complete status, expectedDuration, graduate (G4, 0.5.0)](lifecycle-parity-complete-graduate.md)
 - [wiki.ingest + compiled-knowledge model (G2, 0.5.0)](wiki-ingest-compiled-knowledge-model.md)
 - [Self-referential devDependency hygiene](self-referential-devdependency-hygiene.md)
