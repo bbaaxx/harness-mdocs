@@ -7,6 +7,7 @@
 - [Lifecycle parity: complete status, expectedDuration, graduate (G4, 0.5.0)](lifecycle-parity-complete-graduate.md)
 - [wiki.ingest + compiled-knowledge model (G2, 0.5.0)](wiki-ingest-compiled-knowledge-model.md)
 - [Self-referential devDependency hygiene](self-referential-devdependency-hygiene.md)
+- [Initiative INDEX filename validation](initiative-index-filename-validation.md)
 - [Workflow enforcement dogfood — friction log (G7)](workflow-enforcement-dogfood-friction-log.md)
 - [wiki.ingest surface coverage + byte-stable index contract (G2d)](wiki-ingest-surface-coverage.md)
 - [Surface-Neutral README Guidance](surface-neutral-readme-guidance.md)

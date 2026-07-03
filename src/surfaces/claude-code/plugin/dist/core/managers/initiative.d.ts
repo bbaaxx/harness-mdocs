@@ -13,6 +13,7 @@ export declare class InitiativeManager {
     private sanitizeFileName;
     private toFrontmatter;
     private initiativeFiles;
+    private listedIndexFiles;
     private assertUniqueId;
     assertWriteSupported(operation: string): void;
     create(initiative: Initiative): string;

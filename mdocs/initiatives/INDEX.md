@@ -9,6 +9,7 @@
 - **Prepare release 0.4.0** (done) — prepare-release-0-4-0--2026-06-19.md — 2026-06-19 — [release, npm, version-0.4.0]
 - **Add local quality tooling** (done) — add-local-quality-tooling--2026-06-19.md — 2026-06-19 — [tooling, lint, tests, coverage, quality]
 - **Update harness-mdocs README** (done) — update-harness-mdocs-readme--2026-06-10.md — 2026-06-10 — [docs, readme, harness-mdocs, opencode-migration]
+- **Sync plugin validation runtime with initiative INDEX parser fix** (done) — sync-plugin-validation-runtime--2026-07-03.md — 2026-07-03 — [validation, plugin, mdocs, runtime]
 - **Honor consumer wiki/initiative schema without migration** (done) — consumer-schema-compat--2026-06-24.md — 2026-06-24 — [orchestrator, core, compat, contract, consumer-schema]
 - **G2c repo/system stub templates + wiki.stub/create recognition** (done) — g2c-repo-system-stub-templates--2026-06-23.md — 2026-06-23 — [core, wiki, stubs, repos, systems, 0.5.0, g2c]
 - **cc2 linter tolerance for metadata-only initiatives + consumer wiki frontmatter** (done) — cc2-linter-consumer-tolerance--2026-06-24.md — 2026-06-24 — [core, linter, compat, wiki, lifecycle]

@@ -438,7 +438,7 @@ created: "2026-01-01"
 
 ## Artifacts
 `, 'utf8');
-    fs.writeFileSync(path.join(initiativesDir, 'INDEX.md'), '# Initiatives\n\n- **overview.md log.md index.md** (active) — real--2026-01-01.md — 2026-01-01 — []', 'utf8');
+    fs.writeFileSync(path.join(initiativesDir, 'INDEX.md'), '# Initiatives\n\n- **overview.md log.md index.md — title punctuation** (active) — real--2026-01-01.md — 2026-01-01 — []', 'utf8');
 
     const result = manager.validate();
 
@@ -649,6 +649,35 @@ related_wiki: []
     expect(result.consistent).toBe(false);
     expect(result.missing).toEqual(expect.arrayContaining([
       expect.stringContaining('ghost--2026-05-29.md')
+    ]));
+  });
+
+  test('checkConsistency ignores markdown filenames in INDEX row titles', () => {
+    const manager = new InitiativeManager(testDir);
+    const initiativesDir = path.join(testDir, 'initiatives');
+    fs.writeFileSync(path.join(initiativesDir, 'real--2026-01-01.md'), `---
+id: "real"
+title: "Real"
+status: "active"
+created: "2026-01-01"
+---
+
+## Objective
+
+## Plan
+
+## Progress Log
+
+## Artifacts
+`, 'utf8');
+    fs.writeFileSync(path.join(initiativesDir, 'INDEX.md'), '# Initiatives\n\n- **overview.md log.md index.md — title punctuation** (active) — real--2026-01-01.md — 2026-01-01 — []', 'utf8');
+
+    const result = manager.checkConsistency();
+
+    expect(result.missing).not.toEqual(expect.arrayContaining([
+      'overview.md',
+      'log.md',
+      'index.md'
     ]));
   });
 

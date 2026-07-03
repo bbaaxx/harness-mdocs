@@ -131,6 +131,12 @@ export class InitiativeManager {
     return fs.readdirSync(this.dir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
   }
 
+  private listedIndexFiles(indexContent: string): Set<string> {
+    return new Set(indexContent.split(/\r?\n/)
+      .map(line => line.match(/^-\s+\*\*.*\*\*\s+\([^)]*\)\s+—\s+([\w.-]+\.md)\s+—/)?.[1])
+      .filter((name): name is string => !!name && /^[\w.-]+\.md$/.test(name) && name !== 'INDEX.md'));
+  }
+
   private assertUniqueId(id: string, ignoreFileName?: string): void {
     if (!id) return;
     const ignored = ignoreFileName ? path.resolve(this.dir, this.sanitizeFileName(ignoreFileName)) : '';
@@ -462,9 +468,7 @@ export class InitiativeManager {
     const indexPath = path.join(this.dir, 'INDEX.md');
     if (fs.existsSync(indexPath)) {
       const indexContent = fs.readFileSync(indexPath, 'utf8');
-      const listed = new Set(indexContent.split(/\r?\n/)
-        .map(line => line.split('—')[1]?.trim())
-        .filter((name): name is string => !!name && /^[\w.-]+\.md$/.test(name) && name !== 'INDEX.md'));
+      const listed = this.listedIndexFiles(indexContent);
       const actual = new Set(files);
       for (const listedFile of listed) {
         if (!actual.has(listedFile)) warnings.push(`INDEX.md lists missing initiative file: ${listedFile}`);
@@ -492,7 +496,7 @@ export class InitiativeManager {
     }
 
     const indexContent = fs.readFileSync(indexPath, 'utf8');
-    const listed = new Set(Array.from(indexContent.matchAll(/[\w.-]+\.md/g)).map(match => match[0]).filter(name => name !== 'INDEX.md'));
+    const listed = this.listedIndexFiles(indexContent);
     const actualFiles = this.initiativeFiles();
     const actual = new Set(actualFiles);
 
