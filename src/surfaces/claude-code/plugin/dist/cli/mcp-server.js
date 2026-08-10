@@ -3650,49 +3650,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative4, options, skipNormalization) {
+    function resolveComponent(base, relative5, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse3(serialize(base, options), options);
-        relative4 = parse3(serialize(relative4, options), options);
+        relative5 = parse3(serialize(relative5, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative4.scheme) {
-        target.scheme = relative4.scheme;
-        target.userinfo = relative4.userinfo;
-        target.host = relative4.host;
-        target.port = relative4.port;
-        target.path = removeDotSegments(relative4.path || "");
-        target.query = relative4.query;
+      if (!options.tolerant && relative5.scheme) {
+        target.scheme = relative5.scheme;
+        target.userinfo = relative5.userinfo;
+        target.host = relative5.host;
+        target.port = relative5.port;
+        target.path = removeDotSegments(relative5.path || "");
+        target.query = relative5.query;
       } else {
-        if (relative4.userinfo !== void 0 || relative4.host !== void 0 || relative4.port !== void 0) {
-          target.userinfo = relative4.userinfo;
-          target.host = relative4.host;
-          target.port = relative4.port;
-          target.path = removeDotSegments(relative4.path || "");
-          target.query = relative4.query;
+        if (relative5.userinfo !== void 0 || relative5.host !== void 0 || relative5.port !== void 0) {
+          target.userinfo = relative5.userinfo;
+          target.host = relative5.host;
+          target.port = relative5.port;
+          target.path = removeDotSegments(relative5.path || "");
+          target.query = relative5.query;
         } else {
-          if (!relative4.path) {
+          if (!relative5.path) {
             target.path = base.path;
-            if (relative4.query !== void 0) {
-              target.query = relative4.query;
+            if (relative5.query !== void 0) {
+              target.query = relative5.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative4.path[0] === "/") {
-              target.path = removeDotSegments(relative4.path);
+            if (relative5.path[0] === "/") {
+              target.path = removeDotSegments(relative5.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative4.path;
+                target.path = "/" + relative5.path;
               } else if (!base.path) {
-                target.path = relative4.path;
+                target.path = relative5.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative4.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative5.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative4.query;
+            target.query = relative5.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -3700,7 +3700,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative4.fragment;
+      target.fragment = relative5.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -31384,10 +31384,39 @@ function findInitiativeFilename(mdocsRoot, initiatives, id) {
   void mdocsRoot;
   return initiatives.findKeyById(id);
 }
+var KEY_ALIASES = {
+  related_initiatives: "relatedInitiatives",
+  source_initiatives: "sourceInitiatives",
+  sources: "sourceInitiatives",
+  knowledge_type: "knowledgeType",
+  related_wiki: "relatedWiki",
+  due_date: "dueDate",
+  depends_on: "dependsOn",
+  handoff_summary: "handoffSummary",
+  open_questions: "openQuestions",
+  next_action: "nextAction",
+  expected_duration: "expectedDuration",
+  initiative_id: "initiativeId",
+  wiki_slug: "wikiSlug"
+};
+function normalizeCommandKeys(args) {
+  const out = { ...args };
+  for (const [snake, camel] of Object.entries(KEY_ALIASES)) {
+    if (out[snake] !== void 0 && out[camel] === void 0) {
+      out[camel] = out[snake];
+    }
+    delete out[snake];
+  }
+  return out;
+}
 
 // src/core/commands/registry.ts
 function unique(values) {
   return Array.from(new Set(values));
+}
+function fieldsPersistedEqual(actual, expected) {
+  const normalize = (v) => v === void 0 || Array.isArray(v) && v.length === 0 ? null : v;
+  return JSON.stringify(normalize(actual)) === JSON.stringify(normalize(expected));
 }
 function countIssues(errors, warnings, infos = []) {
   return {
@@ -31629,23 +31658,95 @@ var MdocsCommandRegistry = class {
     });
     return { success: true, filename: path6.basename(filePath), id };
   }
-  updateInitiative(args) {
+  /**
+   * initiative.update — explicit mutation result. snake_case inputs are
+   * normalized to camelCase. Fields the store will not persist are reported
+   * in `skippedFields` (metadata-only mode: anything outside the lifecycle
+   * set, plus an unpersisted progressNote); fields the command does not
+   * support at all (objective, plan, unknown keys) are rejected explicitly in
+   * `unsupportedFields` with no write. Persisted fields are verified by
+   * re-reading the initiative from disk before they are reported as applied.
+   */
+  updateInitiative(rawArgs) {
+    const args = normalizeCommandKeys(rawArgs);
     if (!args.id) return { error: "initiative.update requires id" };
     this.context.initiatives.assertWriteSupported("initiative.update");
     const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.id);
     if (!fileName) return { error: `Initiative not found: ${args.id}` };
     const initiative = this.context.initiatives.read(fileName);
     if (!initiative) return { error: `Initiative not found: ${args.id}` };
-    const updates = args.updates || args;
-    for (const field of ["status", "tags", "aliases", "relatedWiki", "priority", "dueDate", "dependsOn", "owner", "phase", "handoffSummary", "nextAction", "expectedDuration", "graduated"]) {
-      if (updates[field] !== void 0) initiative[field] = updates[field];
+    const updates = normalizeCommandKeys(args.updates || args);
+    const SUPPORTED = /* @__PURE__ */ new Set(["status", "tags", "aliases", "relatedWiki", "priority", "dueDate", "dependsOn", "owner", "phase", "handoffSummary", "nextAction", "expectedDuration", "graduated", "openQuestions", "blockers"]);
+    const CONTROL_KEYS = /* @__PURE__ */ new Set(["id", "updates", "progressNote"]);
+    const metadataOnly = this.context.contract.initiativeMode === "directory" && this.context.contract.initiativeRecordMode === "metadata-only";
+    const appliedFields = [];
+    const appliedValues = {};
+    const skippedFields = [];
+    const unsupportedFields = [];
+    for (const field of Object.keys(updates)) {
+      if (CONTROL_KEYS.has(field) || updates[field] === void 0) continue;
+      if (!SUPPORTED.has(field)) {
+        unsupportedFields.push(field);
+        continue;
+      }
+      if (metadataOnly && !this.metadataOnlyPersistable(field, initiative)) {
+        skippedFields.push(field);
+        continue;
+      }
+      const appliedValue = field === "openQuestions" || field === "blockers" ? Array.isArray(updates[field]) ? updates[field] : void 0 : updates[field];
+      initiative[field] = appliedValue;
+      appliedFields.push(field);
+      appliedValues[field] = appliedValue;
     }
-    if (updates.openQuestions !== void 0) initiative.openQuestions = Array.isArray(updates.openQuestions) ? updates.openQuestions : void 0;
-    if (updates.blockers !== void 0) initiative.blockers = Array.isArray(updates.blockers) ? updates.blockers : void 0;
+    if (unsupportedFields.length > 0) {
+      return {
+        success: false,
+        error: `initiative.update does not support fields: ${unsupportedFields.join(", ")}`,
+        unsupportedFields,
+        skippedFields,
+        appliedFields: [],
+        id: args.id
+      };
+    }
+    if (args.progressNote !== void 0) {
+      if (metadataOnly) {
+        skippedFields.push("progressNote");
+      } else {
+        initiative.progressLog.push(args.progressNote);
+        appliedFields.push("progressNote");
+      }
+    }
     initiative.updated = today();
-    if (args.progressNote) initiative.progressLog.push(args.progressNote);
     const filePath = this.context.initiatives.update(fileName, initiative);
-    return { success: true, filename: path6.basename(filePath), id: initiative.id };
+    const after = this.context.initiatives.read(path6.basename(filePath));
+    const failedFields = appliedFields.filter((field) => field !== "progressNote").filter((field) => {
+      const actual = after?.[field];
+      const expected = appliedValues[field];
+      if (field === "status" && isCompleted(actual) && isCompleted(expected)) return false;
+      return !fieldsPersistedEqual(actual, expected);
+    });
+    if (failedFields.length > 0) {
+      return {
+        success: false,
+        error: `initiative.update postcondition failed: fields not persisted: ${failedFields.join(", ")}`,
+        failedFields,
+        appliedFields: appliedFields.filter((field) => !failedFields.includes(field)),
+        skippedFields,
+        unsupportedFields,
+        id: initiative.id
+      };
+    }
+    return { success: true, filename: path6.basename(filePath), id: initiative.id, appliedFields, skippedFields, unsupportedFields };
+  }
+  /**
+   * Whether initiative.update can persist `field` under metadata-only mode.
+   * Only lifecycle keys are rewritten; next_action only when the consumer
+   * file already carries the key.
+   */
+  metadataOnlyPersistable(field, initiative) {
+    if (field === "status" || field === "graduated") return true;
+    if (field === "nextAction") return initiative.nextAction !== void 0;
+    return false;
   }
   doneInitiative(args) {
     if (!args.id) return { error: "initiative.done requires id" };
@@ -31679,7 +31780,8 @@ var MdocsCommandRegistry = class {
     const result = this.context.initiatives.archive(fileName);
     return { success: true, id: args.id, archivedFilename: result.archivedFilename };
   }
-  createWiki(args) {
+  createWiki(rawArgs) {
+    const args = normalizeCommandKeys(rawArgs);
     if (!args.id || !args.title) return { error: "wiki.create requires id and title" };
     const date5 = today();
     const category = args.category || "";
@@ -31692,6 +31794,7 @@ var MdocsCommandRegistry = class {
       content: args.content || "",
       relatedInitiatives: Array.isArray(args.relatedInitiatives) ? args.relatedInitiatives : [],
       tags: Array.isArray(args.tags) ? args.tags : [],
+      status: args.status || void 0,
       lifecycle: args.lifecycle || void 0,
       knowledgeType: args.knowledgeType || void 0,
       confidence: args.confidence || void 0,
@@ -31701,22 +31804,72 @@ var MdocsCommandRegistry = class {
     });
     return { success: true, filename: category ? path6.join(path6.basename(path6.dirname(filePath)), path6.basename(filePath)) : path6.basename(filePath), id: args.id };
   }
-  updateWiki(args) {
+  /**
+   * wiki.update — lossless, explicit mutation result. snake_case inputs are
+   * normalized to camelCase. Unknown fields are rejected in
+   * `unsupportedFields` with no write. Requested changes are verified by
+   * re-reading the page from disk; if a requested change did not persist the
+   * result is non-success with the failed fields listed.
+   */
+  updateWiki(rawArgs) {
+    const args = normalizeCommandKeys(rawArgs);
     if (!args.id) return { error: "wiki.update requires id" };
+    const KNOWN = /* @__PURE__ */ new Set(["id", "category", "title", "content", "tags", "relatedInitiatives", "status", "lifecycle", "knowledgeType", "confidence", "sourceInitiatives", "supersedes", "relatedWiki"]);
+    const unsupportedFields = Object.keys(args).filter((key) => args[key] !== void 0 && !KNOWN.has(key));
+    if (unsupportedFields.length > 0) {
+      return {
+        success: false,
+        error: `wiki.update does not support fields: ${unsupportedFields.join(", ")}`,
+        unsupportedFields,
+        id: args.id
+      };
+    }
     const category = args.category || "";
     const existing = category ? this.context.wiki.read(category, args.id) : this.context.wiki.readByRef(args.id);
     if (!existing) return { error: `Wiki entry not found: ${category ? `${category}/` : ""}${args.id}` };
-    if (args.title !== void 0) existing.title = args.title;
-    if (args.content !== void 0) existing.content = args.content;
-    if (Array.isArray(args.tags)) existing.tags = args.tags;
-    if (Array.isArray(args.relatedInitiatives)) existing.relatedInitiatives = args.relatedInitiatives;
-    if (args.lifecycle !== void 0) existing.lifecycle = args.lifecycle;
-    if (args.knowledgeType !== void 0) existing.knowledgeType = args.knowledgeType;
-    if (args.confidence !== void 0) existing.confidence = args.confidence;
-    if (Array.isArray(args.sourceInitiatives)) existing.sourceInitiatives = args.sourceInitiatives;
-    if (Array.isArray(args.supersedes)) existing.supersedes = args.supersedes;
+    const rawIdentity = {
+      id: existing.rawFrontmatter?.values.id,
+      category: existing.rawFrontmatter?.values.category
+    };
+    const appliedFields = [];
+    const appliedValues = {};
+    const apply = (field, value) => {
+      existing[field] = value;
+      appliedFields.push(field);
+      appliedValues[field] = value;
+    };
+    if (args.title !== void 0) apply("title", args.title);
+    if (args.content !== void 0) apply("content", args.content);
+    if (Array.isArray(args.tags)) apply("tags", args.tags);
+    if (Array.isArray(args.relatedInitiatives)) apply("relatedInitiatives", args.relatedInitiatives);
+    if (args.status !== void 0) apply("status", args.status);
+    if (args.lifecycle !== void 0) apply("lifecycle", args.lifecycle);
+    if (args.knowledgeType !== void 0) apply("knowledgeType", args.knowledgeType);
+    if (args.confidence !== void 0) apply("confidence", args.confidence);
+    if (Array.isArray(args.sourceInitiatives)) apply("sourceInitiatives", args.sourceInitiatives);
+    if (Array.isArray(args.supersedes)) apply("supersedes", args.supersedes);
+    if (Array.isArray(args.relatedWiki)) apply("relatedWiki", args.relatedWiki);
     const filePath = this.context.wiki.update(category, args.id, existing);
-    return { success: true, filename: category ? path6.join(path6.basename(path6.dirname(filePath)), path6.basename(filePath)) : path6.basename(filePath), id: args.id };
+    const after = category ? this.context.wiki.read(category, args.id) : this.context.wiki.readByRef(args.id);
+    const failedFields = appliedFields.filter((field) => {
+      const actual = after?.[field];
+      const expected = appliedValues[field];
+      if (field === "content") return String(actual ?? "").trim() !== String(expected ?? "").trim();
+      return !fieldsPersistedEqual(actual, expected);
+    });
+    if (!fieldsPersistedEqual(after?.rawFrontmatter?.values.id, rawIdentity.id) || !fieldsPersistedEqual(after?.rawFrontmatter?.values.category, rawIdentity.category)) {
+      failedFields.push("raw identity/category");
+    }
+    if (failedFields.length > 0) {
+      return {
+        success: false,
+        error: `wiki.update postcondition failed: fields not persisted: ${failedFields.join(", ")}`,
+        failedFields,
+        appliedFields: appliedFields.filter((field) => !failedFields.includes(field)),
+        id: args.id
+      };
+    }
+    return { success: true, filename: category ? path6.join(path6.basename(path6.dirname(filePath)), path6.basename(filePath)) : path6.basename(filePath), id: args.id, appliedFields, unsupportedFields: [] };
   }
   stubWiki(args) {
     if (!args.id) return { error: "wiki.stub requires id" };
@@ -31742,7 +31895,24 @@ var MdocsCommandRegistry = class {
       }))
     };
   }
-  linkWiki(args) {
+  /**
+   * wiki.link — bidirectional, postcondition-verified link.
+   *
+   * - Under directory metadata-only mode the initiative-side `related_wiki`
+   *   is persisted via a surgical frontmatter-array mutation (the whitelisted
+   *   update would silently drop it).
+   * - Self-backlink guard: linking an initiative to its own compiled page
+   *   (category `initiatives`/`initiative`, id equal to the initiative id) is
+   *   provenance, not a link — no self `related_initiatives` entry and no
+   *   `related_wiki` self-entry are written; the result is success with
+   *   `selfLink: true`, never `bidirectional: true`.
+   * - After both writes, both sides are read back from disk; only a verified
+   *   pair returns `bidirectional: true`. If the wiki side fails after the
+   *   initiative side was written, the initiative side is rolled back
+   *   surgically so no partial mutation remains.
+   */
+  linkWiki(rawArgs) {
+    const args = normalizeCommandKeys(rawArgs);
     if (!args.initiativeId || !args.wikiSlug) return { error: "wiki.link requires initiativeId and wikiSlug" };
     this.context.initiatives.assertWriteSupported("wiki.link");
     const rawParts = String(args.wikiSlug).split("/");
@@ -31752,27 +31922,88 @@ var MdocsCommandRegistry = class {
     const normalizedParts = parts.map((part, index) => index === parts.length - 1 ? part.replace(/\.md$/, "") : part);
     const wikiSlug = normalizedParts.join("/");
     if (normalizedParts.length === 1 && normalizedParts[0].toLowerCase() === "index") return { error: "Refusing to overwrite canonical root wiki index: index" };
-    if (!this.context.wiki.readByRef(wikiSlug)) return { error: `Wiki entry not found: ${wikiSlug}` };
+    const wikiEntry = this.context.wiki.readByRef(wikiSlug);
+    if (!wikiEntry) return { error: `Wiki entry not found: ${wikiSlug}` };
     const fileName = findInitiativeFilename(this.context.mdocsRoot, this.context.initiatives, args.initiativeId);
     if (!fileName) return { error: `Initiative not found: ${args.initiativeId}` };
     const initiative = this.context.initiatives.read(fileName);
     if (!initiative) return { error: `Initiative not found: ${args.initiativeId}` };
-    if (!initiative.relatedWiki.includes(wikiSlug)) {
-      initiative.relatedWiki.push(wikiSlug);
-      initiative.updated = today();
-      this.context.initiatives.update(fileName, initiative);
+    const wikiCategory = (wikiEntry.category || "").toLowerCase();
+    if ((wikiCategory === "initiatives" || wikiCategory === "initiative") && wikiEntry.id === initiative.id) {
+      return {
+        success: true,
+        selfLink: true,
+        skipped: "own-compiled-page",
+        bidirectional: false,
+        initiativeId: args.initiativeId,
+        wikiSlug
+      };
     }
-    this.context.wiki.addRelatedInitiativeByRef(wikiSlug, args.initiativeId);
-    return { success: true, bidirectional: true, initiativeId: args.initiativeId, wikiSlug };
+    let initiativeChanged = false;
+    try {
+      initiativeChanged = this.context.initiatives.addRelatedWikiLink(fileName, wikiSlug);
+    } catch (err) {
+      return { success: false, bidirectional: false, error: `wiki.link failed on initiative side: ${err.message || String(err)}` };
+    }
+    try {
+      this.context.wiki.addRelatedInitiativeByRef(wikiSlug, args.initiativeId);
+    } catch (err) {
+      let rolledBack = false;
+      if (initiativeChanged) {
+        try {
+          this.context.initiatives.removeRelatedWikiLink(fileName, wikiSlug);
+          rolledBack = true;
+        } catch {
+        }
+      }
+      return {
+        success: false,
+        bidirectional: false,
+        error: `wiki.link failed on wiki side: ${err.message || String(err)}`,
+        rolledBack
+      };
+    }
+    const initiativeAfter = this.context.initiatives.read(fileName);
+    const wikiAfter = this.context.wiki.readByRef(wikiSlug);
+    const initiativeLinked = !!initiativeAfter?.relatedWiki.includes(wikiSlug);
+    const wikiLinked = !!wikiAfter?.relatedInitiatives.includes(args.initiativeId);
+    if (initiativeLinked && wikiLinked) {
+      return { success: true, bidirectional: true, initiativeId: args.initiativeId, wikiSlug };
+    }
+    if (initiativeLinked && !wikiLinked) {
+      try {
+        this.context.initiatives.removeRelatedWikiLink(fileName, wikiSlug);
+      } catch {
+      }
+    }
+    return {
+      success: false,
+      bidirectional: false,
+      error: "wiki.link postcondition failed: link not persisted on both sides",
+      initiativeLinked,
+      wikiLinked
+    };
   }
   crossReferenceWiki(args) {
     if (!args.fromSlug || !args.toSlug) return { error: "wiki.xref requires fromSlug and toSlug" };
-    const [fromCategory, fromId] = args.fromSlug.split("/");
-    const [toCategory, toId] = args.toSlug.split("/");
-    if (!fromCategory || !fromId) return { error: `Invalid fromSlug format: ${args.fromSlug}. Expected category/id` };
-    if (!toCategory || !toId) return { error: `Invalid toSlug format: ${args.toSlug}. Expected category/id` };
+    const parseCategoryRef = (ref) => {
+      if (typeof ref !== "string") return null;
+      const parts = ref.split("/");
+      return parts.length === 2 && parts[0] && parts[1] ? [parts[0], parts[1]] : null;
+    };
+    const fromRef = parseCategoryRef(args.fromSlug);
+    const toRef = parseCategoryRef(args.toSlug);
+    if (!fromRef) return { success: false, error: `Invalid fromSlug format: ${args.fromSlug}. Expected category/id` };
+    if (!toRef) return { success: false, error: `Invalid toSlug format: ${args.toSlug}. Expected category/id` };
+    const [fromCategory, fromId] = fromRef;
+    const [toCategory, toId] = toRef;
+    if (!this.context.wiki.read(toCategory, toId)) {
+      return { success: false, error: `Wiki target not found: ${args.toSlug}` };
+    }
     this.context.wiki.addWikiCrossRef(fromCategory, fromId, toCategory, toId);
-    return { success: true, bidirectional: true, fromSlug: args.fromSlug, toSlug: args.toSlug };
+    const from = this.context.wiki.read(fromCategory, fromId);
+    const persisted = !!from?.relatedWiki?.includes(`${toCategory}/${toId}`);
+    return persisted ? { success: true, bidirectional: false, fromSlug: args.fromSlug, toSlug: args.toSlug } : { success: false, bidirectional: false, error: "wiki.xref postcondition failed: reference not persisted", fromSlug: args.fromSlug, toSlug: args.toSlug };
   }
   /**
    * wiki.ingest — record caller-supplied operations and apply them as one
@@ -31796,7 +32027,8 @@ var MdocsCommandRegistry = class {
     const lockResult = withLock(this.context.mdocsRoot, "wiki-ingest", () => {
       const appliedOps2 = [];
       const changedFiles2 = [];
-      for (const op of operations) {
+      for (const rawOp of operations) {
+        const op = normalizeCommandKeys(rawOp);
         try {
           if (op.type === "createPage") {
             const category = op.category || "";
@@ -31810,6 +32042,7 @@ var MdocsCommandRegistry = class {
               content: op.content ?? "",
               relatedInitiatives: Array.isArray(op.relatedInitiatives) ? op.relatedInitiatives : [],
               tags: Array.isArray(op.tags) ? op.tags : [],
+              status: op.status,
               lifecycle: op.lifecycle,
               knowledgeType: op.knowledgeType,
               confidence: op.confidence
@@ -31823,13 +32056,59 @@ var MdocsCommandRegistry = class {
             if (!existing) {
               appliedOps2.push({ type: op.type, ref, ok: false, error: "not found" });
             } else {
-              if (op.content !== void 0) existing.content = op.content;
-              if (op.lifecycle !== void 0) existing.lifecycle = op.lifecycle;
-              if (Array.isArray(op.tags)) existing.tags = op.tags;
-              if (Array.isArray(op.relatedInitiatives)) existing.relatedInitiatives = op.relatedInitiatives;
+              const rawIdentity = {
+                id: existing.rawFrontmatter?.values.id,
+                category: existing.rawFrontmatter?.values.category
+              };
+              const KNOWN_OP_KEYS = /* @__PURE__ */ new Set(["type", "category", "id", "content", "status", "lifecycle", "tags", "relatedInitiatives"]);
+              const unsupportedFields = Object.keys(op).filter((key) => op[key] !== void 0 && !KNOWN_OP_KEYS.has(key));
+              if (unsupportedFields.length > 0) {
+                appliedOps2.push({
+                  type: op.type,
+                  ref,
+                  ok: false,
+                  error: `unsupported fields: ${unsupportedFields.join(", ")}`,
+                  unsupportedFields
+                });
+                continue;
+              }
+              const appliedFields = [];
+              const appliedValues = {};
+              const applyOp = (field, value) => {
+                existing[field] = value;
+                appliedFields.push(field);
+                appliedValues[field] = value;
+              };
+              if (op.content !== void 0) applyOp("content", op.content);
+              if (op.status !== void 0) applyOp("status", op.status);
+              if (op.lifecycle !== void 0) applyOp("lifecycle", op.lifecycle);
+              if (Array.isArray(op.tags)) applyOp("tags", op.tags);
+              if (Array.isArray(op.relatedInitiatives)) applyOp("relatedInitiatives", op.relatedInitiatives);
               const filePath = this.context.wiki.update(category, op.id, existing);
-              appliedOps2.push({ type: op.type, ref, ok: true });
-              changedFiles2.push(path6.relative(this.context.mdocsRoot, filePath));
+              const after = category ? this.context.wiki.read(category, op.id) : this.context.wiki.readByRef(op.id);
+              const failedFields = appliedFields.filter((field) => {
+                const actual = after?.[field];
+                const expected = appliedValues[field];
+                if (field === "content") return String(actual ?? "").trim() !== String(expected ?? "").trim();
+                return !fieldsPersistedEqual(actual, expected);
+              });
+              if (!fieldsPersistedEqual(after?.rawFrontmatter?.values.id, rawIdentity.id) || !fieldsPersistedEqual(after?.rawFrontmatter?.values.category, rawIdentity.category)) {
+                failedFields.push("raw identity/category");
+              }
+              if (failedFields.length > 0) {
+                appliedOps2.push({
+                  type: op.type,
+                  ref,
+                  ok: false,
+                  error: `postcondition failed: fields not persisted: ${failedFields.join(", ")}`,
+                  failedFields,
+                  appliedFields: appliedFields.filter((field) => !failedFields.includes(field)),
+                  unsupportedFields
+                });
+              } else {
+                appliedOps2.push({ type: op.type, ref, ok: true, appliedFields });
+                changedFiles2.push(path6.relative(this.context.mdocsRoot, filePath));
+              }
             }
           } else if (op.type === "updateOverviewSection") {
             const filePath = this.context.wiki.updateOverviewSection(op.section, op.body);
@@ -31849,8 +32128,14 @@ var MdocsCommandRegistry = class {
             }
           } else if (op.type === "link") {
             try {
-              this.context.wiki.addRelatedInitiativeByRef(op.wikiSlug, op.initiativeId);
-              appliedOps2.push({ type: op.type, ref: `${op.initiativeId}->${op.wikiSlug}`, ok: true });
+              const target = this.context.wiki.readByRef(op.wikiSlug);
+              const targetCategory = (target?.category || "").toLowerCase();
+              if (target && (targetCategory === "initiatives" || targetCategory === "initiative") && target.id === op.initiativeId) {
+                appliedOps2.push({ type: op.type, ref: `${op.initiativeId}->${op.wikiSlug}`, ok: true, selfLink: true, skipped: "own-compiled-page" });
+              } else {
+                this.context.wiki.addRelatedInitiativeByRef(op.wikiSlug, op.initiativeId);
+                appliedOps2.push({ type: op.type, ref: `${op.initiativeId}->${op.wikiSlug}`, ok: true });
+              }
             } catch (linkErr) {
               appliedOps2.push({ type: op.type, ref: `${op.initiativeId}->${op.wikiSlug}`, ok: false, error: linkErr.message || String(linkErr) });
             }
@@ -31868,7 +32153,7 @@ var MdocsCommandRegistry = class {
     }
     const { appliedOps, changedFiles } = lockResult.value;
     return {
-      success: true,
+      success: appliedOps.every((operation) => operation.ok),
       applied: appliedOps.length,
       operations: appliedOps,
       changedFiles,
@@ -32335,7 +32620,7 @@ ${sections}
         }
       }
       const body2 = match[3] || "";
-      fs7.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${newline}${body2.replace(/^\r?\n/, "")}`, "utf8");
+      fs7.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${match[2]}${body2}`, "utf8");
       return;
     }
     for (const [key, value] of Object.entries(updates)) {
@@ -32347,6 +32632,60 @@ ${sections}
     let body = match[3] || "";
     if (progressNote) body = this.appendProgressNote(body, progressNote, newline);
     fs7.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${newline}${body.replace(/^\r?\n/, "")}`, "utf8");
+  }
+  /**
+   * Surgical frontmatter-array mutation for explicit link operations. Adds or
+   * removes one value in a named frontmatter array key (e.g. `related_wiki`)
+   * by line-based rewrite, preserving the body and every other frontmatter
+   * line byte-for-byte. Creates the key (JSON array form) when absent on add.
+   * Idempotent: returns false when the array already contains (add) or does
+   * not contain (remove) the value and leaves the file untouched.
+   *
+   * Unlike updateStatusFile's metadata-only lifecycle path this MAY introduce
+   * the named key: an explicit link operation is a structural mutation the
+   * caller asked for, not a lifecycle refresh.
+   */
+  addFrontmatterArrayValue(key, arrayKey, value) {
+    return this.mutateFrontmatterArrayForKey(key, arrayKey, value, "add");
+  }
+  removeFrontmatterArrayValue(key, arrayKey, value) {
+    return this.mutateFrontmatterArrayForKey(key, arrayKey, value, "remove");
+  }
+  mutateFrontmatterArrayForKey(key, arrayKey, value, op) {
+    const record2 = this.read(key);
+    if (!record2 || record2.sourceKind !== "directory-status" || record2.archived) {
+      throw new Error(`Directory initiative not found: ${key}`);
+    }
+    return this.mutateFrontmatterArray(record2.filePath, arrayKey, value, op);
+  }
+  mutateFrontmatterArray(filePath, arrayKey, value, op) {
+    const content = fs7.readFileSync(filePath, "utf8");
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n?)([\s\S]*)$/);
+    if (!match) throw new Error(`Invalid initiative status format: ${filePath}`);
+    const newline = content.includes("\r\n") ? "\r\n" : "\n";
+    const lines = match[1].split(/\r?\n/);
+    const index = lines.findIndex((line) => line.match(new RegExp(`^${arrayKey}:`)));
+    let current = [];
+    let inlineYaml = false;
+    if (index >= 0) {
+      const rawValue = lines[index].slice(lines[index].indexOf(":") + 1).trim();
+      const parsed = parseYamlValue(rawValue);
+      current = Array.isArray(parsed) ? parsed.map(String) : [];
+      inlineYaml = rawValue.startsWith("[") && !rawValue.includes('"');
+    }
+    const changed = op === "add" ? !current.includes(value) : current.includes(value);
+    if (!changed) return false;
+    const next = op === "add" ? [...current, value] : current.filter((item) => item !== value);
+    if (op === "remove" && next.length === 0 && index >= 0) {
+      lines.splice(index, 1);
+    } else {
+      const nextLine = inlineYaml ? `${arrayKey}: [${next.join(", ")}]` : `${arrayKey}: ${JSON.stringify(next)}`;
+      if (index >= 0) lines[index] = nextLine;
+      else lines.push(nextLine);
+    }
+    const body = match[3] || "";
+    fs7.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${match[2]}${body}`, "utf8");
+    return true;
   }
   appendProgressNote(body, progressNote, newline) {
     const noteLine = `- ${progressNote}`;
@@ -32468,6 +32807,26 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
   }
   initiativeFiles() {
     return fs8.readdirSync(this.dir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+  }
+  validationFiles() {
+    if (this.contract.initiativeMode !== "directory") return this.initiativeFiles();
+    return fs8.readdirSync(this.dir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "archive" && entry.name !== "_archive").map((entry) => path9.join(entry.name, "_status.md")).filter((fileName) => fs8.existsSync(path9.join(this.dir, fileName)));
+  }
+  markdownDestinations(content) {
+    const refs = /* @__PURE__ */ new Set();
+    const addRef = (value) => {
+      let ref = value.split(/[?#]/)[0].replace(/\\/g, "/");
+      while (ref.startsWith("./")) ref = ref.slice(2);
+      if (ref.endsWith(".md")) ref = ref.slice(0, -3);
+      if (ref) refs.add(ref.replace(/\/$/, ""));
+    };
+    for (const match of content.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)) {
+      addRef(match[1]);
+    }
+    for (const match of content.matchAll(/`((?:\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*\/)`/g)) {
+      addRef(match[1]);
+    }
+    return refs;
   }
   listedIndexFiles(indexContent) {
     return new Set(indexContent.split(/\r?\n/).map((line) => line.match(/^-\s+\*\*.*\*\*\s+\([^)]*\)\s+—\s+([\w.-]+\.md)\s+—/)?.[1]).filter((name) => !!name && /^[\w.-]+\.md$/.test(name) && name !== "INDEX.md"));
@@ -32649,6 +33008,42 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     this.updateArchiveIndex();
     return { archivedFilename: sanitized, archiveIndex: path9.join(archiveDir, "INDEX.md") };
   }
+  /**
+   * Add one wiki ref to the initiative's related_wiki. Under directory
+   * metadata-only mode this is a surgical frontmatter-array mutation (body
+   * and unrelated frontmatter preserved byte-for-byte, key created if
+   * absent); every other mode routes through the standard full update.
+   * Idempotent: returns false when the ref was already linked.
+   */
+  addRelatedWikiLink(fileName, ref) {
+    if (this.contract.initiativeMode === "directory" && this.contract.initiativeRecordMode === "metadata-only") {
+      return this.store.addFrontmatterArrayValue(fileName, "related_wiki", ref);
+    }
+    const initiative = this.read(fileName);
+    if (!initiative) throw new Error(`Initiative file not found: ${fileName}`);
+    if (initiative.relatedWiki.includes(ref)) return false;
+    initiative.relatedWiki.push(ref);
+    initiative.updated = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    this.update(fileName, initiative);
+    return true;
+  }
+  /**
+   * Remove one wiki ref from the initiative's related_wiki. Mirrors
+   * addRelatedWikiLink; used to roll back failed bidirectional links.
+   * Idempotent: returns false when the ref was not linked.
+   */
+  removeRelatedWikiLink(fileName, ref) {
+    if (this.contract.initiativeMode === "directory" && this.contract.initiativeRecordMode === "metadata-only") {
+      return this.store.removeFrontmatterArrayValue(fileName, "related_wiki", ref);
+    }
+    const initiative = this.read(fileName);
+    if (!initiative) throw new Error(`Initiative file not found: ${fileName}`);
+    if (!initiative.relatedWiki.includes(ref)) return false;
+    initiative.relatedWiki = initiative.relatedWiki.filter((item) => item !== ref);
+    initiative.updated = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    this.update(fileName, initiative);
+    return true;
+  }
   findById(id) {
     return this.store.findById(id)?.initiative || null;
   }
@@ -32712,7 +33107,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     const errors = [];
     const warnings = [];
     const ids = /* @__PURE__ */ new Map();
-    const files = this.initiativeFiles();
+    const files = this.validationFiles();
     const wikiRoot = path9.join(path9.dirname(this.dir), "wiki");
     for (const fileName of files) {
       let initiative;
@@ -32733,7 +33128,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
             }
           }
         }
-        const parsed = this.read(fileName);
+        const parsed = this.read(fileName.endsWith("_status.md") ? fileName.split(path9.sep)[0] : fileName);
         if (!parsed) continue;
         initiative = parsed;
       } catch (err) {
@@ -32743,7 +33138,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
       if (!front.id) errors.push(`${fileName} missing id`);
       if (!front.title) errors.push(`${fileName} missing title`);
       if (!front.status) errors.push(`${fileName} missing status`);
-      if (!front.created) errors.push(`${fileName} missing created`);
+      if (!front.created && this.contract.initiativeMode !== "directory") errors.push(`${fileName} missing created`);
       if (initiative.id) {
         const firstFile = ids.get(initiative.id);
         if (firstFile) {
@@ -32773,7 +33168,19 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
       }
     }
     const indexPath = path9.join(this.dir, "INDEX.md");
-    if (fs8.existsSync(indexPath)) {
+    if (this.contract.initiativeMode === "directory" && this.contract.wikiIndexOwner === "external") {
+      if (!fs8.existsSync(indexPath)) {
+        errors.push("initiatives/INDEX.md missing external compiled index");
+      } else {
+        const listed = this.markdownDestinations(fs8.readFileSync(indexPath, "utf8"));
+        for (const fileName of files) {
+          const id = fileName.split(path9.sep)[0];
+          if (!listed.has(id) && !listed.has(`${id}/_status`)) {
+            errors.push(`initiatives/INDEX.md missing link to directory initiative: ${id}`);
+          }
+        }
+      }
+    } else if (fs8.existsSync(indexPath)) {
       const indexContent = fs8.readFileSync(indexPath, "utf8");
       const listed = this.listedIndexFiles(indexContent);
       const actual = new Set(files);
@@ -32784,7 +33191,43 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
         if (!listed.has(actualFile)) warnings.push(`INDEX.md missing initiative file: ${actualFile}`);
       }
     }
+    if (this.contract.initiativeMode === "directory") {
+      const overviewPath = path9.join(wikiRoot, "overview.md");
+      const overviewRefs = fs8.existsSync(overviewPath) ? this.markdownDestinations(fs8.readFileSync(overviewPath, "utf8")) : null;
+      for (const fileName of files) {
+        const source = this.read(fileName.split(path9.sep)[0]);
+        if (!source || source.status !== "active") continue;
+        const id = source.id;
+        const plural = path9.join(wikiRoot, "initiatives", `${id}.md`);
+        const singular = path9.join(wikiRoot, "initiative", `${id}.md`);
+        const compiledPath = fs8.existsSync(plural) ? plural : fs8.existsSync(singular) ? singular : null;
+        if (!compiledPath) {
+          errors.push(`${fileName} active initiative missing compiled wiki page: wiki/initiatives/${id}.md`);
+          continue;
+        }
+        const compiledFront = parseFrontmatter(fs8.readFileSync(compiledPath, "utf8"));
+        if (compiledFront.status === void 0 || compiledFront.status === "") {
+          errors.push(`${path9.relative(path9.dirname(this.dir), compiledPath)} missing status`);
+        } else if (!this.statusesEquivalent(source.status, String(compiledFront.status))) {
+          errors.push(`${path9.relative(path9.dirname(this.dir), compiledPath)} status ${compiledFront.status} does not match source status ${source.status}`);
+        }
+        if (this.contract.wikiIndexOwner === "external") {
+          if (!overviewRefs) {
+            errors.push("wiki/overview.md missing external compiled overview");
+          } else {
+            const category = path9.basename(path9.dirname(compiledPath));
+            const categoryAlias = category.endsWith("s") ? category.slice(0, -1) : `${category}s`;
+            if (!overviewRefs.has(`${category}/${id}`) && !overviewRefs.has(`${categoryAlias}/${id}`)) {
+              errors.push(`wiki/overview.md missing link to active initiative: ${id}`);
+            }
+          }
+        }
+      }
+    }
     return { valid: errors.length === 0, errors, warnings };
+  }
+  statusesEquivalent(source, compiled) {
+    return normalizeInitiativeStatus(source) === normalizeInitiativeStatus(compiled);
   }
   checkConsistency() {
     const missing = [];
@@ -32946,6 +33389,15 @@ var MdocsManager = class {
 // src/core/managers/wiki.ts
 var fs10 = __toESM(require("fs"));
 var path11 = __toESM(require("path"));
+var REMOVE_KEY = /* @__PURE__ */ Symbol("remove-frontmatter-key");
+var RAW_KEY_ALIASES = {
+  sources: "source_initiatives"
+};
+function categoryMatchesDir(category, dir) {
+  if (category === dir) return true;
+  const singular = (value) => value.endsWith("s") ? value.slice(0, -1) : value;
+  return singular(category) === singular(dir);
+}
 var WikiManager = class {
   dir;
   standaloneCategories;
@@ -32966,6 +33418,7 @@ var WikiManager = class {
       related_initiatives: entry.relatedInitiatives,
       tags: entry.tags
     };
+    if (entry.status) front.status = entry.status;
     if (entry.lifecycle) front.lifecycle = entry.lifecycle;
     if (entry.knowledgeType) front.knowledge_type = entry.knowledgeType;
     if (entry.confidence) front.confidence = entry.confidence;
@@ -32977,6 +33430,75 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
 ---
 
 `;
+  }
+  /**
+   * Serialize a WikiEntry's frontmatter losslessly when raw frontmatter was
+   * captured at parse time: start from the original lines, replace only
+   * managed keys whose value changed, drop managed keys the caller cleared,
+   * append managed keys that are new, and keep every unknown key and the
+   * original formatting verbatim. Identity keys (id, category) present in the
+   * raw block are never rewritten, preserving path-style ids and singular
+   * consumer categories. Falls back to a full rebuild when no raw frontmatter
+   * was captured (freshly constructed entries).
+   */
+  serializeFrontmatter(entry) {
+    const raw = entry.rawFrontmatter;
+    if (!raw) return this.toFrontmatter(entry);
+    const managed = this.managedFrontmatterValues(entry, raw);
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const line of raw.lines) {
+      const keyMatch = line.match(/^([^:]+):/);
+      if (!keyMatch) {
+        out.push(line);
+        continue;
+      }
+      const rawKey = keyMatch[1].trim();
+      const logical = RAW_KEY_ALIASES[rawKey] ?? rawKey;
+      if (!managed.has(logical) || seen.has(logical)) {
+        out.push(line);
+        continue;
+      }
+      seen.add(logical);
+      const next = managed.get(logical);
+      if (next === REMOVE_KEY) continue;
+      const prev = raw.values[rawKey];
+      if (prev !== void 0 && JSON.stringify(prev) === JSON.stringify(next)) {
+        out.push(line);
+        continue;
+      }
+      out.push(`${rawKey}: ${JSON.stringify(next)}`);
+    }
+    for (const [logical, next] of managed) {
+      if (seen.has(logical) || next === REMOVE_KEY) continue;
+      out.push(`${logical}: ${JSON.stringify(next)}`);
+    }
+    const nl = raw.newline;
+    return `---${nl}${out.join(nl)}${nl}---${nl}${nl}`;
+  }
+  /**
+   * Managed key → next value for a merged write. Identity keys (id, category)
+   * are managed only when absent from the raw block (appended canonically);
+   * when present their original lines are preserved verbatim. Optional fields
+   * the caller cleared map to REMOVE_KEY so their line is dropped.
+   */
+  managedFrontmatterValues(entry, raw) {
+    const managed = /* @__PURE__ */ new Map();
+    if (raw.values.id === void 0) managed.set("id", entry.id);
+    if (raw.values.category === void 0) managed.set("category", entry.category);
+    managed.set("title", entry.title);
+    managed.set("created", entry.created);
+    managed.set("updated", entry.updated);
+    managed.set("related_initiatives", entry.relatedInitiatives);
+    managed.set("tags", entry.tags);
+    managed.set("status", entry.status !== void 0 ? entry.status : REMOVE_KEY);
+    managed.set("lifecycle", entry.lifecycle !== void 0 ? entry.lifecycle : REMOVE_KEY);
+    managed.set("knowledge_type", entry.knowledgeType !== void 0 ? entry.knowledgeType : REMOVE_KEY);
+    managed.set("confidence", entry.confidence !== void 0 ? entry.confidence : REMOVE_KEY);
+    managed.set("source_initiatives", entry.sourceInitiatives && entry.sourceInitiatives.length > 0 ? entry.sourceInitiatives : REMOVE_KEY);
+    managed.set("supersedes", entry.supersedes && entry.supersedes.length > 0 ? entry.supersedes : REMOVE_KEY);
+    managed.set("related_wiki", entry.relatedWiki && entry.relatedWiki.length > 0 ? entry.relatedWiki : REMOVE_KEY);
+    return managed;
   }
   sanitizeName(name) {
     const base = path11.basename(name);
@@ -33019,7 +33541,7 @@ ${lines.join("\n")}
     if (this.isRootCategory(entry.category)) {
       this.assertRootWritable(id);
       const filePath2 = path11.join(this.dir, `${id}.md`);
-      const content2 = this.toFrontmatter({ ...entry, category: "" }) + entry.content + this.generateReferencedBySection(entry.relatedInitiatives);
+      const content2 = this.serializeFrontmatter({ ...entry, category: "" }) + entry.content + this.generateReferencedBySection(entry.relatedInitiatives);
       fs10.writeFileSync(filePath2, content2, "utf8");
       this.updateIndices();
       return filePath2;
@@ -33029,7 +33551,7 @@ ${lines.join("\n")}
     fs10.mkdirSync(categoryDir, { recursive: true });
     const filePath = path11.join(categoryDir, `${id}.md`);
     const referencedBy = this.generateReferencedBySection(entry.relatedInitiatives);
-    const content = this.toFrontmatter(entry) + entry.content + referencedBy;
+    const content = this.serializeFrontmatter(entry) + entry.content + referencedBy;
     fs10.writeFileSync(filePath, content, "utf8");
     this.updateIndices();
     return filePath;
@@ -33065,6 +33587,12 @@ ${lines.join("\n")}
     const front = parseFrontmatter(content);
     const hasFrontmatter = Object.keys(front).length > 0;
     if (!hasFrontmatter && !defaults.id) throw new Error("Invalid wiki entry format");
+    const rawMatch = content.match(/---(\r?\n)([\s\S]*?)\r?\n---/);
+    const rawFrontmatter = rawMatch ? {
+      lines: rawMatch[2].split(/\r?\n/),
+      newline: rawMatch[1] === "\r\n" ? "\r\n" : "\n",
+      values: front
+    } : void 0;
     let body = hasFrontmatter ? content.replace(/---\n[\s\S]*?\n---/, "").trim() : content.trim();
     body = this.stripReferencedBySection(body);
     const firstHeading = body.match(/^#\s+(.+)$/m)?.[1]?.trim();
@@ -33079,15 +33607,17 @@ ${lines.join("\n")}
       category: canonicalCategory,
       created: front.created || "",
       updated: front.updated || "",
-      relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
-      tags: Array.isArray(front.tags) ? front.tags : [],
+      relatedInitiatives: Array.isArray(front.related_initiatives) ? [...front.related_initiatives] : [],
+      tags: Array.isArray(front.tags) ? [...front.tags] : [],
       content: body,
+      status: front.status !== void 0 ? String(front.status) : void 0,
       lifecycle: front.lifecycle || void 0,
       knowledgeType: front.knowledge_type || void 0,
       confidence: front.confidence || void 0,
-      sourceInitiatives: Array.isArray(front.source_initiatives) ? front.source_initiatives : Array.isArray(front.sources) ? front.sources : void 0,
-      supersedes: Array.isArray(front.supersedes) ? front.supersedes : void 0,
-      relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : void 0
+      sourceInitiatives: Array.isArray(front.source_initiatives) ? [...front.source_initiatives] : Array.isArray(front.sources) ? [...front.sources] : void 0,
+      supersedes: Array.isArray(front.supersedes) ? [...front.supersedes] : void 0,
+      relatedWiki: Array.isArray(front.related_wiki) ? [...front.related_wiki] : void 0,
+      rawFrontmatter
     };
   }
   parseRelatedWiki(content) {
@@ -33126,7 +33656,7 @@ ${lines.join("\n")}
       entry.updated = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
       const cleanContent2 = this.stripReferencedBySection(entry.content);
       const referencedBy2 = this.generateReferencedBySection(entry.relatedInitiatives);
-      fs10.writeFileSync(filePath2, this.toFrontmatter({ ...entry, category: "" }) + cleanContent2 + referencedBy2, "utf8");
+      fs10.writeFileSync(filePath2, this.serializeFrontmatter({ ...entry, category: "" }) + cleanContent2 + referencedBy2, "utf8");
       this.updateIndices();
       return filePath2;
     }
@@ -33138,7 +33668,7 @@ ${lines.join("\n")}
     entry.updated = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const cleanContent = this.stripReferencedBySection(entry.content);
     const referencedBy = this.generateReferencedBySection(entry.relatedInitiatives);
-    const content = this.toFrontmatter(entry) + cleanContent + referencedBy;
+    const content = this.serializeFrontmatter(entry) + cleanContent + referencedBy;
     fs10.writeFileSync(filePath, content, "utf8");
     this.updateIndices();
     return filePath;
@@ -33167,6 +33697,31 @@ ${lines.join("\n")}
       return this.update("", id, entry);
     }
     if (parts.length === 2) return this.addRelatedInitiative(parts[0], parts[1].replace(/\.md$/, ""), initiativeId);
+    throw new Error(`Invalid wikiSlug format: ${ref}. Expected id or category/id`);
+  }
+  /**
+   * Surgical inverse of addRelatedInitiativeByRef: removes one initiative id
+   * from a page's related_initiatives. Lossless (routes through the
+   * raw-frontmatter merge). Used to roll back failed bidirectional links.
+   */
+  removeRelatedInitiativeByRef(ref, initiativeId) {
+    const parts = ref.split("/").filter(Boolean);
+    const apply = (entry, category, entryId) => {
+      if (!entry) throw new Error(`Wiki entry not found: ${ref}`);
+      if (entry.relatedInitiatives.includes(initiativeId)) {
+        entry.relatedInitiatives = entry.relatedInitiatives.filter((item) => item !== initiativeId);
+        entry.updated = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+      }
+      return this.update(category, entryId, entry);
+    };
+    if (parts.length === 1) {
+      const id = parts[0].replace(/\.md$/, "");
+      return apply(this.readRoot(id), "", id);
+    }
+    if (parts.length === 2) {
+      const id = parts[1].replace(/\.md$/, "");
+      return apply(this.read(parts[0], id), parts[0], id);
+    }
     throw new Error(`Invalid wikiSlug format: ${ref}. Expected id or category/id`);
   }
   getReferencedBy(category, id) {
@@ -33435,6 +33990,14 @@ tags: []
           if (!entry.id) errors.push(`${relativeName} missing id`);
           if (!entry.title) errors.push(`${relativeName} missing title`);
           if (!entry.category) errors.push(`${relativeName} missing category`);
+          const raw = entry.rawFrontmatter?.values || {};
+          const stem = fileName.replace(/\.md$/, "");
+          if (typeof raw.id === "string" && raw.id !== stem && raw.id !== `${category}/${stem}`) {
+            errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${category}/${stem}`);
+          }
+          if (typeof raw.category === "string" && !categoryMatchesDir(raw.category, category)) {
+            errors.push(`${relativeName} raw category ${raw.category} does not match directory ${category}`);
+          }
           const hasSourceInitiatives = Array.isArray(entry.sourceInitiatives) && entry.sourceInitiatives.length > 0;
           const isStable = entry.lifecycle === "stable";
           const isStandaloneCategory = this.standaloneCategories.has(entry.category);
@@ -33454,11 +34017,44 @@ tags: []
         if (!entry) continue;
         if (!entry.id) errors.push(`${relativeName} missing id`);
         if (!entry.title) errors.push(`${relativeName} missing title`);
+        const raw = entry.rawFrontmatter?.values || {};
+        const stem = path11.basename(filePath, ".md");
+        if (typeof raw.id === "string" && raw.id !== stem) errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${stem}`);
+        if (typeof raw.category === "string" && raw.category !== "") errors.push(`${relativeName} raw category ${raw.category} does not match root wiki`);
       } catch (err) {
         errors.push(`${relativeName} invalid wiki entry format: ${err.message || String(err)}`);
       }
     }
+    if (this.contract.initiativeMode === "directory" && this.contract.wikiIndexOwner === "external") {
+      const indexPath = path11.join(this.dir, "index.md");
+      if (!fs10.existsSync(indexPath)) {
+        errors.push("wiki/index.md missing external compiled index");
+      } else {
+        const refs = this.markdownDestinations(fs10.readFileSync(indexPath, "utf8"));
+        for (const entry of this.list()) {
+          if (entry.id === "index" && entry.category === "") continue;
+          const ref = entry.category ? `${entry.category}/${entry.id}` : entry.id;
+          if (!refs.has(ref) && (entry.category || !refs.has(entry.id))) errors.push(`wiki/index.md missing link to wiki page: ${ref}`);
+        }
+      }
+    }
     return { valid: errors.length === 0, errors, warnings };
+  }
+  markdownDestinations(content) {
+    const refs = /* @__PURE__ */ new Set();
+    const addRef = (value) => {
+      let ref = value.split(/[?#]/)[0].replace(/\\/g, "/");
+      while (ref.startsWith("./")) ref = ref.slice(2);
+      if (ref.endsWith(".md")) ref = ref.slice(0, -3);
+      if (ref) refs.add(ref.replace(/\/$/, ""));
+    };
+    for (const match of content.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)) {
+      addRef(match[1]);
+    }
+    for (const match of content.matchAll(/`((?:\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)+\/?)`/g)) {
+      addRef(match[1]);
+    }
+    return refs;
   }
   rootWikiFiles() {
     if (!fs10.existsSync(this.dir)) return [];
@@ -33838,11 +34434,15 @@ ${bodyText}${appendedBlock}`, "utf8");
 // src/core/validation/linter.ts
 var fs11 = __toESM(require("fs"));
 var path12 = __toESM(require("path"));
-function categoryMatchesDir(category, dir) {
+function categoryMatchesDir2(category, dir) {
   if (category === dir) return true;
   const catS = category.endsWith("s") ? category.slice(0, -1) : category;
   const dirS = dir.endsWith("s") ? dir.slice(0, -1) : dir;
   return catS === dirS || category === dirS + "s" || dir === catS + "s";
+}
+function isCategoryWikiRef(ref, wiki) {
+  const parts = ref.split("/");
+  return parts.length === 2 && parts[0] !== "" && parts[1] === wiki.id && categoryMatchesDir2(parts[0], wiki.category);
 }
 function slugify4(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -33939,10 +34539,11 @@ var MdocsLinter = class {
           const front = parseFrontmatter(content);
           const stem = path12.basename(filePath, ".md");
           wikiData.push({
-            id: front.id || stem,
-            category: front.category || "",
+            id: stem,
+            category: "",
             relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
             sourceInitiatives: Array.isArray(front.source_initiatives) ? front.source_initiatives : Array.isArray(front.sources) ? front.sources : [],
+            relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
             lifecycle: front.lifecycle,
             filePath: path12.basename(filePath)
           });
@@ -33957,12 +34558,13 @@ var MdocsLinter = class {
           try {
             const content = fs11.readFileSync(path12.join(catDir, f), "utf8");
             const front = parseFrontmatter(content);
-            const id = front.id || f.replace(".md", "");
+            const id = f.replace(/\.md$/, "");
             wikiData.push({
               id,
-              category: front.category || category,
+              category,
               relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
               sourceInitiatives: Array.isArray(front.source_initiatives) ? front.source_initiatives : Array.isArray(front.sources) ? front.sources : [],
+              relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
               lifecycle: front.lifecycle,
               filePath: `${category}/${f}`
             });
@@ -33980,20 +34582,24 @@ var MdocsLinter = class {
       }
     }
     const initiativeIds = /* @__PURE__ */ new Set([...canonicalInitiatives, ...initiativeAliases.keys()]);
-    const wikiRefs = new Set(wikiData.flatMap((w) => [w.category ? `${w.category}/${w.id}` : w.id, w.id]));
+    const resolveWikiRef = (ref) => wikiData.find((wiki) => wiki.category ? isCategoryWikiRef(ref, wiki) : ref === wiki.id);
     for (const init of initiativeData) {
       for (const wikiRef of init.relatedWiki) {
-        if (!wikiRefs.has(wikiRef)) {
+        const target = resolveWikiRef(wikiRef);
+        if (!target) {
           issues.push({
             severity: "warning",
             message: `Initiative ${init.id} references missing wiki ${wikiRef}`
           });
         }
+        if (target && (target.category === "initiative" || target.category === "initiatives") && target.id === init.id) {
+          issues.push({ severity: "error", message: `Initiative ${init.id} has self related_wiki reference ${wikiRef}` });
+        }
       }
       if (isCompleted(init.status)) {
         const initRefs = /* @__PURE__ */ new Set([init.id, init.slug]);
         const stableWikiLinks = init.relatedWiki.filter((ref) => {
-          const wikiEntry = wikiData.find((w) => (w.category ? `${w.category}/${w.id}` : w.id) === ref || w.id === ref);
+          const wikiEntry = resolveWikiRef(ref);
           return wikiEntry && wikiEntry.lifecycle === "stable";
         });
         const stableSourceWiki = wikiData.some((wiki) => wiki.lifecycle === "stable" && wiki.sourceInitiatives.some((source) => initRefs.has(source)));
@@ -34019,6 +34625,27 @@ var MdocsLinter = class {
             message: `Wiki ${wiki.category}/${wiki.id} references initiative alias ${initRef}; canonical id is ${initiativeAliases.get(initRef)}`
           });
         }
+        const canonicalId = initiativeAliases.get(initRef);
+        const canonicalInit = initiativeData.find((init) => init.id === initRef || init.slug === initRef || init.id === canonicalId);
+        if (canonicalInit) {
+          const wikiRef2 = wiki.category ? `${wiki.category}/${wiki.id}` : wiki.id;
+          const isOwnCompiledPage = (wiki.category === "initiative" || wiki.category === "initiatives") && wiki.id === canonicalInit.id;
+          const hasReciprocal = wiki.category ? canonicalInit.relatedWiki.some((ref) => isCategoryWikiRef(ref, wiki)) : canonicalInit.relatedWiki.includes(wiki.id);
+          if (!isOwnCompiledPage && !hasReciprocal) {
+            issues.push({ severity: "error", message: `Initiative ${canonicalInit.id} missing reciprocal related_wiki link to ${wikiRef2}` });
+          }
+        }
+      }
+      const wikiRef = wiki.category ? `${wiki.category}/${wiki.id}` : wiki.id;
+      const hasSelfRelatedInitiative = wiki.relatedInitiatives.some(
+        (initRef) => (canonicalInitiatives.has(initRef) ? initRef : initiativeAliases.get(initRef) ?? initRef) === wiki.id
+      );
+      if ((wiki.category === "initiative" || wiki.category === "initiatives") && hasSelfRelatedInitiative) {
+        issues.push({ severity: "error", message: `Compiled initiative page ${wikiRef} has self related_initiatives reference` });
+      }
+      const hasSelfRelatedWiki = wiki.category ? wiki.relatedWiki.some((ref) => isCategoryWikiRef(ref, wiki)) : wiki.relatedWiki.includes(wiki.id);
+      if (hasSelfRelatedWiki) {
+        issues.push({ severity: "error", message: `Wiki ${wikiRef} has self related_wiki reference` });
       }
       for (const initRef of wiki.sourceInitiatives) {
         if (!initiativeIds.has(initRef)) {
@@ -34035,8 +34662,8 @@ var MdocsLinter = class {
         }
       }
       for (const init of initiativeData) {
-        const wikiRef = wiki.category ? `${wiki.category}/${wiki.id}` : wiki.id;
-        if (init.relatedWiki.includes(wikiRef)) {
+        const wikiRef2 = wiki.category ? `${wiki.category}/${wiki.id}` : wiki.id;
+        if (init.relatedWiki.some((ref) => resolveWikiRef(ref) === wiki)) {
           if (!wiki.relatedInitiatives.includes(init.id) && !wiki.sourceInitiatives.includes(init.id) && !wiki.sourceInitiatives.includes(init.slug)) {
             issues.push({
               severity: "warning",
@@ -34234,7 +34861,7 @@ var MdocsLinter = class {
     if (categoryMatch) {
       const category = categoryMatch[1].trim();
       const expectedDir = path12.dirname(filePath).split(path12.sep).pop();
-      if (!isRootWiki && expectedDir !== void 0 && !categoryMatchesDir(category, expectedDir)) {
+      if (!isRootWiki && expectedDir !== void 0 && !categoryMatchesDir2(category, expectedDir)) {
         issues.push({ severity: "warning", message: `Category "${category}" does not match directory "${expectedDir}"` });
         score -= 0.5;
       }
@@ -34518,7 +35145,8 @@ function createMdocsCore(projectDir, options = {}) {
     search,
     audit: audit2,
     linter,
-    dispatch: dispatch2
+    dispatch: dispatch2,
+    contract
   });
   return {
     projectDir,

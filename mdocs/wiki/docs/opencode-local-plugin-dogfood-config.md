@@ -3,7 +3,7 @@ id: "opencode-local-plugin-dogfood-config"
 title: "OpenCode local plugin dogfood config"
 category: "docs"
 created: "2026-07-03"
-updated: "2026-07-03"
+updated: "2026-08-10"
 related_initiatives: ["dogfood-local-opencode-plugin"]
 tags: ["opencode","dogfood","plugin","config"]
 lifecycle: "stable"

@@ -3,10 +3,10 @@ id: "fresh-codex-thread-plugin-smoke-test"
 title: "Fresh Codex Thread Plugin Smoke Test"
 status: "done"
 created: "2026-06-10"
-updated: "2026-06-10"
+updated: "2026-08-10"
 owner: ""
 tags: ["codex","plugin","smoke-test"]
-related_wiki: ["testing/codex-repo-dogfood"]
+related_wiki: ["testing/codex-repo-dogfood","testing/fresh-codex-thread-plugin-smoke-test"]
 priority: "medium"
 phase: "done"
 next_action: "No remaining follow-up for the smoke-tested path; keep CLI-backed Codex v1 wording honest in future docs."

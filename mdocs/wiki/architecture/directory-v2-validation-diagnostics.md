@@ -6,6 +6,7 @@ created: "2026-08-10"
 updated: "2026-08-10"
 related_initiatives: ["p1-stronger-validation-diagnostics"]
 tags: ["validation","directory-v2","metadata-only","github-issue-8"]
+lifecycle: "stable"
 ---
 
 ## Summary

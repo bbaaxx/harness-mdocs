@@ -3,10 +3,10 @@ id: "fix-initiative-index-validation-false-positive"
 title: "Fix initiative INDEX validation false positives for markdown filenames in titles"
 status: "done"
 created: "2026-06-25"
-updated: "2026-07-03"
+updated: "2026-08-10"
 owner: ""
 tags: ["validation","initiatives","index","bug","mdocs"]
-related_wiki: []
+related_wiki: ["docs/initiative-index-filename-validation"]
 priority: "medium"
 phase: "planning"
 next_action: "Patch InitiativeManager.validate() INDEX parsing so it extracts only the filename field from initiative INDEX bullet rows, then add regression tests and run targeted validation."

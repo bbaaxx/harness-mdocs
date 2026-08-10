@@ -3,7 +3,7 @@ id: "harness-mdocs-0-4-2"
 title: "harness-mdocs 0.4.2"
 category: "release"
 created: "2026-06-23"
-updated: "2026-06-23"
+updated: "2026-08-10"
 related_initiatives: ["prepare-release-0-4-2"]
 tags: ["release","0.4.2","claude-code"]
 lifecycle: "stable"

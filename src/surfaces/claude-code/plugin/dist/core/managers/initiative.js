@@ -155,6 +155,35 @@ class InitiativeManager {
     initiativeFiles() {
         return fs.readdirSync(this.dir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
     }
+    validationFiles() {
+        if (this.contract.initiativeMode !== 'directory')
+            return this.initiativeFiles();
+        return fs.readdirSync(this.dir, { withFileTypes: true })
+            .filter(entry => entry.isDirectory() && entry.name !== 'archive' && entry.name !== '_archive')
+            .map(entry => path.join(entry.name, '_status.md'))
+            .filter(fileName => fs.existsSync(path.join(this.dir, fileName)));
+    }
+    markdownDestinations(content) {
+        const refs = new Set();
+        const addRef = (value) => {
+            let ref = value.split(/[?#]/)[0].replace(/\\/g, '/');
+            while (ref.startsWith('./'))
+                ref = ref.slice(2);
+            if (ref.endsWith('.md'))
+                ref = ref.slice(0, -3);
+            if (ref)
+                refs.add(ref.replace(/\/$/, ''));
+        };
+        for (const match of content.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)) {
+            addRef(match[1]);
+        }
+        // External directory-v2 indexes commonly use canonical code paths such
+        // as `example-active/`; require a slash to avoid treating prose as a ref.
+        for (const match of content.matchAll(/`((?:\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*\/)`/g)) {
+            addRef(match[1]);
+        }
+        return refs;
+    }
     listedIndexFiles(indexContent) {
         return new Set(indexContent.split(/\r?\n/)
             .map(line => line.match(/^-\s+\*\*.*\*\*\s+\([^)]*\)\s+—\s+([\w.-]+\.md)\s+—/)?.[1])
@@ -338,6 +367,46 @@ class InitiativeManager {
         this.updateArchiveIndex();
         return { archivedFilename: sanitized, archiveIndex: path.join(archiveDir, 'INDEX.md') };
     }
+    /**
+     * Add one wiki ref to the initiative's related_wiki. Under directory
+     * metadata-only mode this is a surgical frontmatter-array mutation (body
+     * and unrelated frontmatter preserved byte-for-byte, key created if
+     * absent); every other mode routes through the standard full update.
+     * Idempotent: returns false when the ref was already linked.
+     */
+    addRelatedWikiLink(fileName, ref) {
+        if (this.contract.initiativeMode === 'directory' && this.contract.initiativeRecordMode === 'metadata-only') {
+            return this.store.addFrontmatterArrayValue(fileName, 'related_wiki', ref);
+        }
+        const initiative = this.read(fileName);
+        if (!initiative)
+            throw new Error(`Initiative file not found: ${fileName}`);
+        if (initiative.relatedWiki.includes(ref))
+            return false;
+        initiative.relatedWiki.push(ref);
+        initiative.updated = new Date().toISOString().split('T')[0];
+        this.update(fileName, initiative);
+        return true;
+    }
+    /**
+     * Remove one wiki ref from the initiative's related_wiki. Mirrors
+     * addRelatedWikiLink; used to roll back failed bidirectional links.
+     * Idempotent: returns false when the ref was not linked.
+     */
+    removeRelatedWikiLink(fileName, ref) {
+        if (this.contract.initiativeMode === 'directory' && this.contract.initiativeRecordMode === 'metadata-only') {
+            return this.store.removeFrontmatterArrayValue(fileName, 'related_wiki', ref);
+        }
+        const initiative = this.read(fileName);
+        if (!initiative)
+            throw new Error(`Initiative file not found: ${fileName}`);
+        if (!initiative.relatedWiki.includes(ref))
+            return false;
+        initiative.relatedWiki = initiative.relatedWiki.filter(item => item !== ref);
+        initiative.updated = new Date().toISOString().split('T')[0];
+        this.update(fileName, initiative);
+        return true;
+    }
     findById(id) {
         return this.store.findById(id)?.initiative || null;
     }
@@ -411,7 +480,7 @@ class InitiativeManager {
         const errors = [];
         const warnings = [];
         const ids = new Map();
-        const files = this.initiativeFiles();
+        const files = this.validationFiles();
         const wikiRoot = path.join(path.dirname(this.dir), 'wiki');
         for (const fileName of files) {
             let initiative;
@@ -433,7 +502,7 @@ class InitiativeManager {
                         }
                     }
                 }
-                const parsed = this.read(fileName);
+                const parsed = this.read(fileName.endsWith('_status.md') ? fileName.split(path.sep)[0] : fileName);
                 if (!parsed)
                     continue;
                 initiative = parsed;
@@ -448,7 +517,7 @@ class InitiativeManager {
                 errors.push(`${fileName} missing title`);
             if (!front.status)
                 errors.push(`${fileName} missing status`);
-            if (!front.created)
+            if (!front.created && this.contract.initiativeMode !== 'directory')
                 errors.push(`${fileName} missing created`);
             if (initiative.id) {
                 const firstFile = ids.get(initiative.id);
@@ -483,7 +552,21 @@ class InitiativeManager {
             }
         }
         const indexPath = path.join(this.dir, 'INDEX.md');
-        if (fs.existsSync(indexPath)) {
+        if (this.contract.initiativeMode === 'directory' && this.contract.wikiIndexOwner === 'external') {
+            if (!fs.existsSync(indexPath)) {
+                errors.push('initiatives/INDEX.md missing external compiled index');
+            }
+            else {
+                const listed = this.markdownDestinations(fs.readFileSync(indexPath, 'utf8'));
+                for (const fileName of files) {
+                    const id = fileName.split(path.sep)[0];
+                    if (!listed.has(id) && !listed.has(`${id}/_status`)) {
+                        errors.push(`initiatives/INDEX.md missing link to directory initiative: ${id}`);
+                    }
+                }
+            }
+        }
+        else if (fs.existsSync(indexPath)) {
             const indexContent = fs.readFileSync(indexPath, 'utf8');
             const listed = this.listedIndexFiles(indexContent);
             const actual = new Set(files);
@@ -496,7 +579,46 @@ class InitiativeManager {
                     warnings.push(`INDEX.md missing initiative file: ${actualFile}`);
             }
         }
+        if (this.contract.initiativeMode === 'directory') {
+            const overviewPath = path.join(wikiRoot, 'overview.md');
+            const overviewRefs = fs.existsSync(overviewPath) ? this.markdownDestinations(fs.readFileSync(overviewPath, 'utf8')) : null;
+            for (const fileName of files) {
+                const source = this.read(fileName.split(path.sep)[0]);
+                if (!source || source.status !== 'active')
+                    continue;
+                const id = source.id;
+                const plural = path.join(wikiRoot, 'initiatives', `${id}.md`);
+                const singular = path.join(wikiRoot, 'initiative', `${id}.md`);
+                const compiledPath = fs.existsSync(plural) ? plural : fs.existsSync(singular) ? singular : null;
+                if (!compiledPath) {
+                    errors.push(`${fileName} active initiative missing compiled wiki page: wiki/initiatives/${id}.md`);
+                    continue;
+                }
+                const compiledFront = (0, types_1.parseFrontmatter)(fs.readFileSync(compiledPath, 'utf8'));
+                if (compiledFront.status === undefined || compiledFront.status === '') {
+                    errors.push(`${path.relative(path.dirname(this.dir), compiledPath)} missing status`);
+                }
+                else if (!this.statusesEquivalent(source.status, String(compiledFront.status))) {
+                    errors.push(`${path.relative(path.dirname(this.dir), compiledPath)} status ${compiledFront.status} does not match source status ${source.status}`);
+                }
+                if (this.contract.wikiIndexOwner === 'external') {
+                    if (!overviewRefs) {
+                        errors.push('wiki/overview.md missing external compiled overview');
+                    }
+                    else {
+                        const category = path.basename(path.dirname(compiledPath));
+                        const categoryAlias = category.endsWith('s') ? category.slice(0, -1) : `${category}s`;
+                        if (!overviewRefs.has(`${category}/${id}`) && !overviewRefs.has(`${categoryAlias}/${id}`)) {
+                            errors.push(`wiki/overview.md missing link to active initiative: ${id}`);
+                        }
+                    }
+                }
+            }
+        }
         return { valid: errors.length === 0, errors, warnings };
+    }
+    statusesEquivalent(source, compiled) {
+        return (0, initiative_store_1.normalizeInitiativeStatus)(source) === (0, initiative_store_1.normalizeInitiativeStatus)(compiled);
     }
     checkConsistency() {
         const missing = [];

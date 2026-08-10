@@ -3,10 +3,10 @@ id: "prepare-release-0-4-2"
 title: "Prepare release 0.4.2"
 status: "done"
 created: "2026-06-22"
-updated: "2026-06-23"
+updated: "2026-08-10"
 owner: ""
 tags: ["release","0.4.2","claude-code"]
-related_wiki: []
+related_wiki: ["release/harness-mdocs-0-4-2"]
 priority: "medium"
 next_action: "Mark done"
 ---

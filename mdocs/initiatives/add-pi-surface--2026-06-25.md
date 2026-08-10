@@ -3,10 +3,10 @@ id: "add-pi-surface"
 title: "Add pi surface"
 status: "done"
 created: "2026-06-25"
-updated: "2026-06-25"
+updated: "2026-08-10"
 owner: ""
 tags: ["surface","pi","extension","packaging","harness"]
-related_wiki: ["reference/pi-surface"]
+related_wiki: ["reference/pi-surface","release/harness-mdocs-0-6-0"]
 priority: "high"
 next_action: "Advance to VERIFY/REPORT/COMPLETE; commit docs; final release:check"
 ---

@@ -36,6 +36,7 @@
 - **cc0 config-file loader + initiativeRecordMode contract flag + shared helpers** (done) — cc0-config-and-contract-foundation--2026-06-24.md — 2026-06-24 — [core, config, contract, compat, foundation]
 - **cc4 docs (.mdocs.json + initiativeRecordMode) and package dogfood** (done) — cc4-docs-and-dogfood--2026-06-24.md — 2026-06-24 — [docs, dogfood, compat, release]
 - **Fix Claude Code MCP package dependency bundling** (done) — fix-claude-code-mcp-dependency-bundling--2026-06-24.md — 2026-06-24 — [claude-code, mcp, packaging, dependencies, 0.5.3]
+- **Release 0.8.0** (active) — release-0-8-0--2026-08-10.md — 2026-08-10 — [release, 0.8.0, npm, github-actions]
 - **wiki.ingest command + overview/repos/systems modeling** (done) — wiki-ingest-and-compiled-knowledge-model--2026-06-23.md — 2026-06-23 — [core, wiki, ingest, overview, compiled-knowledge, 0.5.0]
 - **Fix initiative INDEX validation false positives for markdown filenames in titles** (done) — fix-initiative-index-validation-false-positive--2026-06-25.md — 2026-06-25 — [validation, initiatives, index, bug, mdocs]
 - **Sync GitHub Releases with npm publishing** (done) — sync-github-releases-with-npm-publishing--2026-06-21.md — 2026-06-21 — [release, github-actions, github-releases, npm, publishing]

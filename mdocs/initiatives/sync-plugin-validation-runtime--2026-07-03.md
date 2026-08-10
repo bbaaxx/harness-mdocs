@@ -3,10 +3,10 @@ id: "sync-plugin-validation-runtime"
 title: "Sync plugin validation runtime with initiative INDEX parser fix"
 status: "done"
 created: "2026-07-03"
-updated: "2026-07-03"
+updated: "2026-08-10"
 owner: ""
 tags: ["validation","plugin","mdocs","runtime"]
-related_wiki: []
+related_wiki: ["docs/initiative-index-filename-validation"]
 priority: "medium"
 ---
 

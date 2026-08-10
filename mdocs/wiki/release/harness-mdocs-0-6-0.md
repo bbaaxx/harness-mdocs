@@ -3,7 +3,7 @@ id: "harness-mdocs-0-6-0"
 title: "harness-mdocs 0.6.0"
 category: "release"
 created: "2026-06-26"
-updated: "2026-07-03"
+updated: "2026-08-10"
 related_initiatives: ["add-pi-surface","prepare-release-0-6-0"]
 tags: ["release","0.6.0","pi","surface","packaging"]
 lifecycle: "stable"

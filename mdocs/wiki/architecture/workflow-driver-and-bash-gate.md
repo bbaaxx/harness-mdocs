@@ -3,7 +3,7 @@ id: "workflow-driver-and-bash-gate"
 title: "Workflow state machine driver and bash gate"
 category: "architecture"
 created: "2026-06-22"
-updated: "2026-06-22"
+updated: "2026-08-10"
 related_initiatives: ["workflow-state-machine-has-no-driver"]
 tags: ["workflow","enforcement","claude-code","bash-gate","decision"]
 lifecycle: "stable"

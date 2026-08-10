@@ -10,6 +10,24 @@ export declare class WikiManager {
     private contract;
     constructor(baseDir: string, options?: WikiManagerOptions);
     private toFrontmatter;
+    /**
+     * Serialize a WikiEntry's frontmatter losslessly when raw frontmatter was
+     * captured at parse time: start from the original lines, replace only
+     * managed keys whose value changed, drop managed keys the caller cleared,
+     * append managed keys that are new, and keep every unknown key and the
+     * original formatting verbatim. Identity keys (id, category) present in the
+     * raw block are never rewritten, preserving path-style ids and singular
+     * consumer categories. Falls back to a full rebuild when no raw frontmatter
+     * was captured (freshly constructed entries).
+     */
+    private serializeFrontmatter;
+    /**
+     * Managed key → next value for a merged write. Identity keys (id, category)
+     * are managed only when absent from the raw block (appended canonically);
+     * when present their original lines are preserved verbatim. Optional fields
+     * the caller cleared map to REMOVE_KEY so their line is dropped.
+     */
+    private managedFrontmatterValues;
     private sanitizeName;
     private isRootCategory;
     private assertRootWritable;
@@ -27,6 +45,12 @@ export declare class WikiManager {
     update(category: string, id: string, entry: WikiEntry): string;
     addRelatedInitiative(category: string, id: string, initiativeId: string): string;
     addRelatedInitiativeByRef(ref: string, initiativeId: string): string;
+    /**
+     * Surgical inverse of addRelatedInitiativeByRef: removes one initiative id
+     * from a page's related_initiatives. Lossless (routes through the
+     * raw-frontmatter merge). Used to roll back failed bidirectional links.
+     */
+    removeRelatedInitiativeByRef(ref: string, initiativeId: string): string;
     getReferencedBy(category: string, id: string): string[];
     private extractWikiRefs;
     addWikiCrossRef(fromCategory: string, fromId: string, toCategory: string, toId: string): string;
@@ -48,6 +72,7 @@ export declare class WikiManager {
         errors: string[];
         warnings: string[];
     };
+    private markdownDestinations;
     private rootWikiFiles;
     private categoryDirs;
     private listInitiativeFiles;

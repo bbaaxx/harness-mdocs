@@ -82,7 +82,8 @@ function createMdocsCore(projectDir, options = {}) {
         search,
         audit,
         linter,
-        dispatch
+        dispatch,
+        contract
     });
     return {
         projectDir,

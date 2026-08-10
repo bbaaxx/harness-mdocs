@@ -3,10 +3,10 @@ id: "fix-claude-code-install-template-and-cli-help"
 title: "Fix Claude Code manual-install template + CLI help"
 status: "done"
 created: "2026-06-22"
-updated: "2026-06-22"
+updated: "2026-08-10"
 owner: ""
 tags: ["claude-code","surface","docs","mcp","cli"]
-related_wiki: []
+related_wiki: ["architecture/claude-code-project-mcp-location"]
 priority: "medium"
 next_action: "Mark done"
 ---

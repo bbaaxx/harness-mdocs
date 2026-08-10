@@ -3,10 +3,10 @@ id: "workflow-state-machine-has-no-driver"
 title: "Workflow state machine has no driver — enforcement is inert"
 status: "done"
 created: "2026-06-22"
-updated: "2026-06-22"
+updated: "2026-08-10"
 owner: ""
 tags: ["claude-code","surface","workflow","enforcement","hooks","bug"]
-related_wiki: []
+related_wiki: ["architecture/claude-code-project-mcp-location","architecture/workflow-driver-and-bash-gate"]
 priority: "medium"
 next_action: "Update mdocs-workflow skill + README to document the advance command; mark done"
 ---

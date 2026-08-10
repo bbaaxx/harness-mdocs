@@ -6,6 +6,7 @@ created: "2026-08-10"
 updated: "2026-08-10"
 related_initiatives: ["p0-lossless-metadata-only-wiki-mutations"]
 tags: ["metadata-only","frontmatter","mutations","github-issue-8"]
+lifecycle: "stable"
 ---
 
 ## Summary

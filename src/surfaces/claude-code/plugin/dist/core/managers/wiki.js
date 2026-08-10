@@ -38,6 +38,25 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const contract_1 = require("../contract");
 const types_1 = require("../types");
+/**
+ * Sentinel marking a managed frontmatter key whose line must be dropped from
+ * the merged raw block (caller cleared an optional field).
+ */
+const REMOVE_KEY = Symbol('remove-frontmatter-key');
+/**
+ * Alias spellings seen in consumer schemas mapped to the canonical managed
+ * key. The raw line keeps its original spelling on rewrite; the alias only
+ * controls which WikiEntry field supplies the value.
+ */
+const RAW_KEY_ALIASES = {
+    sources: 'source_initiatives'
+};
+function categoryMatchesDir(category, dir) {
+    if (category === dir)
+        return true;
+    const singular = (value) => value.endsWith('s') ? value.slice(0, -1) : value;
+    return singular(category) === singular(dir);
+}
 class WikiManager {
     dir;
     standaloneCategories;
@@ -58,6 +77,8 @@ class WikiManager {
             related_initiatives: entry.relatedInitiatives,
             tags: entry.tags,
         };
+        if (entry.status)
+            front.status = entry.status;
         if (entry.lifecycle)
             front.lifecycle = entry.lifecycle;
         if (entry.knowledgeType)
@@ -71,6 +92,80 @@ class WikiManager {
         if (entry.relatedWiki && entry.relatedWiki.length > 0)
             front.related_wiki = entry.relatedWiki;
         return `---\n${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('\n')}\n---\n\n`;
+    }
+    /**
+     * Serialize a WikiEntry's frontmatter losslessly when raw frontmatter was
+     * captured at parse time: start from the original lines, replace only
+     * managed keys whose value changed, drop managed keys the caller cleared,
+     * append managed keys that are new, and keep every unknown key and the
+     * original formatting verbatim. Identity keys (id, category) present in the
+     * raw block are never rewritten, preserving path-style ids and singular
+     * consumer categories. Falls back to a full rebuild when no raw frontmatter
+     * was captured (freshly constructed entries).
+     */
+    serializeFrontmatter(entry) {
+        const raw = entry.rawFrontmatter;
+        if (!raw)
+            return this.toFrontmatter(entry);
+        const managed = this.managedFrontmatterValues(entry, raw);
+        const seen = new Set();
+        const out = [];
+        for (const line of raw.lines) {
+            const keyMatch = line.match(/^([^:]+):/);
+            if (!keyMatch) {
+                out.push(line);
+                continue;
+            }
+            const rawKey = keyMatch[1].trim();
+            const logical = RAW_KEY_ALIASES[rawKey] ?? rawKey;
+            if (!managed.has(logical) || seen.has(logical)) {
+                out.push(line);
+                continue;
+            }
+            seen.add(logical);
+            const next = managed.get(logical);
+            if (next === REMOVE_KEY)
+                continue;
+            const prev = raw.values[rawKey];
+            if (prev !== undefined && JSON.stringify(prev) === JSON.stringify(next)) {
+                out.push(line);
+                continue;
+            }
+            out.push(`${rawKey}: ${JSON.stringify(next)}`);
+        }
+        for (const [logical, next] of managed) {
+            if (seen.has(logical) || next === REMOVE_KEY)
+                continue;
+            out.push(`${logical}: ${JSON.stringify(next)}`);
+        }
+        const nl = raw.newline;
+        return `---${nl}${out.join(nl)}${nl}---${nl}${nl}`;
+    }
+    /**
+     * Managed key → next value for a merged write. Identity keys (id, category)
+     * are managed only when absent from the raw block (appended canonically);
+     * when present their original lines are preserved verbatim. Optional fields
+     * the caller cleared map to REMOVE_KEY so their line is dropped.
+     */
+    managedFrontmatterValues(entry, raw) {
+        const managed = new Map();
+        if (raw.values.id === undefined)
+            managed.set('id', entry.id);
+        if (raw.values.category === undefined)
+            managed.set('category', entry.category);
+        managed.set('title', entry.title);
+        managed.set('created', entry.created);
+        managed.set('updated', entry.updated);
+        managed.set('related_initiatives', entry.relatedInitiatives);
+        managed.set('tags', entry.tags);
+        managed.set('status', entry.status !== undefined ? entry.status : REMOVE_KEY);
+        managed.set('lifecycle', entry.lifecycle !== undefined ? entry.lifecycle : REMOVE_KEY);
+        managed.set('knowledge_type', entry.knowledgeType !== undefined ? entry.knowledgeType : REMOVE_KEY);
+        managed.set('confidence', entry.confidence !== undefined ? entry.confidence : REMOVE_KEY);
+        managed.set('source_initiatives', entry.sourceInitiatives && entry.sourceInitiatives.length > 0 ? entry.sourceInitiatives : REMOVE_KEY);
+        managed.set('supersedes', entry.supersedes && entry.supersedes.length > 0 ? entry.supersedes : REMOVE_KEY);
+        managed.set('related_wiki', entry.relatedWiki && entry.relatedWiki.length > 0 ? entry.relatedWiki : REMOVE_KEY);
+        return managed;
     }
     sanitizeName(name) {
         const base = path.basename(name);
@@ -108,7 +203,7 @@ class WikiManager {
         if (this.isRootCategory(entry.category)) {
             this.assertRootWritable(id);
             const filePath = path.join(this.dir, `${id}.md`);
-            const content = this.toFrontmatter({ ...entry, category: '' }) + entry.content + this.generateReferencedBySection(entry.relatedInitiatives);
+            const content = this.serializeFrontmatter({ ...entry, category: '' }) + entry.content + this.generateReferencedBySection(entry.relatedInitiatives);
             fs.writeFileSync(filePath, content, 'utf8');
             this.updateIndices();
             return filePath;
@@ -118,7 +213,7 @@ class WikiManager {
         fs.mkdirSync(categoryDir, { recursive: true });
         const filePath = path.join(categoryDir, `${id}.md`);
         const referencedBy = this.generateReferencedBySection(entry.relatedInitiatives);
-        const content = this.toFrontmatter(entry) + entry.content + referencedBy;
+        const content = this.serializeFrontmatter(entry) + entry.content + referencedBy;
         fs.writeFileSync(filePath, content, 'utf8');
         this.updateIndices();
         return filePath;
@@ -163,6 +258,15 @@ class WikiManager {
         const hasFrontmatter = Object.keys(front).length > 0;
         if (!hasFrontmatter && !defaults.id)
             throw new Error('Invalid wiki entry format');
+        // Capture the raw frontmatter block for lossless merge on write.
+        const rawMatch = content.match(/---(\r?\n)([\s\S]*?)\r?\n---/);
+        const rawFrontmatter = rawMatch
+            ? {
+                lines: rawMatch[2].split(/\r?\n/),
+                newline: rawMatch[1] === '\r\n' ? '\r\n' : '\n',
+                values: front
+            }
+            : undefined;
         let body = hasFrontmatter ? content.replace(/---\n[\s\S]*?\n---/, '').trim() : content.trim();
         body = this.stripReferencedBySection(body);
         const firstHeading = body.match(/^#\s+(.+)$/m)?.[1]?.trim();
@@ -178,25 +282,30 @@ class WikiManager {
         // correct); otherwise fall back to the frontmatter category. This tolerates singular
         // consumer categories (e.g. "system") without breaking plural-canonical resolution.
         const canonicalCategory = defaults.category || (typeof front.category === 'string' ? front.category : '') || '';
+        // Copy parsed arrays: entry arrays must not alias rawFrontmatter.values,
+        // or later mutations (push/filter) would also mutate the merge baseline
+        // and the lossless merge would mistake a changed value for an untouched one.
         return {
             id: canonicalId,
             title: front.title || fallbackTitle,
             category: canonicalCategory,
             created: front.created || '',
             updated: front.updated || '',
-            relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
-            tags: Array.isArray(front.tags) ? front.tags : [],
+            relatedInitiatives: Array.isArray(front.related_initiatives) ? [...front.related_initiatives] : [],
+            tags: Array.isArray(front.tags) ? [...front.tags] : [],
             content: body,
+            status: front.status !== undefined ? String(front.status) : undefined,
             lifecycle: front.lifecycle || undefined,
             knowledgeType: front.knowledge_type || undefined,
             confidence: front.confidence || undefined,
             sourceInitiatives: Array.isArray(front.source_initiatives)
-                ? front.source_initiatives
+                ? [...front.source_initiatives]
                 : Array.isArray(front.sources)
-                    ? front.sources
+                    ? [...front.sources]
                     : undefined,
-            supersedes: Array.isArray(front.supersedes) ? front.supersedes : undefined,
-            relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : undefined
+            supersedes: Array.isArray(front.supersedes) ? [...front.supersedes] : undefined,
+            relatedWiki: Array.isArray(front.related_wiki) ? [...front.related_wiki] : undefined,
+            rawFrontmatter
         };
     }
     parseRelatedWiki(content) {
@@ -242,7 +351,7 @@ class WikiManager {
             entry.updated = new Date().toISOString().split('T')[0];
             const cleanContent = this.stripReferencedBySection(entry.content);
             const referencedBy = this.generateReferencedBySection(entry.relatedInitiatives);
-            fs.writeFileSync(filePath, this.toFrontmatter({ ...entry, category: '' }) + cleanContent + referencedBy, 'utf8');
+            fs.writeFileSync(filePath, this.serializeFrontmatter({ ...entry, category: '' }) + cleanContent + referencedBy, 'utf8');
             this.updateIndices();
             return filePath;
         }
@@ -255,7 +364,7 @@ class WikiManager {
         // Strip any existing auto-generated Referenced By section before regenerating
         const cleanContent = this.stripReferencedBySection(entry.content);
         const referencedBy = this.generateReferencedBySection(entry.relatedInitiatives);
-        const content = this.toFrontmatter(entry) + cleanContent + referencedBy;
+        const content = this.serializeFrontmatter(entry) + cleanContent + referencedBy;
         fs.writeFileSync(filePath, content, 'utf8');
         this.updateIndices();
         return filePath;
@@ -286,6 +395,32 @@ class WikiManager {
         }
         if (parts.length === 2)
             return this.addRelatedInitiative(parts[0], parts[1].replace(/\.md$/, ''), initiativeId);
+        throw new Error(`Invalid wikiSlug format: ${ref}. Expected id or category/id`);
+    }
+    /**
+     * Surgical inverse of addRelatedInitiativeByRef: removes one initiative id
+     * from a page's related_initiatives. Lossless (routes through the
+     * raw-frontmatter merge). Used to roll back failed bidirectional links.
+     */
+    removeRelatedInitiativeByRef(ref, initiativeId) {
+        const parts = ref.split('/').filter(Boolean);
+        const apply = (entry, category, entryId) => {
+            if (!entry)
+                throw new Error(`Wiki entry not found: ${ref}`);
+            if (entry.relatedInitiatives.includes(initiativeId)) {
+                entry.relatedInitiatives = entry.relatedInitiatives.filter(item => item !== initiativeId);
+                entry.updated = new Date().toISOString().split('T')[0];
+            }
+            return this.update(category, entryId, entry);
+        };
+        if (parts.length === 1) {
+            const id = parts[0].replace(/\.md$/, '');
+            return apply(this.readRoot(id), '', id);
+        }
+        if (parts.length === 2) {
+            const id = parts[1].replace(/\.md$/, '');
+            return apply(this.read(parts[0], id), parts[0], id);
+        }
         throw new Error(`Invalid wikiSlug format: ${ref}. Expected id or category/id`);
     }
     getReferencedBy(category, id) {
@@ -581,6 +716,14 @@ tags: []
                         errors.push(`${relativeName} missing title`);
                     if (!entry.category)
                         errors.push(`${relativeName} missing category`);
+                    const raw = entry.rawFrontmatter?.values || {};
+                    const stem = fileName.replace(/\.md$/, '');
+                    if (typeof raw.id === 'string' && raw.id !== stem && raw.id !== `${category}/${stem}`) {
+                        errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${category}/${stem}`);
+                    }
+                    if (typeof raw.category === 'string' && !categoryMatchesDir(raw.category, category)) {
+                        errors.push(`${relativeName} raw category ${raw.category} does not match directory ${category}`);
+                    }
                     const hasSourceInitiatives = Array.isArray(entry.sourceInitiatives) && entry.sourceInitiatives.length > 0;
                     const isStable = entry.lifecycle === 'stable';
                     const isStandaloneCategory = this.standaloneCategories.has(entry.category);
@@ -604,12 +747,57 @@ tags: []
                     errors.push(`${relativeName} missing id`);
                 if (!entry.title)
                     errors.push(`${relativeName} missing title`);
+                const raw = entry.rawFrontmatter?.values || {};
+                const stem = path.basename(filePath, '.md');
+                if (typeof raw.id === 'string' && raw.id !== stem)
+                    errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${stem}`);
+                if (typeof raw.category === 'string' && raw.category !== '')
+                    errors.push(`${relativeName} raw category ${raw.category} does not match root wiki`);
             }
             catch (err) {
                 errors.push(`${relativeName} invalid wiki entry format: ${err.message || String(err)}`);
             }
         }
+        if (this.contract.initiativeMode === 'directory' && this.contract.wikiIndexOwner === 'external') {
+            const indexPath = path.join(this.dir, 'index.md');
+            if (!fs.existsSync(indexPath)) {
+                errors.push('wiki/index.md missing external compiled index');
+            }
+            else {
+                const refs = this.markdownDestinations(fs.readFileSync(indexPath, 'utf8'));
+                for (const entry of this.list()) {
+                    if (entry.id === 'index' && entry.category === '')
+                        continue;
+                    const ref = entry.category ? `${entry.category}/${entry.id}` : entry.id;
+                    // A bare ID only identifies a root page. Category pages need their
+                    // category in the destination so another category cannot satisfy it.
+                    if (!refs.has(ref) && (entry.category || !refs.has(entry.id)))
+                        errors.push(`wiki/index.md missing link to wiki page: ${ref}`);
+                }
+            }
+        }
         return { valid: errors.length === 0, errors, warnings };
+    }
+    markdownDestinations(content) {
+        const refs = new Set();
+        const addRef = (value) => {
+            let ref = value.split(/[?#]/)[0].replace(/\\/g, '/');
+            while (ref.startsWith('./'))
+                ref = ref.slice(2);
+            if (ref.endsWith('.md'))
+                ref = ref.slice(0, -3);
+            if (ref)
+                refs.add(ref.replace(/\/$/, ''));
+        };
+        for (const match of content.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)) {
+            addRef(match[1]);
+        }
+        // External indexes may use canonical paths in code spans. Require at
+        // least category/id so ordinary backticked prose is never membership.
+        for (const match of content.matchAll(/`((?:\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)+\/?)`/g)) {
+            addRef(match[1]);
+        }
+        return refs;
     }
     rootWikiFiles() {
         if (!fs.existsSync(this.dir))

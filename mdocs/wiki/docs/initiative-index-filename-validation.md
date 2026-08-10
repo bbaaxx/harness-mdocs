@@ -3,7 +3,7 @@ id: "initiative-index-filename-validation"
 title: "Initiative INDEX filename validation"
 category: "docs"
 created: "2026-07-03"
-updated: "2026-07-03"
+updated: "2026-08-10"
 related_initiatives: ["fix-initiative-index-validation-false-positive","sync-plugin-validation-runtime"]
 tags: ["validation","initiatives","index"]
 lifecycle: "stable"

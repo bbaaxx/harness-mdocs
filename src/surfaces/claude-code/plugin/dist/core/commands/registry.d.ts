@@ -1,4 +1,5 @@
 import { AuditLog } from '../audit';
+import { MdocsContract } from '../contract';
 import { InitiativeManager } from '../managers/initiative';
 import { MdocsManager } from '../managers/mdocs';
 import { WikiManager } from '../managers/wiki';
@@ -16,6 +17,7 @@ export interface MdocsCommandContext {
     audit: AuditLog;
     linter: MdocsLinter;
     dispatch: SubagentAssembler;
+    contract: MdocsContract;
 }
 export declare class MdocsCommandRegistry {
     private readonly context;
@@ -74,15 +76,53 @@ export declare class MdocsCommandRegistry {
         clean: boolean;
     };
     private createInitiative;
+    /**
+     * initiative.update — explicit mutation result. snake_case inputs are
+     * normalized to camelCase. Fields the store will not persist are reported
+     * in `skippedFields` (metadata-only mode: anything outside the lifecycle
+     * set, plus an unpersisted progressNote); fields the command does not
+     * support at all (objective, plan, unknown keys) are rejected explicitly in
+     * `unsupportedFields` with no write. Persisted fields are verified by
+     * re-reading the initiative from disk before they are reported as applied.
+     */
     private updateInitiative;
+    /**
+     * Whether initiative.update can persist `field` under metadata-only mode.
+     * Only lifecycle keys are rewritten; next_action only when the consumer
+     * file already carries the key.
+     */
+    private metadataOnlyPersistable;
     private doneInitiative;
     private deleteInitiative;
     private archiveInitiative;
     private createWiki;
+    /**
+     * wiki.update — lossless, explicit mutation result. snake_case inputs are
+     * normalized to camelCase. Unknown fields are rejected in
+     * `unsupportedFields` with no write. Requested changes are verified by
+     * re-reading the page from disk; if a requested change did not persist the
+     * result is non-success with the failed fields listed.
+     */
     private updateWiki;
     private stubWiki;
     private deleteWiki;
     private listWiki;
+    /**
+     * wiki.link — bidirectional, postcondition-verified link.
+     *
+     * - Under directory metadata-only mode the initiative-side `related_wiki`
+     *   is persisted via a surgical frontmatter-array mutation (the whitelisted
+     *   update would silently drop it).
+     * - Self-backlink guard: linking an initiative to its own compiled page
+     *   (category `initiatives`/`initiative`, id equal to the initiative id) is
+     *   provenance, not a link — no self `related_initiatives` entry and no
+     *   `related_wiki` self-entry are written; the result is success with
+     *   `selfLink: true`, never `bidirectional: true`.
+     * - After both writes, both sides are read back from disk; only a verified
+     *   pair returns `bidirectional: true`. If the wiki side fails after the
+     *   initiative side was written, the initiative side is rolled back
+     *   surgically so no partial mutation remains.
+     */
     private linkWiki;
     private crossReferenceWiki;
     /**

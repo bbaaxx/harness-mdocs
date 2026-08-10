@@ -13,6 +13,8 @@ export declare class InitiativeManager {
     private sanitizeFileName;
     private toFrontmatter;
     private initiativeFiles;
+    private validationFiles;
+    private markdownDestinations;
     private listedIndexFiles;
     private assertUniqueId;
     assertWriteSupported(operation: string): void;
@@ -31,6 +33,20 @@ export declare class InitiativeManager {
         archivedFilename: string;
         archiveIndex: string;
     };
+    /**
+     * Add one wiki ref to the initiative's related_wiki. Under directory
+     * metadata-only mode this is a surgical frontmatter-array mutation (body
+     * and unrelated frontmatter preserved byte-for-byte, key created if
+     * absent); every other mode routes through the standard full update.
+     * Idempotent: returns false when the ref was already linked.
+     */
+    addRelatedWikiLink(fileName: string, ref: string): boolean;
+    /**
+     * Remove one wiki ref from the initiative's related_wiki. Mirrors
+     * addRelatedWikiLink; used to roll back failed bidirectional links.
+     * Idempotent: returns false when the ref was not linked.
+     */
+    removeRelatedWikiLink(fileName: string, ref: string): boolean;
     findById(id: string): Initiative | null;
     findKeyById(id: string): string | null;
     findByQuery(query: string): {
@@ -47,6 +63,7 @@ export declare class InitiativeManager {
         errors: string[];
         warnings: string[];
     };
+    private statusesEquivalent;
     checkConsistency(): {
         consistent: boolean;
         missing: string[];

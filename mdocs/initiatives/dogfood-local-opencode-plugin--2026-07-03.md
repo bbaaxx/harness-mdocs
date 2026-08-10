@@ -3,10 +3,10 @@ id: "dogfood-local-opencode-plugin"
 title: "Dogfood local OpenCode plugin build"
 status: "done"
 created: "2026-07-03"
-updated: "2026-07-03"
+updated: "2026-08-10"
 owner: ""
 tags: ["opencode","dogfood","plugin","config"]
-related_wiki: []
+related_wiki: ["docs/opencode-local-plugin-dogfood-config"]
 priority: "medium"
 ---
 

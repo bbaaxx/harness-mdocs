@@ -3,7 +3,7 @@ id: "claude-code-project-mcp-location"
 title: "Claude Code project MCP lives in .mcp.json, not settings.json"
 category: "architecture"
 created: "2026-06-22"
-updated: "2026-06-22"
+updated: "2026-08-10"
 related_initiatives: ["fix-claude-code-install-template-and-cli-help","workflow-state-machine-has-no-driver"]
 tags: ["claude-code","mcp","install","convention","surfaces"]
 lifecycle: "stable"
