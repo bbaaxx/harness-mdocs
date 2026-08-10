@@ -28,8 +28,12 @@ Minor release shipping safe metadata-only mutations and stronger directory-v2 in
 - `mdocs:validate` returned `valid=true`, with one pre-existing `release-0-7-1` stable-learning warning.
 - `npm pack --dry-run` produced `harness-mdocs-0.8.0.tgz` with 298 files, 831.3 kB package size, and 5.0 MB unpacked size.
 
-## Publish Handoff
-- After release-prep commit is pushed to `main`, explicitly approve creation and push of tag `v0.8.0`. The tag triggers npm Trusted Publishing and GitHub Release creation.
+## Published
+- Commit: `d350501` (`chore(release): prepare 0.8.0`).
+- Tag: `v0.8.0`.
+- GitHub Publish workflow: [31438749699](https://github.com/bbaaxx/harness-mdocs/actions/runs/31438749699) succeeded.
+- npm: `harness-mdocs@0.8.0` published and assigned `latest`.
+- GitHub Release: https://github.com/bbaaxx/harness-mdocs/releases/tag/v0.8.0
 
 
 ## Referenced By
