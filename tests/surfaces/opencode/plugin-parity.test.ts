@@ -648,7 +648,14 @@ Existing file
       }
     });
 
-    expect(result).toEqual({ success: true, filename: 'stable-id--2026-05-27.md', id: 'stable-id' });
+    expect(result).toEqual({
+      success: true,
+      filename: 'stable-id--2026-05-27.md',
+      id: 'stable-id',
+      appliedFields: ['status', 'tags', 'priority', 'dueDate', 'dependsOn', 'owner', 'progressNote'],
+      skippedFields: [],
+      unsupportedFields: []
+    });
     expect(fs.existsSync(legacyPath)).toBe(false);
 
     const updated = manager.read('stable-id--2026-05-27.md');

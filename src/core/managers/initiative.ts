@@ -327,6 +327,44 @@ export class InitiativeManager {
     return { archivedFilename: sanitized, archiveIndex: path.join(archiveDir, 'INDEX.md') };
   }
 
+  /**
+   * Add one wiki ref to the initiative's related_wiki. Under directory
+   * metadata-only mode this is a surgical frontmatter-array mutation (body
+   * and unrelated frontmatter preserved byte-for-byte, key created if
+   * absent); every other mode routes through the standard full update.
+   * Idempotent: returns false when the ref was already linked.
+   */
+  addRelatedWikiLink(fileName: string, ref: string): boolean {
+    if (this.contract.initiativeMode === 'directory' && this.contract.initiativeRecordMode === 'metadata-only') {
+      return this.store.addFrontmatterArrayValue(fileName, 'related_wiki', ref);
+    }
+    const initiative = this.read(fileName);
+    if (!initiative) throw new Error(`Initiative file not found: ${fileName}`);
+    if (initiative.relatedWiki.includes(ref)) return false;
+    initiative.relatedWiki.push(ref);
+    initiative.updated = new Date().toISOString().split('T')[0];
+    this.update(fileName, initiative);
+    return true;
+  }
+
+  /**
+   * Remove one wiki ref from the initiative's related_wiki. Mirrors
+   * addRelatedWikiLink; used to roll back failed bidirectional links.
+   * Idempotent: returns false when the ref was not linked.
+   */
+  removeRelatedWikiLink(fileName: string, ref: string): boolean {
+    if (this.contract.initiativeMode === 'directory' && this.contract.initiativeRecordMode === 'metadata-only') {
+      return this.store.removeFrontmatterArrayValue(fileName, 'related_wiki', ref);
+    }
+    const initiative = this.read(fileName);
+    if (!initiative) throw new Error(`Initiative file not found: ${fileName}`);
+    if (!initiative.relatedWiki.includes(ref)) return false;
+    initiative.relatedWiki = initiative.relatedWiki.filter(item => item !== ref);
+    initiative.updated = new Date().toISOString().split('T')[0];
+    this.update(fileName, initiative);
+    return true;
+  }
+
   findById(id: string): Initiative | null {
     return this.store.findById(id)?.initiative || null;
   }

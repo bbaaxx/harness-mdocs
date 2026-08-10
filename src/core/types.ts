@@ -70,6 +70,22 @@ export interface Initiative {
   graduated?: string;
 }
 
+/**
+ * Raw frontmatter captured when a wiki page is parsed. Stashed on the parsed
+ * WikiEntry (never serialized into frontmatter output) so update paths can
+ * merge managed keys into the original block instead of reconstructing it —
+ * preserving unknown keys, original key aliases (sources vs source_initiatives),
+ * path-style ids, singular categories, and formatting verbatim.
+ */
+export interface WikiRawFrontmatter {
+  /** Original lines between the --- fences, verbatim. */
+  lines: string[];
+  /** Newline style of the source file. */
+  newline: '\n' | '\r\n';
+  /** Parsed key→value projection of the raw block (alias spellings kept). */
+  values: Record<string, any>;
+}
+
 export interface WikiEntry {
   id: string;
   title: string;
@@ -79,12 +95,14 @@ export interface WikiEntry {
   relatedInitiatives: string[];
   tags: string[];
   content: string;
+  status?: string;
   lifecycle?: 'draft' | 'stable' | 'superseded' | 'needs-review';
   knowledgeType?: 'architecture' | 'decision' | 'how-to' | 'reference' | 'roadmap' | 'note';
   confidence?: 'low' | 'medium' | 'high';
   sourceInitiatives?: string[];
   supersedes?: string[];
   relatedWiki?: string[];
+  rawFrontmatter?: WikiRawFrontmatter;
 }
 
 export interface WorkflowState {
@@ -125,8 +143,8 @@ export interface SearchOptions {
 }
 
 export type WikiIngestOp =
-  | { type: 'createPage'; category: string; id: string; title: string; content?: string; tags?: string[]; relatedInitiatives?: string[]; lifecycle?: WikiEntry['lifecycle']; knowledgeType?: WikiEntry['knowledgeType']; confidence?: WikiEntry['confidence'] }
-  | { type: 'updatePage'; category: string; id: string; content?: string; lifecycle?: WikiEntry['lifecycle']; tags?: string[]; relatedInitiatives?: string[] }
+  | { type: 'createPage'; category: string; id: string; title: string; content?: string; tags?: string[]; relatedInitiatives?: string[]; status?: string; lifecycle?: WikiEntry['lifecycle']; knowledgeType?: WikiEntry['knowledgeType']; confidence?: WikiEntry['confidence'] }
+  | { type: 'updatePage'; category: string; id: string; content?: string; status?: string; lifecycle?: WikiEntry['lifecycle']; tags?: string[]; relatedInitiatives?: string[] }
   | { type: 'updateOverviewSection'; section: string; body: string }
   | { type: 'appendLog'; entry: { timestamp?: string; date?: string; operation?: string; subject?: string; content: string } | string }
   | { type: 'link'; initiativeId: string; wikiSlug: string };

@@ -80,7 +80,8 @@ export function createMdocsCore(projectDir: string, options: MdocsCoreOptions = 
     search,
     audit,
     linter,
-    dispatch
+    dispatch,
+    contract
   });
 
   return {

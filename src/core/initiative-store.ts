@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { MdocsContract } from './contract';
-import { Initiative, isCompleted, parseFrontmatter, PlanItemStatus, readExpectedDurationRaw, Status } from './types';
+import { Initiative, isCompleted, parseFrontmatter, parseYamlValue, PlanItemStatus, readExpectedDurationRaw, Status } from './types';
 
 // Lifecycle keys honored under metadata-only mode. Core bookkeeping keys
 // (status/updated/completed/graduated) are added-or-updated so lifecycle
@@ -362,7 +362,7 @@ export class InitiativeStore {
         }
       }
       const body = match[3] || '';
-      fs.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${newline}${body.replace(/^\r?\n/, '')}`, 'utf8');
+      fs.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${match[2]}${body}`, 'utf8');
       return;
     }
 
@@ -375,6 +375,73 @@ export class InitiativeStore {
     let body = match[3] || '';
     if (progressNote) body = this.appendProgressNote(body, progressNote, newline);
     fs.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${newline}${body.replace(/^\r?\n/, '')}`, 'utf8');
+  }
+
+  /**
+   * Surgical frontmatter-array mutation for explicit link operations. Adds or
+   * removes one value in a named frontmatter array key (e.g. `related_wiki`)
+   * by line-based rewrite, preserving the body and every other frontmatter
+   * line byte-for-byte. Creates the key (JSON array form) when absent on add.
+   * Idempotent: returns false when the array already contains (add) or does
+   * not contain (remove) the value and leaves the file untouched.
+   *
+   * Unlike updateStatusFile's metadata-only lifecycle path this MAY introduce
+   * the named key: an explicit link operation is a structural mutation the
+   * caller asked for, not a lifecycle refresh.
+   */
+  addFrontmatterArrayValue(key: string, arrayKey: string, value: string): boolean {
+    return this.mutateFrontmatterArrayForKey(key, arrayKey, value, 'add');
+  }
+
+  removeFrontmatterArrayValue(key: string, arrayKey: string, value: string): boolean {
+    return this.mutateFrontmatterArrayForKey(key, arrayKey, value, 'remove');
+  }
+
+  private mutateFrontmatterArrayForKey(key: string, arrayKey: string, value: string, op: 'add' | 'remove'): boolean {
+    const record = this.read(key);
+    if (!record || record.sourceKind !== 'directory-status' || record.archived) {
+      throw new Error(`Directory initiative not found: ${key}`);
+    }
+    return this.mutateFrontmatterArray(record.filePath, arrayKey, value, op);
+  }
+
+  private mutateFrontmatterArray(filePath: string, arrayKey: string, value: string, op: 'add' | 'remove'): boolean {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n?)([\s\S]*)$/);
+    if (!match) throw new Error(`Invalid initiative status format: ${filePath}`);
+    const newline = content.includes('\r\n') ? '\r\n' : '\n';
+    const lines = match[1].split(/\r?\n/);
+
+    const index = lines.findIndex(line => line.match(new RegExp(`^${arrayKey}:`)));
+    let current: string[] = [];
+    let inlineYaml = false;
+    if (index >= 0) {
+      const rawValue = lines[index].slice(lines[index].indexOf(':') + 1).trim();
+      const parsed = parseYamlValue(rawValue);
+      current = Array.isArray(parsed) ? parsed.map(String) : [];
+      // Preserve the consumer's YAML inline style (`[a, b]`) when the original
+      // line used it; JSON arrays keep JSON serialization.
+      inlineYaml = rawValue.startsWith('[') && !rawValue.includes('"');
+    }
+
+    const changed = op === 'add' ? !current.includes(value) : current.includes(value);
+    if (!changed) return false;
+    const next = op === 'add' ? [...current, value] : current.filter(item => item !== value);
+    if (op === 'remove' && next.length === 0 && index >= 0) {
+      // Removing the last value drops the key entirely so an add+remove pair
+      // (e.g. link rollback) restores the file byte-for-byte.
+      lines.splice(index, 1);
+    } else {
+      const nextLine = inlineYaml ? `${arrayKey}: [${next.join(', ')}]` : `${arrayKey}: ${JSON.stringify(next)}`;
+      if (index >= 0) lines[index] = nextLine;
+      else lines.push(nextLine);
+    }
+
+    const body = match[3] || '';
+    // Preserve everything after the closing fence (separator + body)
+    // byte-for-byte so add+remove pairs restore the original file exactly.
+    fs.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${match[2]}${body}`, 'utf8');
+    return true;
   }
 
   private appendProgressNote(body: string, progressNote: string, newline: string): string {
