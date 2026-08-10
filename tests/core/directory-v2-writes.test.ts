@@ -23,6 +23,18 @@ test('directory-v2 wiki.link accepts root wiki references', async () => {
   copyDir(fixtureRoot, projectDir);
   const core = createMdocsCore(projectDir);
   const statusPath = path.join(projectDir, 'mdocs', 'initiatives', 'example-active', '_status.md');
+  fs.mkdirSync(path.join(projectDir, 'mdocs', 'wiki', 'initiatives'), { recursive: true });
+  fs.writeFileSync(path.join(projectDir, 'mdocs', 'wiki', 'initiatives', 'example-active.md'), `---
+id: initiatives/example-active
+title: Example Active
+category: initiative
+status: active
+related_initiatives: []
+tags: []
+---
+`, 'utf8');
+  fs.writeFileSync(path.join(projectDir, 'mdocs', 'initiatives', 'INDEX.md'), '# Initiatives\n- [Active](example-active/_status.md)\n- [Complete](example-complete/_status.md)\n', 'utf8');
+  fs.writeFileSync(path.join(projectDir, 'mdocs', 'wiki', 'index.md'), '# Wiki\n- [System](systems/system-page.md)\n- [Overview](overview.md)\n- [Active](initiatives/example-active.md)\n', 'utf8');
   fs.writeFileSync(path.join(projectDir, 'mdocs', 'wiki', 'overview.md'), `---
 id: overview
 title: Overview
@@ -34,6 +46,8 @@ tags: []
 ---
 
 Root overview.
+
+- [Active](initiatives/example-active.md)
 `, 'utf8');
 
   const result = await core.commands.execute('wiki.link', { initiativeId: 'example-active', wikiSlug: 'overview' });

@@ -26,6 +26,11 @@ function categoryMatchesDir(category: string, dir: string): boolean {
   return catS === dirS || category === dirS + 's' || dir === catS + 's';
 }
 
+function isCategoryWikiRef(ref: string, wiki: { category: string; id: string }): boolean {
+  const parts = ref.split('/');
+  return parts.length === 2 && parts[0] !== '' && parts[1] === wiki.id && categoryMatchesDir(parts[0], wiki.category);
+}
+
 function slugify(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
@@ -130,7 +135,7 @@ export class MdocsLinter {
     }
 
     // Collect all wiki data
-    const wikiData: { id: string; category: string; relatedInitiatives: string[]; sourceInitiatives: string[]; lifecycle?: string; filePath: string }[] = [];
+    const wikiData: { id: string; category: string; relatedInitiatives: string[]; sourceInitiatives: string[]; relatedWiki: string[]; lifecycle?: string; filePath: string }[] = [];
     if (fs.existsSync(wikiDir)) {
       for (const filePath of this.rootWikiFiles()) {
         try {
@@ -138,10 +143,11 @@ export class MdocsLinter {
           const front = parseFrontmatter(content);
           const stem = path.basename(filePath, '.md');
           wikiData.push({
-            id: front.id || stem,
-            category: front.category || '',
+            id: stem,
+            category: '',
             relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
             sourceInitiatives: Array.isArray(front.source_initiatives) ? front.source_initiatives : Array.isArray(front.sources) ? front.sources : [],
+            relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
             lifecycle: front.lifecycle,
             filePath: path.basename(filePath)
           });
@@ -155,12 +161,13 @@ export class MdocsLinter {
           try {
             const content = fs.readFileSync(path.join(catDir, f), 'utf8');
             const front = parseFrontmatter(content);
-            const id = front.id || f.replace('.md', '');
+            const id = f.replace(/\.md$/, '');
             wikiData.push({
               id,
-              category: front.category || category,
+              category,
               relatedInitiatives: Array.isArray(front.related_initiatives) ? front.related_initiatives : [],
               sourceInitiatives: Array.isArray(front.source_initiatives) ? front.source_initiatives : Array.isArray(front.sources) ? front.sources : [],
+              relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
               lifecycle: front.lifecycle,
               filePath: `${category}/${f}`
             });
@@ -178,17 +185,23 @@ export class MdocsLinter {
       }
     }
     const initiativeIds = new Set([...canonicalInitiatives, ...initiativeAliases.keys()]);
-    const wikiRefs = new Set(wikiData.flatMap(w => [w.category ? `${w.category}/${w.id}` : w.id, w.id]));
+    const resolveWikiRef = (ref: string) => wikiData.find(wiki => wiki.category
+      ? isCategoryWikiRef(ref, wiki)
+      : ref === wiki.id);
 
     // Check initiative related_wiki
     for (const init of initiativeData) {
       for (const wikiRef of init.relatedWiki) {
         // Broken reference
-        if (!wikiRefs.has(wikiRef)) {
+        const target = resolveWikiRef(wikiRef);
+        if (!target) {
           issues.push({
             severity: 'warning',
             message: `Initiative ${init.id} references missing wiki ${wikiRef}`
           });
+        }
+        if (target && (target.category === 'initiative' || target.category === 'initiatives') && target.id === init.id) {
+          issues.push({ severity: 'error', message: `Initiative ${init.id} has self related_wiki reference ${wikiRef}` });
         }
       }
 
@@ -196,7 +209,7 @@ export class MdocsLinter {
       if (isCompleted(init.status)) {
         const initRefs = new Set([init.id, init.slug]);
         const stableWikiLinks = init.relatedWiki.filter(ref => {
-          const wikiEntry = wikiData.find(w => (w.category ? `${w.category}/${w.id}` : w.id) === ref || w.id === ref);
+          const wikiEntry = resolveWikiRef(ref);
           return wikiEntry && wikiEntry.lifecycle === 'stable';
         });
         const stableSourceWiki = wikiData.some(wiki => wiki.lifecycle === 'stable' && wiki.sourceInitiatives.some(source => initRefs.has(source)));
@@ -225,6 +238,31 @@ export class MdocsLinter {
             message: `Wiki ${wiki.category}/${wiki.id} references initiative alias ${initRef}; canonical id is ${initiativeAliases.get(initRef)}`
           });
         }
+        const canonicalId = initiativeAliases.get(initRef);
+        const canonicalInit = initiativeData.find(init => init.id === initRef || init.slug === initRef || init.id === canonicalId);
+        if (canonicalInit) {
+          const wikiRef = wiki.category ? `${wiki.category}/${wiki.id}` : wiki.id;
+          const isOwnCompiledPage = (wiki.category === 'initiative' || wiki.category === 'initiatives') && wiki.id === canonicalInit.id;
+          const hasReciprocal = wiki.category
+            ? canonicalInit.relatedWiki.some(ref => isCategoryWikiRef(ref, wiki))
+            : canonicalInit.relatedWiki.includes(wiki.id);
+          if (!isOwnCompiledPage && !hasReciprocal) {
+            issues.push({ severity: 'error', message: `Initiative ${canonicalInit.id} missing reciprocal related_wiki link to ${wikiRef}` });
+          }
+        }
+      }
+      const wikiRef = wiki.category ? `${wiki.category}/${wiki.id}` : wiki.id;
+      const hasSelfRelatedInitiative = wiki.relatedInitiatives.some(initRef =>
+        (canonicalInitiatives.has(initRef) ? initRef : initiativeAliases.get(initRef) ?? initRef) === wiki.id
+      );
+      if ((wiki.category === 'initiative' || wiki.category === 'initiatives') && hasSelfRelatedInitiative) {
+        issues.push({ severity: 'error', message: `Compiled initiative page ${wikiRef} has self related_initiatives reference` });
+      }
+      const hasSelfRelatedWiki = wiki.category
+        ? wiki.relatedWiki.some(ref => isCategoryWikiRef(ref, wiki))
+        : wiki.relatedWiki.includes(wiki.id);
+      if (hasSelfRelatedWiki) {
+        issues.push({ severity: 'error', message: `Wiki ${wikiRef} has self related_wiki reference` });
       }
       for (const initRef of wiki.sourceInitiatives) {
         if (!initiativeIds.has(initRef)) {
@@ -244,7 +282,7 @@ export class MdocsLinter {
       // Check backlinks: initiatives referencing this wiki should have this initiative in their backlinks
       for (const init of initiativeData) {
         const wikiRef = wiki.category ? `${wiki.category}/${wiki.id}` : wiki.id;
-        if (init.relatedWiki.includes(wikiRef)) {
+        if (init.relatedWiki.some(ref => resolveWikiRef(ref) === wiki)) {
           // Initiative references this wiki entry - check if wiki has backlink
           if (!wiki.relatedInitiatives.includes(init.id) && !wiki.sourceInitiatives.includes(init.id) && !wiki.sourceInitiatives.includes(init.slug)) {
             issues.push({

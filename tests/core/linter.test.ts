@@ -110,6 +110,53 @@ Alias note.
     expect(messages).toContain('did you mean canonical-work?');
   });
 
+  test('graph detects compiled initiative self links through aliases', () => {
+    const linter = new MdocsLinter(testDir);
+    fs.mkdirSync(path.join(testDir, 'wiki', 'initiative'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'initiatives', 'canonical-work--2025-05-24.md'), `---
+id: canonical-work
+title: Canonical Work
+status: active
+created: 2025-05-24
+updated: 2025-05-24
+owner: test
+tags: [test]
+aliases: [Old Work]
+related_wiki: []
+---
+
+## Objective
+This objective has enough detail to cover compiled initiative self-link validation.
+
+## Plan
+- [ ] Implement validation in src/core/validation/linter.ts
+
+## Progress Log
+- Created
+
+## Artifacts
+- src/core/validation/linter.ts
+
+## Acceptance Criteria
+- Alias self link is reported
+`, 'utf8');
+    fs.writeFileSync(path.join(testDir, 'wiki', 'initiative', 'canonical-work.md'), `---
+id: canonical-work
+title: Canonical Work
+category: initiative
+created: 2025-05-24
+updated: 2025-05-24
+related_initiatives: [old-work]
+tags: [test]
+---
+
+Compiled initiative page.
+`, 'utf8');
+
+    const messages = linter.lintAll().find(result => result.file === 'GRAPH')?.issues.map(issue => issue.message).join('\n') || '';
+    expect(messages).toContain('Compiled initiative page initiative/canonical-work has self related_initiatives reference');
+  });
+
   test('graph treats canonical ids as canonical even when another initiative has matching alias', () => {
     const linter = new MdocsLinter(testDir);
     fs.writeFileSync(path.join(testDir, 'initiatives', 'alias-owner--2025-05-24.md'), `---
@@ -366,7 +413,7 @@ created: 2025-05-24
 updated: 2025-05-24
 owner: test
 tags: [test]
-related_wiki: []
+related_wiki: [architecture/test-wiki]
 ---
 
 ## Objective

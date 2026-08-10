@@ -19,6 +19,12 @@ const RAW_KEY_ALIASES: Record<string, string> = {
   sources: 'source_initiatives'
 };
 
+function categoryMatchesDir(category: string, dir: string): boolean {
+  if (category === dir) return true;
+  const singular = (value: string) => value.endsWith('s') ? value.slice(0, -1) : value;
+  return singular(category) === singular(dir);
+}
+
 export interface WikiManagerOptions {
   standaloneCategories?: string[];
   compatibility?: MdocsCompatibilityConfig;
@@ -688,6 +694,14 @@ tags: []
           if (!entry.id) errors.push(`${relativeName} missing id`);
           if (!entry.title) errors.push(`${relativeName} missing title`);
           if (!entry.category) errors.push(`${relativeName} missing category`);
+          const raw = entry.rawFrontmatter?.values || {};
+          const stem = fileName.replace(/\.md$/, '');
+          if (typeof raw.id === 'string' && raw.id !== stem && raw.id !== `${category}/${stem}`) {
+            errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${category}/${stem}`);
+          }
+          if (typeof raw.category === 'string' && !categoryMatchesDir(raw.category, category)) {
+            errors.push(`${relativeName} raw category ${raw.category} does not match directory ${category}`);
+          }
           const hasSourceInitiatives = Array.isArray(entry.sourceInitiatives) && entry.sourceInitiatives.length > 0;
           const isStable = entry.lifecycle === 'stable';
           const isStandaloneCategory = this.standaloneCategories.has(entry.category);
@@ -708,12 +722,51 @@ tags: []
         if (!entry) continue;
         if (!entry.id) errors.push(`${relativeName} missing id`);
         if (!entry.title) errors.push(`${relativeName} missing title`);
+        const raw = entry.rawFrontmatter?.values || {};
+        const stem = path.basename(filePath, '.md');
+        if (typeof raw.id === 'string' && raw.id !== stem) errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${stem}`);
+        if (typeof raw.category === 'string' && raw.category !== '') errors.push(`${relativeName} raw category ${raw.category} does not match root wiki`);
       } catch (err: any) {
         errors.push(`${relativeName} invalid wiki entry format: ${err.message || String(err)}`);
       }
     }
 
+    if (this.contract.initiativeMode === 'directory' && this.contract.wikiIndexOwner === 'external') {
+      const indexPath = path.join(this.dir, 'index.md');
+      if (!fs.existsSync(indexPath)) {
+        errors.push('wiki/index.md missing external compiled index');
+      } else {
+        const refs = this.markdownDestinations(fs.readFileSync(indexPath, 'utf8'));
+        for (const entry of this.list()) {
+          if (entry.id === 'index' && entry.category === '') continue;
+          const ref = entry.category ? `${entry.category}/${entry.id}` : entry.id;
+          // A bare ID only identifies a root page. Category pages need their
+          // category in the destination so another category cannot satisfy it.
+          if (!refs.has(ref) && (entry.category || !refs.has(entry.id))) errors.push(`wiki/index.md missing link to wiki page: ${ref}`);
+        }
+      }
+    }
+
     return { valid: errors.length === 0, errors, warnings };
+  }
+
+  private markdownDestinations(content: string): Set<string> {
+    const refs = new Set<string>();
+    const addRef = (value: string) => {
+      let ref = value.split(/[?#]/)[0].replace(/\\/g, '/');
+      while (ref.startsWith('./')) ref = ref.slice(2);
+      if (ref.endsWith('.md')) ref = ref.slice(0, -3);
+      if (ref) refs.add(ref.replace(/\/$/, ''));
+    };
+    for (const match of content.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)) {
+      addRef(match[1]);
+    }
+    // External indexes may use canonical paths in code spans. Require at
+    // least category/id so ordinary backticked prose is never membership.
+    for (const match of content.matchAll(/`((?:\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)+\/?)`/g)) {
+      addRef(match[1]);
+    }
+    return refs;
   }
 
   private rootWikiFiles(): string[] {

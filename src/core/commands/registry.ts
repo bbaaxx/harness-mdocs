@@ -487,6 +487,10 @@ export class MdocsCommandRegistry {
     const category = args.category || '';
     const existing = category ? this.context.wiki.read(category, args.id) : this.context.wiki.readByRef(args.id);
     if (!existing) return { error: `Wiki entry not found: ${category ? `${category}/` : ''}${args.id}` };
+    const rawIdentity = {
+      id: existing.rawFrontmatter?.values.id,
+      category: existing.rawFrontmatter?.values.category
+    };
 
     const appliedFields: string[] = [];
     const appliedValues: Record<string, any> = {};
@@ -518,6 +522,9 @@ export class MdocsCommandRegistry {
       if (field === 'content') return String(actual ?? '').trim() !== String(expected ?? '').trim();
       return !fieldsPersistedEqual(actual, expected);
     });
+    if (!fieldsPersistedEqual(after?.rawFrontmatter?.values.id, rawIdentity.id) || !fieldsPersistedEqual(after?.rawFrontmatter?.values.category, rawIdentity.category)) {
+      failedFields.push('raw identity/category');
+    }
     if (failedFields.length > 0) {
       return {
         success: false,
@@ -661,12 +668,26 @@ export class MdocsCommandRegistry {
 
   private crossReferenceWiki(args: Record<string, any>) {
     if (!args.fromSlug || !args.toSlug) return { error: 'wiki.xref requires fromSlug and toSlug' };
-    const [fromCategory, fromId] = args.fromSlug.split('/');
-    const [toCategory, toId] = args.toSlug.split('/');
-    if (!fromCategory || !fromId) return { error: `Invalid fromSlug format: ${args.fromSlug}. Expected category/id` };
-    if (!toCategory || !toId) return { error: `Invalid toSlug format: ${args.toSlug}. Expected category/id` };
+    const parseCategoryRef = (ref: unknown): [string, string] | null => {
+      if (typeof ref !== 'string') return null;
+      const parts = ref.split('/');
+      return parts.length === 2 && parts[0] && parts[1] ? [parts[0], parts[1]] : null;
+    };
+    const fromRef = parseCategoryRef(args.fromSlug);
+    const toRef = parseCategoryRef(args.toSlug);
+    if (!fromRef) return { success: false, error: `Invalid fromSlug format: ${args.fromSlug}. Expected category/id` };
+    if (!toRef) return { success: false, error: `Invalid toSlug format: ${args.toSlug}. Expected category/id` };
+    const [fromCategory, fromId] = fromRef;
+    const [toCategory, toId] = toRef;
+    if (!this.context.wiki.read(toCategory, toId)) {
+      return { success: false, error: `Wiki target not found: ${args.toSlug}` };
+    }
     this.context.wiki.addWikiCrossRef(fromCategory, fromId, toCategory, toId);
-    return { success: true, bidirectional: true, fromSlug: args.fromSlug, toSlug: args.toSlug };
+    const from = this.context.wiki.read(fromCategory, fromId);
+    const persisted = !!from?.relatedWiki?.includes(`${toCategory}/${toId}`);
+    return persisted
+      ? { success: true, bidirectional: false, fromSlug: args.fromSlug, toSlug: args.toSlug }
+      : { success: false, bidirectional: false, error: 'wiki.xref postcondition failed: reference not persisted', fromSlug: args.fromSlug, toSlug: args.toSlug };
   }
 
   /**
@@ -725,8 +746,22 @@ export class MdocsCommandRegistry {
             if (!existing) {
               appliedOps.push({ type: op.type, ref, ok: false, error: 'not found' });
             } else {
+              const rawIdentity = {
+                id: existing.rawFrontmatter?.values.id,
+                category: existing.rawFrontmatter?.values.category
+              };
               const KNOWN_OP_KEYS = new Set(['type', 'category', 'id', 'content', 'status', 'lifecycle', 'tags', 'relatedInitiatives']);
               const unsupportedFields = Object.keys(op).filter(key => (op as any)[key] !== undefined && !KNOWN_OP_KEYS.has(key));
+              if (unsupportedFields.length > 0) {
+                appliedOps.push({
+                  type: op.type,
+                  ref,
+                  ok: false,
+                  error: `unsupported fields: ${unsupportedFields.join(', ')}`,
+                  unsupportedFields
+                });
+                continue;
+              }
               const appliedFields: string[] = [];
               const appliedValues: Record<string, any> = {};
               const applyOp = (field: string, value: any) => {
@@ -748,6 +783,9 @@ export class MdocsCommandRegistry {
                 if (field === 'content') return String(actual ?? '').trim() !== String(expected ?? '').trim();
                 return !fieldsPersistedEqual(actual, expected);
               });
+              if (!fieldsPersistedEqual(after?.rawFrontmatter?.values.id, rawIdentity.id) || !fieldsPersistedEqual(after?.rawFrontmatter?.values.category, rawIdentity.category)) {
+                failedFields.push('raw identity/category');
+              }
               if (failedFields.length > 0) {
                 appliedOps.push({
                   type: op.type,
@@ -759,7 +797,7 @@ export class MdocsCommandRegistry {
                   unsupportedFields
                 });
               } else {
-                appliedOps.push({ type: op.type, ref, ok: true, appliedFields, ...(unsupportedFields.length > 0 ? { unsupportedFields } : {}) });
+                appliedOps.push({ type: op.type, ref, ok: true, appliedFields });
                 changedFiles.push(path.relative(this.context.mdocsRoot, filePath));
               }
             }
@@ -813,7 +851,7 @@ export class MdocsCommandRegistry {
 
     const { appliedOps, changedFiles } = lockResult.value;
     return {
-      success: true,
+      success: appliedOps.every(operation => operation.ok),
       applied: appliedOps.length,
       operations: appliedOps,
       changedFiles,

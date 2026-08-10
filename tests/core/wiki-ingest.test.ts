@@ -131,7 +131,7 @@ describe('wiki.ingest command', () => {
       ]
     });
 
-    expect(result).toMatchObject({ success: true });
+    expect(result).toMatchObject({ success: false });
     expect(result.applied).toBe(2);
     const updateOp = result.operations.find((o: any) => o.type === 'updatePage');
     expect(updateOp).toMatchObject({ ok: false, error: 'not found' });
@@ -141,6 +141,21 @@ describe('wiki.ingest command', () => {
     // d2 was created despite the prior op failing.
     const d2Path = path.join(core.mdocsRoot, 'wiki', 'decisions', 'd2.md');
     expect(fs.existsSync(d2Path)).toBe(true);
+  });
+
+  test('updatePage rejects unsupported fields before writing', async () => {
+    const core = makeCore(projectDir);
+    await core.commands.execute('wiki.ingest', {
+      operations: [{ type: 'createPage', category: 'decisions', id: 'd1', title: 'D1', content: 'original' }]
+    });
+
+    const result = await core.commands.execute('wiki.ingest', {
+      operations: [{ type: 'updatePage', category: 'decisions', id: 'd1', content: 'changed', objective: 'unsupported' }]
+    });
+
+    expect(result).toMatchObject({ success: false });
+    expect(result.operations[0]).toMatchObject({ ok: false, unsupportedFields: ['objective'] });
+    expect(fs.readFileSync(path.join(core.mdocsRoot, 'wiki', 'decisions', 'd1.md'), 'utf8')).toContain('original');
   });
 
   test('validation: empty/non-array operations returns error and writes nothing', async () => {

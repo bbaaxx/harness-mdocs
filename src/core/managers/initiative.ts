@@ -131,6 +131,33 @@ export class InitiativeManager {
     return fs.readdirSync(this.dir).filter(f => f.endsWith('.md') && f !== 'INDEX.md');
   }
 
+  private validationFiles(): string[] {
+    if (this.contract.initiativeMode !== 'directory') return this.initiativeFiles();
+    return fs.readdirSync(this.dir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && entry.name !== 'archive' && entry.name !== '_archive')
+      .map(entry => path.join(entry.name, '_status.md'))
+      .filter(fileName => fs.existsSync(path.join(this.dir, fileName)));
+  }
+
+  private markdownDestinations(content: string): Set<string> {
+    const refs = new Set<string>();
+    const addRef = (value: string) => {
+      let ref = value.split(/[?#]/)[0].replace(/\\/g, '/');
+      while (ref.startsWith('./')) ref = ref.slice(2);
+      if (ref.endsWith('.md')) ref = ref.slice(0, -3);
+      if (ref) refs.add(ref.replace(/\/$/, ''));
+    };
+    for (const match of content.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)) {
+      addRef(match[1]);
+    }
+    // External directory-v2 indexes commonly use canonical code paths such
+    // as `example-active/`; require a slash to avoid treating prose as a ref.
+    for (const match of content.matchAll(/`((?:\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*\/)`/g)) {
+      addRef(match[1]);
+    }
+    return refs;
+  }
+
   private listedIndexFiles(indexContent: string): Set<string> {
     return new Set(indexContent.split(/\r?\n/)
       .map(line => line.match(/^-\s+\*\*.*\*\*\s+\([^)]*\)\s+—\s+([\w.-]+\.md)\s+—/)?.[1])
@@ -438,7 +465,7 @@ export class InitiativeManager {
     const errors: string[] = [];
     const warnings: string[] = [];
     const ids = new Map<string, string>();
-    const files = this.initiativeFiles();
+    const files = this.validationFiles();
     const wikiRoot = path.join(path.dirname(this.dir), 'wiki');
 
     for (const fileName of files) {
@@ -460,7 +487,7 @@ export class InitiativeManager {
             }
           }
         }
-        const parsed = this.read(fileName);
+        const parsed = this.read(fileName.endsWith('_status.md') ? fileName.split(path.sep)[0] : fileName);
         if (!parsed) continue;
         initiative = parsed;
       } catch (err: any) {
@@ -471,7 +498,7 @@ export class InitiativeManager {
       if (!front.id) errors.push(`${fileName} missing id`);
       if (!front.title) errors.push(`${fileName} missing title`);
       if (!front.status) errors.push(`${fileName} missing status`);
-      if (!front.created) errors.push(`${fileName} missing created`);
+      if (!front.created && this.contract.initiativeMode !== 'directory') errors.push(`${fileName} missing created`);
 
       if (initiative.id) {
         const firstFile = ids.get(initiative.id);
@@ -504,7 +531,19 @@ export class InitiativeManager {
     }
 
     const indexPath = path.join(this.dir, 'INDEX.md');
-    if (fs.existsSync(indexPath)) {
+    if (this.contract.initiativeMode === 'directory' && this.contract.wikiIndexOwner === 'external') {
+      if (!fs.existsSync(indexPath)) {
+        errors.push('initiatives/INDEX.md missing external compiled index');
+      } else {
+        const listed = this.markdownDestinations(fs.readFileSync(indexPath, 'utf8'));
+        for (const fileName of files) {
+          const id = fileName.split(path.sep)[0];
+          if (!listed.has(id) && !listed.has(`${id}/_status`)) {
+            errors.push(`initiatives/INDEX.md missing link to directory initiative: ${id}`);
+          }
+        }
+      }
+    } else if (fs.existsSync(indexPath)) {
       const indexContent = fs.readFileSync(indexPath, 'utf8');
       const listed = this.listedIndexFiles(indexContent);
       const actual = new Set(files);
@@ -516,7 +555,45 @@ export class InitiativeManager {
       }
     }
 
+    if (this.contract.initiativeMode === 'directory') {
+      const overviewPath = path.join(wikiRoot, 'overview.md');
+      const overviewRefs = fs.existsSync(overviewPath) ? this.markdownDestinations(fs.readFileSync(overviewPath, 'utf8')) : null;
+      for (const fileName of files) {
+        const source = this.read(fileName.split(path.sep)[0]);
+        if (!source || source.status !== 'active') continue;
+        const id = source.id;
+        const plural = path.join(wikiRoot, 'initiatives', `${id}.md`);
+        const singular = path.join(wikiRoot, 'initiative', `${id}.md`);
+        const compiledPath = fs.existsSync(plural) ? plural : fs.existsSync(singular) ? singular : null;
+        if (!compiledPath) {
+          errors.push(`${fileName} active initiative missing compiled wiki page: wiki/initiatives/${id}.md`);
+          continue;
+        }
+        const compiledFront = parseFrontmatter(fs.readFileSync(compiledPath, 'utf8'));
+        if (compiledFront.status === undefined || compiledFront.status === '') {
+          errors.push(`${path.relative(path.dirname(this.dir), compiledPath)} missing status`);
+        } else if (!this.statusesEquivalent(source.status, String(compiledFront.status))) {
+          errors.push(`${path.relative(path.dirname(this.dir), compiledPath)} status ${compiledFront.status} does not match source status ${source.status}`);
+        }
+        if (this.contract.wikiIndexOwner === 'external') {
+          if (!overviewRefs) {
+            errors.push('wiki/overview.md missing external compiled overview');
+          } else {
+            const category = path.basename(path.dirname(compiledPath));
+            const categoryAlias = category.endsWith('s') ? category.slice(0, -1) : `${category}s`;
+            if (!overviewRefs.has(`${category}/${id}`) && !overviewRefs.has(`${categoryAlias}/${id}`)) {
+              errors.push(`wiki/overview.md missing link to active initiative: ${id}`);
+            }
+          }
+        }
+      }
+    }
+
     return { valid: errors.length === 0, errors, warnings };
+  }
+
+  private statusesEquivalent(source: string, compiled: string): boolean {
+    return normalizeInitiativeStatus(source) === normalizeInitiativeStatus(compiled);
   }
 
   checkConsistency(): { consistent: boolean; missing: string[]; orphans: string[]; stale: boolean } {
