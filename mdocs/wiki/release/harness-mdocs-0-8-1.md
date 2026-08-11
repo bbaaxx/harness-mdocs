@@ -22,16 +22,20 @@ Patch release restoring directory-v2 metadata-only validation compatibility repo
 - External-index completeness, asymmetric-link, and genuine self-link diagnostics remain active.
 
 ## Verification
-- `npm run release:check` passed.
+- Local `npm run release:check` passed.
 - 45 Jest suites / 502 tests passed in both test and coverage runs.
 - Coverage: 91.14% statements, 81.01% branches, 93.54% functions, 93.81% lines.
 - `mdocs:validate` returned `valid=true`, with one pre-existing `release-0-7-1` stable-learning warning.
 - `npm pack --dry-run` produced `harness-mdocs-0.8.1.tgz`: 298 files, 832.8 kB package size, 5.0 MB unpacked size.
 - Package, lockfile, Claude plugin, and marketplace versions all resolve to `0.8.1`.
-- npm registry confirms `harness-mdocs@0.8.1` is not yet published.
+- GitHub Release Check workflow [31460733569](https://github.com/bbaaxx/harness-mdocs/actions/runs/31460733569) passed on Node 24.
 
-## Publication
-Not published. Release commit, main push, tag, and tag push require explicit approval. Tag `v0.8.1` will trigger npm Trusted Publishing and GitHub Release creation.
+## Published
+- Release commit: `3859047` (`chore(release): prepare 0.8.1`).
+- Annotated tag: `v0.8.1`, targeting `3859047`.
+- Publish workflow [31460827157](https://github.com/bbaaxx/harness-mdocs/actions/runs/31460827157) succeeded.
+- npm: `harness-mdocs@0.8.1` published; `latest` points to `0.8.1`.
+- GitHub Release: https://github.com/bbaaxx/harness-mdocs/releases/tag/v0.8.1
 
 ## Referenced By
 

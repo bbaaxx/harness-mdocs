@@ -9,7 +9,7 @@
 - **Add pi surface** (done) — add-pi-surface--2026-06-25.md — 2026-06-25 — [surface, pi, extension, packaging, harness]
 - **Prepare release 0.4.0** (done) — prepare-release-0-4-0--2026-06-19.md — 2026-06-19 — [release, npm, version-0.4.0]
 - **Add local quality tooling** (done) — add-local-quality-tooling--2026-06-19.md — 2026-06-19 — [tooling, lint, tests, coverage, quality]
-- **Publish release 0.8.1** (active) — publish-release-0-8-1--2026-08-11.md — 2026-08-11 — [release, 0.8.1, npm, github-actions, publishing]
+- **Publish release 0.8.1** (done) — publish-release-0-8-1--2026-08-11.md — 2026-08-11 — [release, 0.8.1, npm, github-actions, publishing]
 - **Update harness-mdocs README** (done) — update-harness-mdocs-readme--2026-06-10.md — 2026-06-10 — [docs, readme, harness-mdocs, opencode-migration]
 - **P1: Stronger validation diagnostics** (done) — p1-stronger-validation-diagnostics--2026-08-10.md — 2026-08-10 — [validation, metadata-only, github-issue-8]
 - **Sync plugin validation runtime with initiative INDEX parser fix** (done) — sync-plugin-validation-runtime--2026-07-03.md — 2026-07-03 — [validation, plugin, mdocs, runtime]
