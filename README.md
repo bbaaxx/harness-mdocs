@@ -327,8 +327,8 @@ Some consumer workspaces use a thinner schema than harness-mdocs authors by defa
 }
 ```
 
-- `initiativeRecordMode: "metadata-only"` — treat `_status.md` as thin lifecycle metadata: rewrite only lifecycle keys (status/updated/completed/graduated) in place, never inject `## Objective`/`## Plan`/`## Progress Log`, never add structural frontmatter keys, preserve inline `tags: [a, b]` formatting. PostToolUse records audit only (no progress-log mutation). The linter relaxes initiative body-section and required-field checks while keeping lifecycle telemetry.
-- Wiki identity resolves by filename stem + parent-directory category, so path-style `id` and singular `category` produce correct backlinks; `appendLog` can emit the consumer heading `## [YYYY-MM-DD] {operation} | {subject}`.
+- `initiativeRecordMode: "metadata-only"` — treat `_status.md` as thin lifecycle metadata: rewrite only lifecycle keys (status/updated/completed/graduated) in place, never inject `## Objective`/`## Plan`/`## Progress Log`, never add structural frontmatter keys, preserve inline `tags: [a, b]` formatting. PostToolUse records audit only (no progress-log mutation). Linter and manager validation do not require `id` or `title`; directory name supplies identity while lifecycle validation remains active.
+- Wiki identity resolves by filename stem + physical parent directory, so path-style `id` and singular `category` produce correct backlinks. In directory metadata-only mode, root compiled views may retain matching semantic categories such as `overview`, `index`, `log`, and `glossary`; validation still treats them as bare root identities. `appendLog` can emit consumer heading `## [YYYY-MM-DD] {operation} | {subject}`.
 
 Config precedence: env > `.mdocs.json` file > detected contract. See [docs/consumer-layering.md](docs/consumer-layering.md).
 

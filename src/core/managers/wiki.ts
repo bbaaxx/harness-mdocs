@@ -145,6 +145,11 @@ export class WikiManager {
     return category === undefined || category === '';
   }
 
+  private allowsSemanticRootCategory(): boolean {
+    return this.contract.initiativeMode === 'directory'
+      && this.contract.initiativeRecordMode === 'metadata-only';
+  }
+
   private assertRootWritable(id: string): void {
     if (id.toLowerCase() === 'index' && this.contract.wikiIndexMode === 'canonical-lowercase') {
       throw new Error('Refusing to overwrite canonical root wiki index: index');
@@ -220,10 +225,11 @@ export class WikiManager {
     const filePath = path.join(this.dir, `${entryId}.md`);
     if (!fs.existsSync(filePath)) return null;
     const content = fs.readFileSync(filePath, 'utf8');
-    return this.parseWikiEntry(content, { id: entryId, category: '' });
+    return this.parseWikiEntry(content, { id: entryId, category: '' }, this.allowsSemanticRootCategory()
+      && ['overview', 'index', 'log', 'glossary'].includes(entryId));
   }
 
-  private parseWikiEntry(content: string, defaults: { id?: string; category?: string } = {}): WikiEntry {
+  private parseWikiEntry(content: string, defaults: { id?: string; category?: string } = {}, physicalCategory = false): WikiEntry {
     const front = parseFrontmatter(content);
     const hasFrontmatter = Object.keys(front).length > 0;
     if (!hasFrontmatter && !defaults.id) throw new Error('Invalid wiki entry format');
@@ -253,7 +259,9 @@ export class WikiManager {
     // Canonical category: prefer the on-disk parent dir when supplied (always plural and
     // correct); otherwise fall back to the frontmatter category. This tolerates singular
     // consumer categories (e.g. "system") without breaking plural-canonical resolution.
-    const canonicalCategory = defaults.category || (typeof front.category === 'string' ? front.category : '') || '';
+    const canonicalCategory = physicalCategory && defaults.category !== undefined
+      ? defaults.category
+      : defaults.category || (typeof front.category === 'string' ? front.category : '') || '';
 
     // Copy parsed arrays: entry arrays must not alias rawFrontmatter.values,
     // or later mutations (push/filter) would also mutate the merge baseline
@@ -725,7 +733,12 @@ tags: []
         const raw = entry.rawFrontmatter?.values || {};
         const stem = path.basename(filePath, '.md');
         if (typeof raw.id === 'string' && raw.id !== stem) errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${stem}`);
-        if (typeof raw.category === 'string' && raw.category !== '') errors.push(`${relativeName} raw category ${raw.category} does not match root wiki`);
+        const compatibleSemanticCategory = this.allowsSemanticRootCategory()
+          && ['overview', 'index', 'log', 'glossary'].includes(stem)
+          && raw.category === stem;
+        if (typeof raw.category === 'string' && raw.category !== '' && !compatibleSemanticCategory) {
+          errors.push(`${relativeName} raw category ${raw.category} does not match root wiki`);
+        }
       } catch (err: any) {
         errors.push(`${relativeName} invalid wiki entry format: ${err.message || String(err)}`);
       }

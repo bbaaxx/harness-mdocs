@@ -1,6 +1,7 @@
 # Initiatives
 
 - **Close harness-mdocs 0.4.3 / 0.5.0 gaps** (done) — close-harness-mdocs-gaps--2026-06-23.md — 2026-06-23 — [orchestrator, release, 0.4.3, 0.5.0, gap-closure]
+- **Fix 0.8.0 metadata-only validation compatibility regression** (done) — fix-0-8-0-metadata-only-validation-regression--2026-08-10.md — 2026-08-10 — [bugfix, validation, metadata-only, directory-v2, github-issue-8, 0.8.1]
 - **Prepare release 0.4.2** (done) — prepare-release-0-4-2--2026-06-22.md — 2026-06-22 — [release, 0.4.2, claude-code]
 - **End-to-end enforcement dogfood on a real multi-step initiative** (done) — dogfood-enforcement-end-to-end--2026-06-23.md — 2026-06-23 — [claude-code, workflow, enforcement, dogfood, verification, 0.4.3]
 - **Enforcement opt-in config + git-gating reconsidered** (done) — configurable-workflow-enforcement--2026-06-23.md — 2026-06-23 — [claude-code, workflow, enforcement, config, hooks, 0.4.3]

@@ -102,6 +102,91 @@ test('directory status records are validated by InitiativeManager', () => {
   expect(errors).toContain('example-active/_status.md missing id');
 });
 
+test('metadata-only directory status derives identity without id or title', () => {
+  const { project, root } = setup();
+  compiled(root);
+  const statusPath = path.join(root, 'initiatives', 'example-active', '_status.md');
+  fs.writeFileSync(statusPath, fs.readFileSync(statusPath, 'utf8')
+    .replace('id: example-active\n', '')
+    .replace('title: Example Active\n', ''), 'utf8');
+  fs.writeFileSync(path.join(root, 'initiatives', 'INDEX.md'), '# Initiatives\n- [Active](example-active/_status.md)\n- [Complete](example-complete/_status.md)\n', 'utf8');
+
+  const core = createMdocsCore(project, { compatibility: { initiativeRecordMode: 'metadata-only' } });
+  const validation = core.managers.initiatives.validate();
+  expect(core.managers.initiatives.read('example-active')).toMatchObject({ id: 'example-active', title: 'Example Active' });
+  expect(validation).toMatchObject({ valid: true, errors: [] });
+});
+
+test('metadata-only directory validation keeps semantic compiled views at root identity', () => {
+  const { project, root } = setup();
+  compiled(root);
+  const wikiRoot = path.join(root, 'wiki');
+  const writeRootView = (id: string, title: string, body = '') => {
+    fs.writeFileSync(path.join(wikiRoot, `${id}.md`), `---
+id: ${id}
+title: ${title}
+category: ${id}
+updated: 2026-01-01
+related_initiatives: []
+tags: []
+---
+${body}`, 'utf8');
+  };
+  writeRootView('overview', 'Overview', '- [Active](initiatives/example-active.md)');
+  writeRootView('log', 'Log');
+  writeRootView('glossary', 'Glossary');
+  writeRootView('index', 'Index', [
+    '- [Overview](overview.md)',
+    '- [Log](log.md)',
+    '- [Glossary](glossary.md)',
+    '- [System](systems/system-page.md)',
+    '- [Active](initiatives/example-active.md)'
+  ].join('\n'));
+
+  const defaultCore = createMdocsCore(project);
+  expect(defaultCore.managers.wiki.readByRef('overview')).toMatchObject({ category: 'overview', id: 'overview' });
+  expect(defaultCore.managers.wiki.validate().errors.join('\n')).toContain('overview.md raw category overview does not match root wiki');
+
+  const core = createMdocsCore(project, { compatibility: { initiativeRecordMode: 'metadata-only' } });
+  const entries = core.managers.wiki.list().filter(entry => ['index', 'overview', 'log', 'glossary'].includes(entry.id));
+  const validation = core.managers.wiki.validate();
+  expect(entries.map(entry => `${entry.category}/${entry.id}`)).toEqual(['/glossary', '/index', '/log', '/overview']);
+  expect(validation).toMatchObject({ valid: true, errors: [] });
+
+  fs.writeFileSync(path.join(wikiRoot, 'overview.md'), fs.readFileSync(path.join(wikiRoot, 'overview.md'), 'utf8')
+    .replace('category: overview', 'category: dashboard'), 'utf8');
+  expect(core.managers.wiki.validate().errors.join('\n')).toContain('overview.md raw category dashboard does not match root wiki');
+});
+
+test('metadata-only root compiled views ignore wiki index mode', () => {
+  const { project, root } = setup();
+  fs.writeFileSync(path.join(root, 'wiki', 'overview.md'), `---
+id: overview
+title: Overview
+category: overview
+---
+# Overview
+`, 'utf8');
+
+  const core = createMdocsCore(project, { compatibility: { initiativeRecordMode: 'metadata-only', wikiIndexMode: 'generated-uppercase' } });
+  expect(core.managers.wiki.readByRef('overview')).toMatchObject({ category: '', id: 'overview' });
+  expect(core.managers.wiki.validate().errors.join('\n')).not.toContain('overview.md raw category overview does not match root wiki');
+});
+
+test('metadata-only root compatibility rejects arbitrary matching category stems', () => {
+  const { project, root } = setup();
+  fs.writeFileSync(path.join(root, 'wiki', 'notes.md'), `---
+id: notes
+title: Notes
+category: notes
+---
+# Notes
+`, 'utf8');
+
+  const core = createMdocsCore(project, { compatibility: { initiativeRecordMode: 'metadata-only' } });
+  expect(core.managers.wiki.validate().errors.join('\n')).toContain('notes.md raw category notes does not match root wiki');
+});
+
 test('graph skips reciprocal provenance check but reports self-link integrity failures', () => {
   const { project, root } = setup();
   compiled(root, 'active', '');
