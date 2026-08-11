@@ -30,6 +30,7 @@ export declare class WikiManager {
     private managedFrontmatterValues;
     private sanitizeName;
     private isRootCategory;
+    private allowsSemanticRootCategory;
     private assertRootWritable;
     private generateReferencedBySection;
     private stripReferencedBySection;

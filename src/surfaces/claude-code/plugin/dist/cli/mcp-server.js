@@ -33109,6 +33109,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     const ids = /* @__PURE__ */ new Map();
     const files = this.validationFiles();
     const wikiRoot = path9.join(path9.dirname(this.dir), "wiki");
+    const metadataOnly = this.contract.initiativeMode === "directory" && this.contract.initiativeRecordMode === "metadata-only";
     for (const fileName of files) {
       let initiative;
       let front = {};
@@ -33135,8 +33136,8 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
         errors.push(`${fileName} invalid initiative format: ${err.message || String(err)}`);
         continue;
       }
-      if (!front.id) errors.push(`${fileName} missing id`);
-      if (!front.title) errors.push(`${fileName} missing title`);
+      if (!metadataOnly && !front.id) errors.push(`${fileName} missing id`);
+      if (!metadataOnly && !front.title) errors.push(`${fileName} missing title`);
       if (!front.status) errors.push(`${fileName} missing status`);
       if (!front.created && this.contract.initiativeMode !== "directory") errors.push(`${fileName} missing created`);
       if (initiative.id) {
@@ -33510,6 +33511,9 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
   isRootCategory(category) {
     return category === void 0 || category === "";
   }
+  allowsSemanticRootCategory() {
+    return this.contract.initiativeMode === "directory" && this.contract.initiativeRecordMode === "metadata-only";
+  }
   assertRootWritable(id) {
     if (id.toLowerCase() === "index" && this.contract.wikiIndexMode === "canonical-lowercase") {
       throw new Error("Refusing to overwrite canonical root wiki index: index");
@@ -33581,9 +33585,9 @@ ${lines.join("\n")}
     const filePath = path11.join(this.dir, `${entryId}.md`);
     if (!fs10.existsSync(filePath)) return null;
     const content = fs10.readFileSync(filePath, "utf8");
-    return this.parseWikiEntry(content, { id: entryId, category: "" });
+    return this.parseWikiEntry(content, { id: entryId, category: "" }, this.allowsSemanticRootCategory() && ["overview", "index", "log", "glossary"].includes(entryId));
   }
-  parseWikiEntry(content, defaults = {}) {
+  parseWikiEntry(content, defaults = {}, physicalCategory = false) {
     const front = parseFrontmatter(content);
     const hasFrontmatter = Object.keys(front).length > 0;
     if (!hasFrontmatter && !defaults.id) throw new Error("Invalid wiki entry format");
@@ -33600,7 +33604,7 @@ ${lines.join("\n")}
     const rawFrontId = typeof front.id === "string" ? front.id : "";
     const frontIdStem = rawFrontId ? path11.basename(rawFrontId) : "";
     const canonicalId = defaults.id || frontIdStem || rawFrontId || "";
-    const canonicalCategory = defaults.category || (typeof front.category === "string" ? front.category : "") || "";
+    const canonicalCategory = physicalCategory && defaults.category !== void 0 ? defaults.category : defaults.category || (typeof front.category === "string" ? front.category : "") || "";
     return {
       id: canonicalId,
       title: front.title || fallbackTitle,
@@ -34020,7 +34024,10 @@ tags: []
         const raw = entry.rawFrontmatter?.values || {};
         const stem = path11.basename(filePath, ".md");
         if (typeof raw.id === "string" && raw.id !== stem) errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${stem}`);
-        if (typeof raw.category === "string" && raw.category !== "") errors.push(`${relativeName} raw category ${raw.category} does not match root wiki`);
+        const compatibleSemanticCategory = this.allowsSemanticRootCategory() && ["overview", "index", "log", "glossary"].includes(stem) && raw.category === stem;
+        if (typeof raw.category === "string" && raw.category !== "" && !compatibleSemanticCategory) {
+          errors.push(`${relativeName} raw category ${raw.category} does not match root wiki`);
+        }
       } catch (err) {
         errors.push(`${relativeName} invalid wiki entry format: ${err.message || String(err)}`);
       }

@@ -482,6 +482,7 @@ class InitiativeManager {
         const ids = new Map();
         const files = this.validationFiles();
         const wikiRoot = path.join(path.dirname(this.dir), 'wiki');
+        const metadataOnly = this.contract.initiativeMode === 'directory' && this.contract.initiativeRecordMode === 'metadata-only';
         for (const fileName of files) {
             let initiative;
             let front = {};
@@ -511,9 +512,9 @@ class InitiativeManager {
                 errors.push(`${fileName} invalid initiative format: ${err.message || String(err)}`);
                 continue;
             }
-            if (!front.id)
+            if (!metadataOnly && !front.id)
                 errors.push(`${fileName} missing id`);
-            if (!front.title)
+            if (!metadataOnly && !front.title)
                 errors.push(`${fileName} missing title`);
             if (!front.status)
                 errors.push(`${fileName} missing status`);
