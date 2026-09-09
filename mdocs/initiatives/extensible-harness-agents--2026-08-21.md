@@ -10,7 +10,7 @@ related_wiki: ["architecture/extensible-harness-agents","architecture/plan-gated
 priority: "medium"
 phase: "implementation"
 handoff_summary: "READY for implementation-team takeover. Read `docs/extensible-harness-agents-implementation-handoff`, then linked architecture pages. Existing uncommitted first slice must be adopted, not recreated. Production effectful Run defaults plan-only until trusted HumanAttestationProvider, HostIdentityProvider, protected ControllerStore, ActionMediator, UsageMeter, cancellation, and adversarial probes pass. Work packages WP-000..WP-410 define dependencies, owners, files, defaults, acceptance, verification, rollout, and rollback."
-next_action: "WP-090: define trusted HumanAttestationProvider, HostIdentityProvider, protected ControllerStore contract, ActionMediator boundary, UsageMeter, fidelity truth table, opaque handle semantics, rollout kill switch, and fake trusted adapter. Gate: negative forged-origin/identity fixtures; missing component deterministically yields plan-only."
+next_action: "WP-100 contract retrofit: Zod strict schemas for full field catalog (execution-blueprint/plan/orchestration-artifact/plan-approval/execution-mode-selection/run-record/delegation-ticket/action-receipt/execution-report/run-checkpoint/goal-verdict), semantic roles, internal EO profile, strict PLAN_ROOT->EXECUTION->LEAF topology, RFC 8785 canonicalization + domain-separated digests with golden vectors, compatibility policy, valid/invalid fixtures. Depends on WP-090 (landed)."
 ---
 
 ## Objective
@@ -27,7 +27,7 @@ Extend `mdocs-orchestrator` with an extensible, surface-neutral capability model
 - [x] Finalize immutable plan/graph, trusted human attestation, mode selection, loop authority, delegation depth, protected state, action mediation, tickets, budgets, reports, evidence, whole-goal verdict, cancellation, and resume contracts.
 - [x] Produce reviewed implementation-team handoff with defaults, canonical serialization, field catalog, work packages, dependencies, ownership, rollout, rollback, tests, and Definition of Ready.
 - [x] **WP-000:** Adopt verified first slice and correct baseline capability/package/hook/generated-asset drift.
-- [ ] **WP-090:** Define trusted attestation, host identity, protected ControllerStore, ActionMediator, UsageMeter, fidelity truth table, and fake trusted adapter.
+- [x] **WP-090:** Define trusted attestation, host identity, protected ControllerStore, ActionMediator, UsageMeter, fidelity truth table, and fake trusted adapter.
 - [ ] **WP-100:** Retrofit canonical schemas, semantic roles, internal EO profile, strict topology, canonical digests, and all Run contracts.
 - [ ] **WP-105/WP-110/WP-115/WP-120:** Establish generator foundation, deterministic plan/graph compiler, side-effect-free project context, and pure project-scoped Route.
 - [ ] **WP-200/WP-210/WP-220/WP-225:** Implement protected storage, tickets/leases/budgets, receipts/reports, and mandatory action mediation.
@@ -1587,5 +1587,57 @@ Extend `mdocs-orchestrator` with an extensible, surface-neutral capability model
 - [2026-09-09T00:28:24.641Z] mdocs executed at step REPORT
 - [2026-09-09T00:28:31.178Z] bash executed at step REPORT
 - [2026-09-09T00:28:38.693Z] edit executed at step REPORT
+- [2026-09-09T00:28:43.751Z] bash executed at step REPORT
+- [2026-09-09T00:28:51.823Z] todowrite executed at step REPORT
+- [2026-09-09T00:31:40.291Z] read executed at step REPORT
+- [2026-09-09T00:32:31.927Z] todowrite executed at step REPORT
+- [2026-09-09T00:34:00.557Z] mdocs_status executed at step REPORT
+- [2026-09-09T00:34:00.676Z] read executed at step REPORT
+- [2026-09-09T00:34:08.754Z] mdocs_resume executed at step REPORT
+- [2026-09-09T00:34:08.781Z] read executed at step REPORT
+- [2026-09-09T00:34:08.790Z] read executed at step REPORT
+- [2026-09-09T00:34:08.797Z] read executed at step REPORT
+- [2026-09-09T00:34:16.160Z] read executed at step REPORT
+- [2026-09-09T00:34:16.172Z] read executed at step REPORT
+- [2026-09-09T00:34:16.231Z] read executed at step REPORT
+- [2026-09-09T00:34:23.266Z] read executed at step REPORT
+- [2026-09-09T00:34:38.537Z] grep executed at step REPORT
+- [2026-09-09T00:34:45.693Z] bash executed at step REPORT
+- [2026-09-09T00:36:12.573Z] write executed at step REPORT
+- [2026-09-09T00:36:31.877Z] write executed at step REPORT
+- [2026-09-09T00:36:44.613Z] write executed at step REPORT
+- [2026-09-09T00:36:49.011Z] write executed at step REPORT
+- [2026-09-09T00:37:06.137Z] write executed at step REPORT
+- [2026-09-09T00:37:09.819Z] write executed at step REPORT
+- [2026-09-09T00:37:32.505Z] write executed at step REPORT
+- [2026-09-09T00:37:39.211Z] write executed at step REPORT
+- [2026-09-09T00:39:13.638Z] write executed at step REPORT
+- [2026-09-09T00:39:25.886Z] write executed at step REPORT
+- [2026-09-09T00:39:25.894Z] write executed at step REPORT
+- [2026-09-09T00:39:25.906Z] edit executed at step REPORT
+- [2026-09-09T00:41:11.184Z] write executed at step REPORT
+- [2026-09-09T00:41:26.084Z] bash executed at step REPORT
+- [2026-09-09T00:41:38.140Z] bash executed at step REPORT
+- [2026-09-09T00:41:42.174Z] bash executed at step REPORT
+- [2026-09-09T00:41:59.307Z] mdocs executed at step REPORT
+- [2026-09-09T00:42:08.934Z] mdocs executed at step REPORT
+- [2026-09-09T00:42:16.698Z] mdocs_ingest executed at step REPORT
+- [2026-09-09T00:42:26.138Z] mdocs_ingest executed at step REPORT
+- [2026-09-09T00:42:46.512Z] task executed at step REPORT
+- [2026-09-09T00:42:56.129Z] bash executed at step REPORT
+- [2026-09-09T00:43:02.744Z] read executed at step REPORT
+- [2026-09-09T00:43:02.959Z] read executed at step REPORT
+- [2026-09-09T00:43:08.254Z] read executed at step REPORT
+- [2026-09-09T00:43:18.589Z] read executed at step REPORT
+- [2026-09-09T00:43:18.807Z] read executed at step REPORT
+- [2026-09-09T00:43:18.825Z] read executed at step REPORT
+- [2026-09-09T00:43:18.835Z] read executed at step REPORT
+- [2026-09-09T00:43:34.882Z] edit executed at step REPORT
+- [2026-09-09T00:44:03.289Z] bash executed at step REPORT
+- [2026-09-09T00:44:25.848Z] todowrite executed at step REPORT
+- [2026-09-09T00:44:30.909Z] bash executed at step REPORT
+- WP-090 complete (commit baa53ea). Trust foundation landed under src/agents/run/trust/: OpaqueHandle broker, HumanAttestationProvider (separate approval + mode gestures; digest/project/session binding; replay, expiry, revocation; negative-oracle docs), HostIdentityProvider, ControllerStore CAS + protection contract, ActionMediator pre-effect boundary (intent persisted before effect), UsageMeter reservation semantics, pure fail-closed evaluateRunFidelity truth table (missing authority component => plan-only, never supervised; metering required only when hard token/cost budgets enforced), RunKillSwitch with conservative defaults (route/run both false). Fake trusted control plane (in-memory, real UUID nonces, failComponent scripting) validates the gate: 22 tests covering forged attestation/identity, per-component plan-only downgrades, metering, CAS conflicts, kill switch, separate mode event. Full gate green: build, typecheck, 551 tests/47 suites, coverage, git diff --check. Reviewer fix: corrected createOpaqueHandle doc comment to match actual root export.
+- [2026-09-09T00:44:45.004Z] mdocs executed at step REPORT
+- [2026-09-09T00:45:06.734Z] edit executed at step REPORT
 
 ## Artifacts
