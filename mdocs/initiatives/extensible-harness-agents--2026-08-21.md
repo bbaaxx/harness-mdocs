@@ -10,7 +10,7 @@ related_wiki: ["architecture/extensible-harness-agents","architecture/plan-gated
 priority: "medium"
 phase: "implementation"
 handoff_summary: "READY for implementation-team takeover. Read `docs/extensible-harness-agents-implementation-handoff`, then linked architecture pages. Existing uncommitted first slice must be adopted, not recreated. Production effectful Run defaults plan-only until trusted HumanAttestationProvider, HostIdentityProvider, protected ControllerStore, ActionMediator, UsageMeter, cancellation, and adversarial probes pass. Work packages WP-000..WP-410 define dependencies, owners, files, defaults, acceptance, verification, rollout, and rollback."
-next_action: "Implementation team starts WP-000: snapshot current worktree, exclude rotated audit artifacts, run baseline build/capability/full/coverage/pack/mdocs checks, adopt first `src/agents` slice, and correct baseline declaration/version/hook/generated-source drift before WP-090 and WP-100."
+next_action: "WP-090: define trusted HumanAttestationProvider, HostIdentityProvider, protected ControllerStore contract, ActionMediator boundary, UsageMeter, fidelity truth table, opaque handle semantics, rollout kill switch, and fake trusted adapter. Gate: negative forged-origin/identity fixtures; missing component deterministically yields plan-only."
 ---
 
 ## Objective
@@ -26,7 +26,7 @@ Extend `mdocs-orchestrator` with an extensible, surface-neutral capability model
 - [x] Capture hierarchical Plan Orchestrator -> Execution Orchestrator -> leaf worker specification and research ultracode, nested subagents, agent teams, and OpenCode hidden/task controls.
 - [x] Finalize immutable plan/graph, trusted human attestation, mode selection, loop authority, delegation depth, protected state, action mediation, tickets, budgets, reports, evidence, whole-goal verdict, cancellation, and resume contracts.
 - [x] Produce reviewed implementation-team handoff with defaults, canonical serialization, field catalog, work packages, dependencies, ownership, rollout, rollback, tests, and Definition of Ready.
-- [ ] **WP-000:** Adopt verified first slice and correct baseline capability/package/hook/generated-asset drift.
+- [x] **WP-000:** Adopt verified first slice and correct baseline capability/package/hook/generated-asset drift.
 - [ ] **WP-090:** Define trusted attestation, host identity, protected ControllerStore, ActionMediator, UsageMeter, fidelity truth table, and fake trusted adapter.
 - [ ] **WP-100:** Retrofit canonical schemas, semantic roles, internal EO profile, strict topology, canonical digests, and all Run contracts.
 - [ ] **WP-105/WP-110/WP-115/WP-120:** Establish generator foundation, deterministic plan/graph compiler, side-effect-free project context, and pure project-scoped Route.
@@ -1581,5 +1581,11 @@ Extend `mdocs-orchestrator` with an extensible, surface-neutral capability model
 - [2026-09-09T00:27:46.752Z] read executed at step REPORT
 - [2026-09-09T00:27:47.514Z] read executed at step REPORT
 - [2026-09-09T00:27:47.524Z] read executed at step REPORT
+- [2026-09-09T00:27:57.572Z] bash executed at step REPORT
+- [2026-09-09T00:28:13.917Z] bash executed at step REPORT
+- WP-000 complete. Worktree snapshot archived (patch + untracked tar, audit rotations excluded). Baseline gate green: build, 31 capability/package tests, typecheck, 529 tests/46 suites, coverage, pack dry-run (dist/agents + ./agents export in tarball), mdocs:validate (1 known graph warning for release-0-7-1), git diff --check clean. Drift corrected: .gitignore now excludes mdocs/audit.log.* rotations; no declaration/version/hook/generated-source drift found (pack plugin build byte-identical). First slice reviewed and committed: 2179d3f feat(agents) + 36da7e6 docs(mdocs). Ready for WP-090 trust foundation.
+- [2026-09-09T00:28:24.641Z] mdocs executed at step REPORT
+- [2026-09-09T00:28:31.178Z] bash executed at step REPORT
+- [2026-09-09T00:28:38.693Z] edit executed at step REPORT
 
 ## Artifacts
