@@ -10,7 +10,7 @@ related_wiki: ["architecture/extensible-harness-agents","architecture/plan-gated
 priority: "medium"
 phase: "implementation"
 handoff_summary: "READY for implementation-team takeover. Read `docs/extensible-harness-agents-implementation-handoff`, then linked architecture pages. Existing uncommitted first slice must be adopted, not recreated. Production effectful Run defaults plan-only until trusted HumanAttestationProvider, HostIdentityProvider, protected ControllerStore, ActionMediator, UsageMeter, cancellation, and adversarial probes pass. Work packages WP-000..WP-410 define dependencies, owners, files, defaults, acceptance, verification, rollout, and rollback."
-next_action: "WP-100 contract retrofit: Zod strict schemas for full field catalog (execution-blueprint/plan/orchestration-artifact/plan-approval/execution-mode-selection/run-record/delegation-ticket/action-receipt/execution-report/run-checkpoint/goal-verdict), semantic roles, internal EO profile, strict PLAN_ROOT->EXECUTION->LEAF topology, RFC 8785 canonicalization + domain-separated digests with golden vectors, compatibility policy, valid/invalid fixtures. Depends on WP-090 (landed)."
+next_action: "Wave 2/3: WP-115 side-effect-free project context (depends WP-000 only — can run parallel) and WP-105 generator foundation / WP-110 plan-graph compiler / WP-120 Route / WP-200 protected storage / WP-300 fidelity evaluator (all depend WP-100, now landed). Recommended next: WP-115 then WP-120 Route chain, or WP-110 compiler."
 ---
 
 ## Objective
@@ -28,7 +28,7 @@ Extend `mdocs-orchestrator` with an extensible, surface-neutral capability model
 - [x] Produce reviewed implementation-team handoff with defaults, canonical serialization, field catalog, work packages, dependencies, ownership, rollout, rollback, tests, and Definition of Ready.
 - [x] **WP-000:** Adopt verified first slice and correct baseline capability/package/hook/generated-asset drift.
 - [x] **WP-090:** Define trusted attestation, host identity, protected ControllerStore, ActionMediator, UsageMeter, fidelity truth table, and fake trusted adapter.
-- [ ] **WP-100:** Retrofit canonical schemas, semantic roles, internal EO profile, strict topology, canonical digests, and all Run contracts.
+- [x] **WP-100:** Retrofit canonical schemas, semantic roles, internal EO profile, strict topology, canonical digests, and all Run contracts.
 - [ ] **WP-105/WP-110/WP-115/WP-120:** Establish generator foundation, deterministic plan/graph compiler, side-effect-free project context, and pure project-scoped Route.
 - [ ] **WP-200/WP-210/WP-220/WP-225:** Implement protected storage, tickets/leases/budgets, receipts/reports, and mandatory action mediation.
 - [ ] **WP-300/WP-230:** Implement measured fidelity evaluator and trusted RunController with milestone/autonomous behavior, recovery, cancellation, and verdicts.
@@ -1639,5 +1639,75 @@ Extend `mdocs-orchestrator` with an extensible, surface-neutral capability model
 - WP-090 complete (commit baa53ea). Trust foundation landed under src/agents/run/trust/: OpaqueHandle broker, HumanAttestationProvider (separate approval + mode gestures; digest/project/session binding; replay, expiry, revocation; negative-oracle docs), HostIdentityProvider, ControllerStore CAS + protection contract, ActionMediator pre-effect boundary (intent persisted before effect), UsageMeter reservation semantics, pure fail-closed evaluateRunFidelity truth table (missing authority component => plan-only, never supervised; metering required only when hard token/cost budgets enforced), RunKillSwitch with conservative defaults (route/run both false). Fake trusted control plane (in-memory, real UUID nonces, failComponent scripting) validates the gate: 22 tests covering forged attestation/identity, per-component plan-only downgrades, metering, CAS conflicts, kill switch, separate mode event. Full gate green: build, typecheck, 551 tests/47 suites, coverage, git diff --check. Reviewer fix: corrected createOpaqueHandle doc comment to match actual root export.
 - [2026-09-09T00:44:45.004Z] mdocs executed at step REPORT
 - [2026-09-09T00:45:06.734Z] edit executed at step REPORT
+- [2026-09-09T00:45:12.660Z] bash executed at step REPORT
+- [2026-09-09T05:06:56.933Z] todowrite executed at step REPORT
+- [2026-09-09T05:08:52.410Z] mdocs_status executed at step REPORT
+- [2026-09-09T05:08:52.447Z] bash executed at step REPORT
+- [2026-09-09T05:08:57.519Z] bash executed at step REPORT
+- [2026-09-09T05:09:02.223Z] read executed at step REPORT
+- [2026-09-09T05:09:10.103Z] read executed at step REPORT
+- [2026-09-09T05:09:10.112Z] read executed at step REPORT
+- [2026-09-09T05:09:20.811Z] read executed at step REPORT
+- [2026-09-09T05:09:20.820Z] read executed at step REPORT
+- [2026-09-09T05:09:20.829Z] read executed at step REPORT
+- [2026-09-09T05:09:31.297Z] read executed at step REPORT
+- [2026-09-09T05:09:31.443Z] read executed at step REPORT
+- [2026-09-09T05:09:31.453Z] read executed at step REPORT
+- [2026-09-09T05:09:36.184Z] read executed at step REPORT
+- [2026-09-09T05:09:44.283Z] read executed at step REPORT
+- [2026-09-09T05:09:44.421Z] bash executed at step REPORT
+- [2026-09-09T05:09:56.389Z] bash executed at step REPORT
+- [2026-09-09T05:11:29.898Z] bash executed at step REPORT
+- [2026-09-09T05:11:29.932Z] bash executed at step REPORT
+- [2026-09-09T05:12:08.484Z] write executed at step REPORT
+- [2026-09-09T05:12:23.192Z] edit executed at step REPORT
+- [2026-09-09T05:12:31.751Z] edit executed at step REPORT
+- [2026-09-09T05:12:37.459Z] edit executed at step REPORT
+- [2026-09-09T05:12:44.557Z] edit executed at step REPORT
+- [2026-09-09T05:13:07.510Z] write executed at step REPORT
+- [2026-09-09T05:13:22.614Z] write executed at step REPORT
+- [2026-09-09T05:15:11.054Z] write executed at step REPORT
+- [2026-09-09T05:15:33.731Z] write executed at step REPORT
+- [2026-09-09T05:15:56.502Z] edit executed at step REPORT
+- [2026-09-09T05:16:04.920Z] edit executed at step REPORT
+- [2026-09-09T05:16:11.447Z] write executed at step REPORT
+- [2026-09-09T05:16:22.785Z] edit executed at step REPORT
+- [2026-09-09T05:16:23.204Z] edit executed at step REPORT
+- [2026-09-09T05:16:35.069Z] edit executed at step REPORT
+- [2026-09-09T05:16:36.317Z] edit executed at step REPORT
+- [2026-09-09T05:16:52.153Z] edit executed at step REPORT
+- [2026-09-09T05:16:55.807Z] edit executed at step REPORT
+- [2026-09-09T05:16:56.197Z] edit executed at step REPORT
+- [2026-09-09T05:17:04.204Z] bash executed at step REPORT
+- [2026-09-09T05:17:12.741Z] edit executed at step REPORT
+- [2026-09-09T05:17:20.648Z] bash executed at step REPORT
+- [2026-09-09T05:17:30.669Z] bash executed at step REPORT
+- [2026-09-09T05:18:08.112Z] write executed at step REPORT
+- [2026-09-09T05:18:20.631Z] bash executed at step REPORT
+- [2026-09-09T05:18:38.417Z] write executed at step REPORT
+- [2026-09-09T05:18:38.528Z] write executed at step REPORT
+- [2026-09-09T05:19:13.520Z] bash executed at step REPORT
+- [2026-09-09T05:19:31.337Z] bash executed at step REPORT
+- [2026-09-09T05:20:31.545Z] write executed at step REPORT
+- [2026-09-09T05:20:41.623Z] bash executed at step REPORT
+- [2026-09-09T05:20:51.168Z] edit executed at step REPORT
+- [2026-09-09T05:20:58.971Z] bash executed at step REPORT
+- [2026-09-09T05:21:24.336Z] edit executed at step REPORT
+- [2026-09-09T05:21:36.255Z] bash executed at step REPORT
+- [2026-09-09T05:21:56.388Z] bash executed at step REPORT
+- [2026-09-09T05:22:10.718Z] bash executed at step REPORT
+- [2026-09-09T05:22:33.735Z] task executed at step REPORT
+- [2026-09-09T05:23:08.976Z] read executed at step REPORT
+- [2026-09-09T05:23:08.987Z] read executed at step REPORT
+- [2026-09-09T05:23:08.997Z] read executed at step REPORT
+- [2026-09-09T05:23:20.186Z] bash executed at step REPORT
+- [2026-09-09T05:23:20.197Z] grep executed at step REPORT
+- [2026-09-09T05:23:31.326Z] read executed at step REPORT
+- [2026-09-09T05:24:07.359Z] bash executed at step REPORT
+- [2026-09-09T05:24:13.859Z] grep executed at step REPORT
+- [2026-09-09T05:24:27.177Z] bash executed at step REPORT
+- WP-100 complete (commit 324222d). src/agents/contracts/ landed: in-repo RFC 8785 JCS canonicalizer (fail-closed: NaN/Infinity/-0/unsafe integers/lone surrogates/duplicate keys incl. escape-aliased/class instances rejected), canonical envelope with domain-separated sha256 digests (UTF8(kind)||0x00||JCS({schemaVersion,id,payload}), timingSafeEqual verify), semantic roles with only PLAN_ROOT->EXECUTION and EXECUTION->LEAF edges, all 11 strict payload schemas per field catalog, orchestration-artifact superRefine enforcing owner/type consistency + milestone-bounded workstreams + Kahn acyclicity + dangling-edge rejection, kind->schema registry with parseContract fail-closed on unknown kind/major, COMPATIBILITY_POLICY. Profiles gained required exposure field; internal execution-orchestrator profile (policy-backed-resumable, exposure internal, no capability) added. Fixtures: 11 valid sealed envelopes + 10 invalid (dup-key, non-I-JSON, root->leaf, EO->EO, cycle, dangling, unbounded workstream, non-root integration, digest-mismatch, bundled approval+mode). Gate: 3 golden digest vectors, key-permutation determinism, material-change digest invalidation, approval/mode strict separation. 602 tests/48 suites green; build/typecheck/coverage/pack/diff-check clean. Noted deviation: I-JSON integer bound >= 2^53 (2^53+1 unrepresentable); leaf-level work = workstream nodeType with LEAF owner.
+- [2026-09-09T05:24:42.334Z] mdocs executed at step REPORT
+- [2026-09-09T05:24:51.012Z] edit executed at step REPORT
 
 ## Artifacts
