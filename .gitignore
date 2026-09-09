@@ -19,4 +19,5 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 mdocs/audit.log
+mdocs/audit.log.*
 mdocs/.workflow-state.json

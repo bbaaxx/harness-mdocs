@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { createRequire } from 'module';
 import * as path from 'path';
 
 const root = path.resolve(__dirname, '../../..');
@@ -35,5 +36,22 @@ test('package exports OpenCode runtime entrypoints and compatibility alias', () 
   expect(packageJson.exports['./plugin'].default).toBe('./dist/surfaces/opencode/opencode.js');
   expect(packageJson.exports['./api'].default).toBe('./dist/api.js');
   expect(packageJson.exports['./core'].default).toBe('./dist/core/index.js');
+  expect(packageJson.exports['./agents']).toEqual({
+    types: './dist/agents/index.d.ts',
+    default: './dist/agents/index.js'
+  });
   expect(packageJson.exports['./codex'].default).toBe('./dist/surfaces/codex/index.js');
+});
+
+test('built agents subpath resolves through package exports', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const agentsExport = packageJson.exports['./agents'];
+  const runtimeTarget = path.resolve(root, agentsExport.default);
+  const typesTarget = path.resolve(root, agentsExport.types);
+  const packageRequire = createRequire(path.join(root, 'package.json'));
+
+  expect(fs.existsSync(runtimeTarget)).toBe(true);
+  expect(fs.existsSync(typesTarget)).toBe(true);
+  expect(packageRequire.resolve('harness-mdocs/agents')).toBe(runtimeTarget);
+  expect(packageRequire('harness-mdocs/agents').canonicalAgentCapabilityRegistry).toBeDefined();
 });

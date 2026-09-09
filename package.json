@@ -39,6 +39,10 @@
       "types": "./dist/core/index.d.ts",
       "default": "./dist/core/index.js"
     },
+    "./agents": {
+      "types": "./dist/agents/index.d.ts",
+      "default": "./dist/agents/index.js"
+    },
     "./opencode": {
       "types": "./dist/surfaces/opencode/index.d.ts",
       "default": "./dist/surfaces/opencode/index.js"
