@@ -17,6 +17,7 @@
 - **G2c repo/system stub templates + wiki.stub/create recognition** (done) — g2c-repo-system-stub-templates--2026-06-23.md — 2026-06-23 — [core, wiki, stubs, repos, systems, 0.5.0, g2c]
 - **cc2 linter tolerance for metadata-only initiatives + consumer wiki frontmatter** (done) — cc2-linter-consumer-tolerance--2026-06-24.md — 2026-06-24 — [core, linter, compat, wiki, lifecycle]
 - **cc1 metadata-only initiative writes (store + manager + PostToolUse)** (done) — cc1-metadata-only-initiative--2026-06-24.md — 2026-06-24 — [core, initiative, compat, hooks]
+- **Extensible Mdocs Orchestrator Route and Run capabilities** (active) — extensible-harness-agents--2026-08-21.md — 2026-08-21 — [agents, orchestrator, route, run, harness, opencode, claude-code, codex, pi, capabilities, permissions, extensibility]
 - **Lifecycle parity: complete status, graduate, long-running warnings** (done) — lifecycle-parity-graduate-and-status--2026-06-23.md — 2026-06-23 — [core, lifecycle, validation, initiative-status, 0.5.0]
 - **Project-root resolution: unify cwd vs MDOCS_PROJECT_DIR** (done) — unify-project-root-resolution--2026-06-23.md — 2026-06-23 — [claude-code, mcp, hooks, project-root, multi-project, 0.4.3]
 - **Release 0.7.1** (done) — release-0-7-1--2026-08-07.md — 2026-08-07 — [release]

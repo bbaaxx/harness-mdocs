@@ -1,0 +1,102 @@
+---
+id: "hierarchical-run-orchestration-spec-2"
+title: "Hierarchical Run orchestration — specification 2"
+category: "architecture"
+created: "2026-08-21"
+updated: "2026-08-24"
+related_initiatives: ["extensible-harness-agents"]
+tags: ["agents","orchestrator","subagents","teams","ultracode","delegation","depth","run"]
+lifecycle: "stable"
+knowledge_type: "decision"
+confidence: "high"
+source_initiatives: ["extensible-harness-agents"]
+---
+
+# Hierarchical Run Orchestration — Specification 2
+
+## Status
+
+Processed and reconciled. Final architecture: `architecture/extensible-harness-agents`. Trust decision: `architecture/run-trust-boundary`.
+
+## Intent
+
+During approved Run, main `mdocs-orchestrator` acts as Plan Orchestrator and delegates bounded workstreams to internal Execution Orchestrators. Each EO may dispatch leaf workers only.
+
+```text
+PLAN_ROOT -> EXECUTION -> LEAF
+```
+
+Maximum orchestration depth 1; delegation depth 2. No EO->EO, leaf delegation, nested teams, or root->leaf exception. Root performs integration through ActionMediator.
+
+## References
+
+- Claude workflows/ultracode: https://code.claude.com/docs/en/workflows.md
+- Claude nested subagents: https://code.claude.com/docs/en/sub-agents.md#let-subagents-spawn-their-own-subagents
+- Claude teams: https://code.claude.com/docs/en/agent-teams.md
+- OpenCode agents: https://opencode.ai/docs/agents
+
+## Research Preserved
+
+- Ultracode compiles work into inspectable script and keeps intermediate results outside main context. Mdocs similarly compiles approved semantic graph; native script is adapter, not durable truth.
+- Claude nested subagents support configurable depth. Nested child-type allowlists are not sufficient; trusted gate must enforce role edge.
+- Claude native teams have fixed root lead, one team/session, no nested teams, direct teammate interaction, and resume limits. They are optional subtree accelerators only.
+- OpenCode supports hidden subagents and task permissions, but hidden is visibility only. Direct invocation still needs authority denial.
+- Neither normal custom-agent registry guarantees literal non-instantiability. Product promise is internal and non-user-authorizable.
+
+## Role Boundaries
+
+### Plan Orchestrator
+
+Owns plan/graph compilation, human approval binding, mode, global controller, budgets, EO workstream leases, integration, final verdict, pause/cancel/resume.
+
+### Execution Orchestrator
+
+Internal `execution-orchestrator/v1`; requires opaque controller-issued handle. Owns one workstream: local decomposition, leaf dispatch/monitoring, local verification, bounded remediation, structured report. Cannot approve/amend plan, select mode, expand authority, own global continuation, dispatch EO, or declare milestone/goal success.
+
+### Leaf
+
+One bounded task; no delegation or authority/state mutation.
+
+## Authority
+
+Role strings and prompt text carry no authority. Trusted control plane binds host identity, approved plan/graph, node/lease/generations, scope/write set, operations, approvals, budgets, depth/fanout, expiry/replay/cancellation, and expected report.
+
+Workers receive opaque handles. Direct invocation has no handle and cannot effect or delegate.
+
+## Execution Graph
+
+Before approval, compiler creates immutable DAG of milestone, workstream, and root integration nodes with dependencies, write ownership, criteria, budgets, fanout, and report schema. Approval binds plan and graph digests. Surface rendering must preserve graph semantics or require reapproval.
+
+## Budgets And Ownership
+
+Parent atomically reserves child capacity. EO subdivides leaf reservation only. Global caps override subtree. Retries/replacements/resumes consume cumulative budgets. One EO lease per workstream; stale lease/report quarantined. Overlapping write sets serialize unless isolation proven.
+
+## Reports
+
+Leaf report references mediated action receipts. EO aggregates lineage, mutations, criteria, evidence, uncertainty, and budget reconciliation. Reports cannot advance global state. Root validates and performs milestone/whole-goal integration.
+
+## Loop Authority
+
+Exactly one RunController owns continuation. EO local loops are bounded subroutines. `/goal`, dynamic workflow, Ralph, Team, or host task runtime may implement mechanics beneath controller only.
+
+## Surface Direction
+
+- Claude: internal EO custom subagent, depth 2, leaf no Agent, trusted PreToolUse/controller gate; workflows optional later.
+- OpenCode: hidden EO, depth 2, task topology plus trusted gate.
+- Codex/pi: plan-only until trust/delegation controls exist.
+
+## Invariants
+
+- No dispatch/effect without trusted approval, mode, identity, and current handle.
+- Only root->EO->leaf.
+- Child authority/budget strict subset.
+- EO reports never equal root verdict.
+- One controller/checkpoint writer.
+- Autonomous success continues; milestone success holds.
+- Missing trust component yields plan-only.
+
+## Referenced By
+
+*Auto-generated by mdocs*
+
+- extensible-harness-agents
