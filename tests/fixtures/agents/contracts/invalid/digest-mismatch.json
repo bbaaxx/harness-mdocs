@@ -1,0 +1,56 @@
+{
+  "kind": "execution-plan/v1",
+  "schemaVersion": 1,
+  "id": "plan-demo",
+  "payload": {
+    "objective": "Deliver the demo milestone",
+    "scope": [
+      "src/**"
+    ],
+    "outOfScope": [
+      "dist/**"
+    ],
+    "milestones": [
+      {
+        "milestoneId": "milestone-one",
+        "dependencies": [],
+        "criteria": [
+          "tests pass"
+        ],
+        "verification": "npm test"
+      }
+    ],
+    "integrationCriteria": [
+      "full suite green"
+    ],
+    "regressionCriteria": [
+      "no capability regressions"
+    ],
+    "writeSets": [
+      "src/**"
+    ],
+    "expectedSideEffects": [
+      "workspace-writes"
+    ],
+    "policy": {
+      "network": "deny"
+    },
+    "budgets": {
+      "maxActiveExecutionOrchestrators": 2,
+      "tokensGlobal": 200000
+    },
+    "pauseRules": [
+      "pause on uncertain outcome"
+    ],
+    "failureRules": [
+      "retry once per node"
+    ],
+    "cancelRules": [
+      "drain 30s"
+    ],
+    "completionRules": [
+      "all milestones accepted"
+    ]
+  },
+  "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}

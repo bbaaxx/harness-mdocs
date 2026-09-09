@@ -1,0 +1,23 @@
+{
+  "kind": "execution-mode-selection/v1",
+  "schemaVersion": 1,
+  "id": "mode-demo",
+  "payload": {
+    "eventId": "evt-mode-1",
+    "providerId": "host-attestation-ui",
+    "providerVersion": "1.0.0",
+    "principalRef": "principal:human-1",
+    "challengeNonce": "nonce-def-456",
+    "planDigest": "sha256:64879f7d6b960a01909762d911a32d4582c20010c5641ee90278b644a9e3b525",
+    "graphDigest": "sha256:eef93e1d14482804277fca0172464032d1a4fdbcc338524059fa1e861454ad4d",
+    "planRevision": 1,
+    "projectId": "project:demo",
+    "hostSessionRef": "host-session:demo",
+    "issuedAt": "2026-09-08T00:00:00Z",
+    "expiresAt": "2026-09-08T01:00:00Z",
+    "revocationGeneration": 0,
+    "verificationRef": "verify:opaque-1",
+    "mode": "milestone"
+  },
+  "digest": "sha256:5eca9e5427b8df119c865c43f227cfe3ce342b63af9c1e7b0c9bf4cb790985bb"
+}

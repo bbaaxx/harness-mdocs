@@ -1,0 +1,45 @@
+{
+  "kind": "delegation-ticket/v1",
+  "schemaVersion": 1,
+  "id": "ticket-demo",
+  "payload": {
+    "ticketHandleId": "opaque:ticket-1",
+    "runId": "run:demo",
+    "graphId": "graph:demo",
+    "nodeId": "workstream-one",
+    "parentNodeId": "milestone-one",
+    "generation": 1,
+    "issuerRole": "PLAN_ROOT",
+    "recipientRole": "EXECUTION",
+    "hostIdentityRef": "host-identity:session-1",
+    "scope": "implement workstream one",
+    "writeSet": [
+      "src/a/**"
+    ],
+    "criteria": [
+      "unit tests pass"
+    ],
+    "operationClasses": [
+      "fs.write"
+    ],
+    "toolClasses": [
+      "structured-argv"
+    ],
+    "credentialClasses": [],
+    "approvalRefs": [
+      "evt-approval-1"
+    ],
+    "budgets": {
+      "tokensEo": 60000
+    },
+    "allowedChildRole": "LEAF",
+    "maxChildDepth": 1,
+    "maxFanout": 2,
+    "nonce": "ticket-nonce-1",
+    "expiresAt": "2026-09-08T01:00:00Z",
+    "cancellationGeneration": 0,
+    "reportDestination": "controller://reports",
+    "reportSchemaRef": "execution-report/v1"
+  },
+  "digest": "sha256:d555aff0cfe86506403d84e0cbcab0ba6f675f5f1ccfc9ae0ecf9bae00bc7e25"
+}

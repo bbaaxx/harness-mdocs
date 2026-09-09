@@ -1,0 +1,48 @@
+{
+  "kind": "run-checkpoint/v1",
+  "schemaVersion": 1,
+  "id": "checkpoint-demo",
+  "payload": {
+    "casGeneration": 1,
+    "graphEpoch": 0,
+    "cancellationGeneration": 0,
+    "nodeStates": [
+      {
+        "nodeId": "workstream-one",
+        "state": "running"
+      }
+    ],
+    "controllerLease": "lease:controller:1",
+    "workstreamLeases": {
+      "workstream-one": "lease:eo:1"
+    },
+    "reservations": {
+      "reservation-1": {
+        "tokens": 100
+      }
+    },
+    "usageCommitted": {
+      "tokens": 100
+    },
+    "ticketRefs": [
+      "opaque:ticket-1"
+    ],
+    "completedActionIds": [
+      "action-1"
+    ],
+    "pendingEffects": [],
+    "fingerprints": {
+      "src/a/one.ts": "fp:after"
+    },
+    "evidenceRefs": [
+      "evidence:1"
+    ],
+    "reportRefs": [
+      "report-demo"
+    ],
+    "blockers": [],
+    "nextTransition": "accept-report",
+    "checksum": "sha256:4f63315d7af76a6fbadc4a2909595bdfd61453d15cdb7713bfacaafd26ac20a8"
+  },
+  "digest": "sha256:9fe0b27b5b2dbf168d98cdb53bc8403f3337a19414aa9c8c2e236ea0e997a861"
+}

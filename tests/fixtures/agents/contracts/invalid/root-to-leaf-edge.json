@@ -1,0 +1,42 @@
+{
+  "kind": "orchestration-artifact/v1",
+  "schemaVersion": 1,
+  "id": "invalid-graph",
+  "payload": {
+    "planDigest": "sha256:64879f7d6b960a01909762d911a32d4582c20010c5641ee90278b644a9e3b525",
+    "nodes": [
+      {
+        "nodeId": "milestone-one",
+        "nodeType": "milestone",
+        "ownerRole": "PLAN_ROOT",
+        "writeSet": [],
+        "isolation": "worktree",
+        "localCriteria": [
+          "c"
+        ],
+        "expectedReportKind": "execution-report/v1"
+      },
+      {
+        "nodeId": "leaf-task",
+        "nodeType": "workstream",
+        "ownerRole": "LEAF",
+        "writeSet": [],
+        "isolation": "worktree",
+        "localCriteria": [
+          "c"
+        ],
+        "expectedReportKind": "execution-report/v1"
+      }
+    ],
+    "edges": [
+      {
+        "fromNodeId": "milestone-one",
+        "toNodeId": "leaf-task"
+      }
+    ],
+    "fanout": 2,
+    "budgets": {},
+    "adapterRequirements": []
+  },
+  "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}

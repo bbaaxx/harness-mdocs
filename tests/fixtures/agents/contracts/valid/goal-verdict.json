@@ -1,0 +1,30 @@
+{
+  "kind": "goal-verdict/v1",
+  "schemaVersion": 1,
+  "id": "verdict-demo",
+  "payload": {
+    "acceptedNodeIds": [
+      "milestone-one"
+    ],
+    "integrationEvidenceRefs": [
+      "evidence:integration"
+    ],
+    "regressionEvidenceRefs": [
+      "evidence:regression"
+    ],
+    "independentReview": {
+      "ref": "review:1",
+      "outcome": "accepted"
+    },
+    "unresolvedItems": [],
+    "uncertainItems": [],
+    "budgetTotals": {
+      "tokens": 100,
+      "costUsd": 0.01
+    },
+    "finalState": "completed",
+    "finalReason": "all milestones accepted",
+    "completedAt": "2026-09-08T01:00:00Z"
+  },
+  "digest": "sha256:41f5207adb2806f4a0503356fb6a21962d5f68d22148ef9992d335ce71f4baef"
+}

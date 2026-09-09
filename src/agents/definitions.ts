@@ -4,21 +4,36 @@ export const ORCHESTRATE_PROFILE = Object.freeze({
   schemaVersion: 1,
   id: 'orchestrate',
   productIdentity: 'mdocs-orchestrator',
-  mode: 'normal'
+  mode: 'normal',
+  exposure: 'user'
 } as const) satisfies AgentProfileDefinition;
 
 export const ROUTE_PROFILE = Object.freeze({
   schemaVersion: 1,
   id: 'route',
   productIdentity: 'mdocs-orchestrator',
-  mode: 'read-only'
+  mode: 'read-only',
+  exposure: 'user'
 } as const) satisfies AgentProfileDefinition;
 
 export const RUN_PROFILE = Object.freeze({
   schemaVersion: 1,
   id: 'run',
   productIdentity: 'mdocs-orchestrator',
-  mode: 'policy-backed-resumable'
+  mode: 'policy-backed-resumable',
+  exposure: 'user'
+} as const) satisfies AgentProfileDefinition;
+
+// Internal Execution Orchestrator: owns bounded workstreams inside a Run.
+// exposure 'internal' — NOT user-authorizable — and deliberately carries NO
+// capability: it is reachable only through the trusted control plane's
+// delegation tickets, never through user invocation.
+export const EXECUTION_ORCHESTRATOR_PROFILE = Object.freeze({
+  schemaVersion: 1,
+  id: 'execution-orchestrator',
+  productIdentity: 'mdocs-orchestrator',
+  mode: 'policy-backed-resumable',
+  exposure: 'internal'
 } as const) satisfies AgentProfileDefinition;
 
 export const ORCHESTRATE_CAPABILITY = Object.freeze({
@@ -51,7 +66,8 @@ export const RUN_CAPABILITY = Object.freeze({
 export const CANONICAL_AGENT_PROFILES = Object.freeze([
   ORCHESTRATE_PROFILE,
   ROUTE_PROFILE,
-  RUN_PROFILE
+  RUN_PROFILE,
+  EXECUTION_ORCHESTRATOR_PROFILE
 ] as const);
 
 export const CANONICAL_AGENT_CAPABILITIES = Object.freeze([

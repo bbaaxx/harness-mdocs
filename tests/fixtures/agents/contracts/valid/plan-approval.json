@@ -1,0 +1,23 @@
+{
+  "kind": "plan-approval/v1",
+  "schemaVersion": 1,
+  "id": "approval-demo",
+  "payload": {
+    "eventId": "evt-approval-1",
+    "providerId": "host-attestation-ui",
+    "providerVersion": "1.0.0",
+    "principalRef": "principal:human-1",
+    "challengeNonce": "nonce-abc-123",
+    "planDigest": "sha256:64879f7d6b960a01909762d911a32d4582c20010c5641ee90278b644a9e3b525",
+    "graphDigest": "sha256:eef93e1d14482804277fca0172464032d1a4fdbcc338524059fa1e861454ad4d",
+    "planRevision": 1,
+    "projectId": "project:demo",
+    "hostSessionRef": "host-session:demo",
+    "issuedAt": "2026-09-08T00:00:00Z",
+    "expiresAt": "2026-09-08T01:00:00Z",
+    "revocationGeneration": 0,
+    "verificationRef": "verify:opaque-1",
+    "decision": "approved"
+  },
+  "digest": "sha256:9722b050da0be513b665da2dd6a641a47bf8b6ee7d8a9daac8e3c44f2d5ee0a3"
+}

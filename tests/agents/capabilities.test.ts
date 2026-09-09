@@ -41,9 +41,16 @@ test('canonical capability and profile definitions satisfy strict schemas', () =
 
 test('canonical profiles preserve one product identity and intended activation boundaries', () => {
   expect(CANONICAL_AGENT_PROFILES.map(profile => profile.productIdentity))
-    .toEqual(['mdocs-orchestrator', 'mdocs-orchestrator', 'mdocs-orchestrator']);
+    .toEqual([
+      'mdocs-orchestrator',
+      'mdocs-orchestrator',
+      'mdocs-orchestrator',
+      'mdocs-orchestrator'
+    ]);
   expect(CANONICAL_AGENT_PROFILES.map(profile => profile.mode))
-    .toEqual(['normal', 'read-only', 'policy-backed-resumable']);
+    .toEqual(['normal', 'read-only', 'policy-backed-resumable', 'policy-backed-resumable']);
+  expect(CANONICAL_AGENT_PROFILES.map(profile => profile.exposure))
+    .toEqual(['user', 'user', 'user', 'internal']);
   expect(CANONICAL_AGENT_CAPABILITIES.map(capability => capability.invocation.activation))
     .toEqual(['default', 'explicit', 'explicit']);
 });
@@ -276,7 +283,7 @@ test('registry listing and lookup are deterministic', () => {
   expect(registry.listCapabilities().map(capability => capability.id))
     .toEqual(['orchestrate', 'route', 'run']);
   expect(registry.listProfiles().map(profile => profile.id))
-    .toEqual(['orchestrate', 'route', 'run']);
+    .toEqual(['execution-orchestrator', 'orchestrate', 'route', 'run']);
   expect(registry.getCapability('route')?.profileId).toBe('route');
   expect(registry.getProfile('missing')).toBeUndefined();
 });
@@ -305,7 +312,8 @@ test('fourth capability registers through existing contract semantics', () => {
     schemaVersion: 1,
     id: 'inspect',
     productIdentity: 'mdocs-orchestrator',
-    mode: 'read-only'
+    mode: 'read-only',
+    exposure: 'user'
   } as const;
   const inspectCapability = {
     schemaVersion: 1,

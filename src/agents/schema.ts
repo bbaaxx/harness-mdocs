@@ -18,7 +18,11 @@ export const agentProfileDefinitionSchema = z.object({
   schemaVersion: z.literal(AGENT_SCHEMA_VERSION),
   id: agentIdSchema,
   productIdentity: z.literal(MDOCS_ORCHESTRATOR_IDENTITY),
-  mode: z.enum(['normal', 'read-only', 'policy-backed-resumable'])
+  mode: z.enum(['normal', 'read-only', 'policy-backed-resumable']),
+  // 'user' profiles are authorizable surfaces; 'internal' profiles (the
+  // Execution Orchestrator) exist only inside Run's trusted control plane
+  // and are never user-authorizable.
+  exposure: z.enum(['user', 'internal'])
 }).strict();
 
 export const agentCapabilityDefinitionSchema = z.object({

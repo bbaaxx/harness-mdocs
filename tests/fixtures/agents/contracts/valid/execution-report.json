@@ -1,0 +1,41 @@
+{
+  "kind": "execution-report/v1",
+  "schemaVersion": 1,
+  "id": "report-demo",
+  "payload": {
+    "ticketRef": "opaque:ticket-1",
+    "leaseRef": "lease:eo:1",
+    "childLineage": [
+      "opaque:ticket-2"
+    ],
+    "mutations": [
+      "src/a/one.ts"
+    ],
+    "actions": [
+      "action-1"
+    ],
+    "criterionResults": [
+      {
+        "criterionId": "unit tests pass",
+        "outcome": "met",
+        "evidenceRef": "evidence:1"
+      }
+    ],
+    "receiptRefs": [
+      "receipt-demo"
+    ],
+    "evidenceRefs": [
+      "evidence:1"
+    ],
+    "budgetReconciliation": {
+      "tokensUsed": 100
+    },
+    "assumptions": [
+      "none beyond ticket scope"
+    ],
+    "unresolvedItems": [],
+    "uncertainOutcomes": [],
+    "requestedDisposition": "continue"
+  },
+  "digest": "sha256:fc4349a2d3d09f10a2445c41fd21fdfda7b4f3ec54ae322076aad2aa3570985a"
+}

@@ -1,0 +1,78 @@
+{
+  "kind": "orchestration-artifact/v1",
+  "schemaVersion": 1,
+  "id": "graph-demo",
+  "payload": {
+    "planDigest": "sha256:64879f7d6b960a01909762d911a32d4582c20010c5641ee90278b644a9e3b525",
+    "nodes": [
+      {
+        "nodeId": "milestone-one",
+        "nodeType": "milestone",
+        "ownerRole": "PLAN_ROOT",
+        "writeSet": [
+          "src/**"
+        ],
+        "isolation": "controller",
+        "localCriteria": [
+          "tests pass"
+        ],
+        "expectedReportKind": "execution-report/v1"
+      },
+      {
+        "nodeId": "workstream-one",
+        "nodeType": "workstream",
+        "ownerRole": "EXECUTION",
+        "writeSet": [
+          "src/a/**"
+        ],
+        "isolation": "worktree",
+        "localCriteria": [
+          "unit tests pass"
+        ],
+        "expectedReportKind": "execution-report/v1"
+      },
+      {
+        "nodeId": "leaf-task-one",
+        "nodeType": "workstream",
+        "ownerRole": "LEAF",
+        "writeSet": [
+          "src/a/one.ts"
+        ],
+        "isolation": "worktree",
+        "localCriteria": [
+          "file compiles"
+        ],
+        "expectedReportKind": "execution-report/v1"
+      },
+      {
+        "nodeId": "integration-one",
+        "nodeType": "integration",
+        "ownerRole": "PLAN_ROOT",
+        "writeSet": [],
+        "isolation": "controller",
+        "localCriteria": [
+          "integration suite green"
+        ],
+        "expectedReportKind": "execution-report/v1"
+      }
+    ],
+    "edges": [
+      {
+        "fromNodeId": "milestone-one",
+        "toNodeId": "workstream-one"
+      },
+      {
+        "fromNodeId": "workstream-one",
+        "toNodeId": "leaf-task-one"
+      }
+    ],
+    "fanout": 2,
+    "budgets": {
+      "tokensGlobal": 200000
+    },
+    "adapterRequirements": [
+      "fake-trusted-adapter"
+    ]
+  },
+  "digest": "sha256:0d499eda506aae6d6e9272723305d89d74c353c56fa7f1a87d9016e9c92b3621"
+}

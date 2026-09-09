@@ -1,0 +1,78 @@
+{
+  "kind": "execution-blueprint/v1",
+  "schemaVersion": 1,
+  "id": "blueprint-demo",
+  "payload": {
+    "requestDigest": "sha256:1f58b9145b24d108d7ac38887338b3ea3229833b9c1e418250343f907bfd1047",
+    "projectIdentity": "mdocs-demo",
+    "projectRoot": "/workspace/demo",
+    "inventoryDigest": "sha256:b11a85b296a90afc460430434a504e7acb04b064575b7277724688af0e59d189",
+    "capabilityObservations": [
+      {
+        "capabilityId": "run",
+        "evidence": [
+          {
+            "source": "project-config",
+            "reference": ".mdocs.json"
+          }
+        ],
+        "availability": {
+          "installed": "confirmed",
+          "configured": "confirmed",
+          "exposed": "confirmed",
+          "permitted": "confirmed",
+          "taskSuitability": "suitable"
+        }
+      }
+    ],
+    "selectedRoutes": [
+      {
+        "id": "run",
+        "reasons": [
+          "capabilities confirmed"
+        ]
+      }
+    ],
+    "rejectedRoutes": [
+      {
+        "id": "route",
+        "reasons": [
+          "superseded by run"
+        ]
+      }
+    ],
+    "topology": [
+      {
+        "from": "PLAN_ROOT",
+        "to": "EXECUTION"
+      },
+      {
+        "from": "EXECUTION",
+        "to": "LEAF"
+      }
+    ],
+    "fidelityRequirements": [
+      "plan-only"
+    ],
+    "fidelityResult": "plan-only",
+    "sideEffects": [
+      "none"
+    ],
+    "approvalForecast": {
+      "requiresApproval": true,
+      "notes": [
+        "human approval required before run"
+      ]
+    },
+    "verification": [
+      "npm test"
+    ],
+    "fallbacks": [
+      "emit plan-only blueprint"
+    ],
+    "unresolvedPreflightChecks": [
+      "usage-metering unprobed"
+    ]
+  },
+  "digest": "sha256:e3e3118a538766da721f571cdbd7401dfed0d6e0f0c1941608bd0761f67533ce"
+}
