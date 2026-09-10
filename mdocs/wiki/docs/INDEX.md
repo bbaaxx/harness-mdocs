@@ -2,6 +2,7 @@
 
 - [Project read context and pure Route implementation](project-read-context-and-route.md)
 - [wiki.ingest command + withLock promotion (G2b)](wiki-ingest-command.md)
+- [Immutable plan/graph compiler and approval binding](plan-graph-compiler-and-approval-binding.md)
 - [OpenCode plugin version pinning](opencode-plugin-version-pinning.md)
 - [Compiled-knowledge overview.md / log.md grammar](compiled-knowledge-overview-log-grammar.md)
 - [repos/systems entity stub templates (G2c)](repo-system-entity-templates.md)
