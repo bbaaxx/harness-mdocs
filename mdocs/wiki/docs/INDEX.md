@@ -1,5 +1,6 @@
 # docs
 
+- [Project read context and pure Route implementation](project-read-context-and-route.md)
 - [wiki.ingest command + withLock promotion (G2b)](wiki-ingest-command.md)
 - [OpenCode plugin version pinning](opencode-plugin-version-pinning.md)
 - [Compiled-knowledge overview.md / log.md grammar](compiled-knowledge-overview-log-grammar.md)
