@@ -2,6 +2,7 @@ export * from './schema';
 export * from './registry';
 export * from './definitions';
 export * from './evidence';
+export * from './project-context';
 export * from './run';
 export * from './contracts';
 
