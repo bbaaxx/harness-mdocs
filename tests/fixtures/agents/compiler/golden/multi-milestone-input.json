@@ -1,0 +1,56 @@
+{
+  "planKey": "release-hardening",
+  "planRevision": 3,
+  "objective": "Ship deterministic compiler",
+  "scope": ["src/**", "docs/**"],
+  "outOfScope": ["dist/**"],
+  "milestones": [
+    {
+      "key": "docs",
+      "dependsOn": ["core"],
+      "criteria": ["Guide is accurate"],
+      "verification": "review docs",
+      "writeSet": ["docs/**"],
+      "integrationCriteria": ["Guide matches behavior"],
+      "workstreams": [
+        {
+          "key": "guide",
+          "criteria": ["Guide is complete"],
+          "writeSet": ["docs/guide.md"],
+          "leaves": []
+        }
+      ]
+    },
+    {
+      "key": "core",
+      "dependsOn": [],
+      "criteria": ["Compiler is deterministic"],
+      "verification": "npm test",
+      "writeSet": ["src/**"],
+      "integrationCriteria": ["Core tests pass"],
+      "workstreams": [
+        {
+          "key": "api",
+          "criteria": ["API compiles"],
+          "writeSet": ["src/compiler/**"],
+          "leaves": [
+            {
+              "key": "handler",
+              "criteria": ["Handler validates input"],
+              "writeSet": ["src/compiler/handler.ts"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "integrationCriteria": ["All suites pass"],
+  "regressionCriteria": ["No contract regression"],
+  "expectedSideEffects": ["workspace writes"],
+  "policy": {"network": "deny", "review": {"required": true}},
+  "adapterRequirements": ["trusted-attestation"],
+  "pauseRules": ["Pause on uncertainty"],
+  "failureRules": ["Fail closed"],
+  "cancelRules": ["Stop before drain"],
+  "completionRules": ["All integrations pass"]
+}

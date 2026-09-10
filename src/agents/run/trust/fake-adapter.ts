@@ -4,6 +4,7 @@ import {
   AttestationChallenge,
   AttestationChallengeParams,
   AttestationExpectedBinding,
+  AttestationPairVerification,
   AttestationVerification,
   ExecutionModeSelectionEvent,
   HumanAttestationProvider,
@@ -59,8 +60,12 @@ interface FakeChallenge {
   nonce: string;
   params: AttestationChallengeParams;
   expiresAt: Date;
-  approvalUsed: boolean;
-  modeUsed: boolean;
+  used: boolean;
+}
+
+interface IssuedEventRecord {
+  kind: PlanApprovalEvent['kind'] | ExecutionModeSelectionEvent['kind'];
+  snapshot: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -108,8 +113,9 @@ export function createFakeTrustedControlPlane(
   // --- attestation -----------------------------------------------------------
   const challenges = new Map<string, FakeChallenge>();
   const revoked = new Map<string, number>();
-  const verifiedApprovalIds = new Set<string>();
-  const verifiedModeIds = new Set<string>();
+  const issuedEventIdentities = new WeakSet<object>();
+  const issuedEvents = new WeakMap<object, IssuedEventRecord>();
+  const verifiedEventIds = new Set<string>();
   let revocationGeneration = 0;
 
   function issueEventId(): string {
@@ -137,36 +143,100 @@ export function createFakeTrustedControlPlane(
   function liveChallenge(challengeId: string): FakeChallenge {
     const challenge = challenges.get(challengeId);
     if (!challenge) throw new Error(`Unknown attestation challenge "${challengeId}"`);
-    if (now().getTime() > challenge.expiresAt.getTime()) {
+    if (now().getTime() >= challenge.expiresAt.getTime()) {
       throw new Error(`Attestation challenge "${challengeId}" expired`);
     }
     return challenge;
   }
 
-  function verifyEvent(
+  function preflightEvent(
     event: PlanApprovalEvent | ExecutionModeSelectionEvent,
     expected: AttestationExpectedBinding,
-    verifiedIds: Set<string>
+    expectedKind: PlanApprovalEvent['kind'] | ExecutionModeSelectionEvent['kind']
   ): AttestationVerification {
+    if (!event || typeof event !== 'object') return { ok: false, reason: 'untrusted-origin' };
+    if (!issuedEventIdentities.has(event)) return { ok: false, reason: 'untrusted-origin' };
+    const issued = issuedEvents.get(event);
+    if (!issued) return { ok: false, reason: 'untrusted-origin' };
+    if (issued.kind !== expectedKind) return { ok: false, reason: 'kind-mismatch' };
+
+    const eventRecord = event as unknown as Record<string, unknown>;
+    const snapshotKeys = Object.keys(issued.snapshot);
+    const eventKeys = Object.keys(eventRecord);
+    if (
+      eventKeys.length !== snapshotKeys.length ||
+      snapshotKeys.some(key => eventRecord[key] !== issued.snapshot[key])
+    ) {
+      return { ok: false, reason: 'invalid-event' };
+    }
     if (event.providerId !== providerId || event.providerVersion !== providerVersion) {
       return { ok: false, reason: 'untrusted-origin' };
+    }
+    if (event.kind !== issued.kind) return { ok: false, reason: 'invalid-event' };
+    if (event.kind === 'plan-approval/v1' && event.decision !== 'approved') {
+      return { ok: false, reason: 'decision-rejected' };
+    }
+    if (
+      event.kind === 'execution-mode-selection/v1' &&
+      event.mode !== 'milestone' && event.mode !== 'autonomous'
+    ) {
+      return { ok: false, reason: 'invalid-event' };
     }
     if (revoked.has(event.eventId)) return { ok: false, reason: 'revoked' };
     if (event.planDigest !== expected.planDigest || event.graphDigest !== expected.graphDigest) {
       return { ok: false, reason: 'digest-mismatch' };
     }
+    if (event.planRevision !== expected.planRevision) return { ok: false, reason: 'revision-mismatch' };
+    if (event.principalRef !== expected.principalRef) return { ok: false, reason: 'principal-mismatch' };
     if (event.projectId !== expected.projectId) return { ok: false, reason: 'project-mismatch' };
     if (event.hostSessionRef !== expected.hostSessionRef) {
       return { ok: false, reason: 'session-mismatch' };
     }
-    if (now().getTime() > Date.parse(event.expiresAt)) return { ok: false, reason: 'expired' };
-    if (verifiedIds.has(event.eventId)) return { ok: false, reason: 'replayed' };
-    verifiedIds.add(event.eventId);
+    if (now().getTime() >= Date.parse(event.expiresAt)) return { ok: false, reason: 'expired' };
+    if (verifiedEventIds.has(event.eventId)) return { ok: false, reason: 'replayed' };
+    return { ok: true };
+  }
+
+  function verifyEvent(
+    event: PlanApprovalEvent | ExecutionModeSelectionEvent,
+    expected: AttestationExpectedBinding,
+    expectedKind: PlanApprovalEvent['kind'] | ExecutionModeSelectionEvent['kind']
+  ): AttestationVerification {
+    const result = preflightEvent(event, expected, expectedKind);
+    if (result.ok) verifiedEventIds.add(event.eventId);
+    return result;
+  }
+
+  function verifyPair(
+    approval: PlanApprovalEvent,
+    modeSelection: ExecutionModeSelectionEvent,
+    expected: AttestationExpectedBinding
+  ): AttestationPairVerification {
+    const approvalResult = preflightEvent(approval, expected, 'plan-approval/v1');
+    if (!approvalResult.ok) return { ...approvalResult, target: 'approval' };
+    const modeResult = preflightEvent(modeSelection, expected, 'execution-mode-selection/v1');
+    if (!modeResult.ok) return { ...modeResult, target: 'mode-selection' };
+    if (
+      approval.eventId === modeSelection.eventId ||
+      approval.challengeNonce === modeSelection.challengeNonce ||
+      approval.verificationRef === modeSelection.verificationRef
+    ) {
+      return { ok: false, target: 'pair', reason: 'invalid-event' };
+    }
+    verifiedEventIds.add(approval.eventId);
+    verifiedEventIds.add(modeSelection.eventId);
     return { ok: true };
   }
 
   const attestation: HumanAttestationProvider = {
     beginChallenge: async (params: AttestationChallengeParams) => {
+      if (
+        params.principalRef !== principalRef ||
+        params.projectId !== projectId ||
+        params.hostSessionRef !== hostSessionRef
+      ) {
+        throw new Error('Attestation challenge identity/project/session binding mismatch');
+      }
       const challengeId = crypto.randomUUID();
       const nonce = crypto.randomUUID();
       const expiresAt = new Date(now().getTime() + challengeTtlMs);
@@ -174,47 +244,69 @@ export function createFakeTrustedControlPlane(
         nonce,
         params: { ...params },
         expiresAt,
-        approvalUsed: false,
-        modeUsed: false
+        used: false
       });
       const challenge: AttestationChallenge = {
         challengeId,
         nonce,
-        presentedDigests: { planDigest: params.planDigest, graphDigest: params.graphDigest },
+        presentedDigests: Object.freeze({
+          planDigest: params.planDigest,
+          graphDigest: params.graphDigest
+        }),
         expiresAt: expiresAt.toISOString()
       };
       return Object.freeze(challenge);
     },
     recordApproval: async (challengeId, decision) => {
-      const challenge = liveChallenge(challengeId);
-      if (challenge.approvalUsed) {
-        throw new Error(`Replay rejected: challenge "${challengeId}" already used for approval`);
+      if (decision !== 'approved' && decision !== 'rejected') {
+        throw new Error(`Invalid approval decision "${String(decision)}"`);
       }
-      challenge.approvalUsed = true;
+      const challenge = liveChallenge(challengeId);
+      if (challenge.used) {
+        throw new Error(`Replay rejected: challenge "${challengeId}" already minted an event`);
+      }
+      challenge.used = true;
       const event: PlanApprovalEvent = {
         kind: 'plan-approval/v1',
         eventId: issueEventId(),
         ...bindingFrom(challenge),
         decision
       };
-      return Object.freeze(event);
+      const frozen = Object.freeze(event);
+      issuedEventIdentities.add(frozen);
+      issuedEvents.set(frozen, Object.freeze({
+        kind: frozen.kind,
+        snapshot: Object.freeze({ ...frozen })
+      }));
+      return frozen;
     },
     recordModeSelection: async (challengeId, mode) => {
-      const challenge = liveChallenge(challengeId);
-      if (challenge.modeUsed) {
-        throw new Error(`Replay rejected: challenge "${challengeId}" already used for mode selection`);
+      if (mode !== 'milestone' && mode !== 'autonomous') {
+        throw new Error(`Invalid execution mode "${String(mode)}"`);
       }
-      challenge.modeUsed = true;
+      const challenge = liveChallenge(challengeId);
+      if (challenge.used) {
+        throw new Error(`Replay rejected: challenge "${challengeId}" already minted an event`);
+      }
+      challenge.used = true;
       const event: ExecutionModeSelectionEvent = {
         kind: 'execution-mode-selection/v1',
         eventId: issueEventId(),
         ...bindingFrom(challenge),
         mode
       };
-      return Object.freeze(event);
+      const frozen = Object.freeze(event);
+      issuedEventIdentities.add(frozen);
+      issuedEvents.set(frozen, Object.freeze({
+        kind: frozen.kind,
+        snapshot: Object.freeze({ ...frozen })
+      }));
+      return frozen;
     },
-    verifyApproval: (event, expected) => verifyEvent(event, expected, verifiedApprovalIds),
-    verifyModeSelection: (event, expected) => verifyEvent(event, expected, verifiedModeIds),
+    verifyApproval: (event, expected) => verifyEvent(event, expected, 'plan-approval/v1'),
+    verifyModeSelection: (event, expected) =>
+      verifyEvent(event, expected, 'execution-mode-selection/v1'),
+    verifyPair,
     revoke: async (eventId: string, generation: number) => {
       revoked.set(eventId, generation);
       revocationGeneration = Math.max(revocationGeneration, generation);

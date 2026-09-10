@@ -56,22 +56,39 @@ export interface AttestationChallengeParams {
 export interface AttestationExpectedBinding {
   planDigest: Digest;
   graphDigest: Digest;
+  planRevision: number;
+  principalRef: string;
   projectId: string;
   hostSessionRef: string;
 }
+
+export type AttestationVerificationFailureReason =
+  | 'digest-mismatch'
+  | 'revision-mismatch'
+  | 'principal-mismatch'
+  | 'project-mismatch'
+  | 'session-mismatch'
+  | 'kind-mismatch'
+  | 'decision-rejected'
+  | 'invalid-event'
+  | 'expired'
+  | 'revoked'
+  | 'replayed'
+  | 'untrusted-origin';
 
 export type AttestationVerification =
   | { ok: true }
   | {
       ok: false;
-      reason:
-        | 'digest-mismatch'
-        | 'project-mismatch'
-        | 'session-mismatch'
-        | 'expired'
-        | 'revoked'
-        | 'replayed'
-        | 'untrusted-origin';
+      reason: AttestationVerificationFailureReason;
+    };
+
+export type AttestationPairVerification =
+  | { ok: true }
+  | {
+      ok: false;
+      target: 'approval' | 'mode-selection' | 'pair';
+      reason: AttestationVerificationFailureReason;
     };
 
 /**
@@ -100,5 +117,15 @@ export interface HumanAttestationProvider {
     event: ExecutionModeSelectionEvent,
     expected: AttestationExpectedBinding
   ): AttestationVerification;
+  /**
+   * Atomically verifies and consumes both gestures, or consumes neither.
+   * Implementations MUST authenticate opaque/signature/object identity before
+   * reflecting on or reading any fields from untrusted event arguments.
+   */
+  verifyPair(
+    approval: PlanApprovalEvent,
+    modeSelection: ExecutionModeSelectionEvent,
+    expected: AttestationExpectedBinding
+  ): AttestationPairVerification;
   revoke(eventId: string, generation: number): Promise<void>;
 }

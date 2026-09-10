@@ -27,6 +27,8 @@ function expectedBinding() {
   return {
     planDigest: PLAN_DIGEST,
     graphDigest: GRAPH_DIGEST,
+    planRevision: 1,
+    principalRef: 'principal:fake',
     projectId: 'project:fake',
     hostSessionRef: 'host-session:fake'
   } as const;
@@ -61,14 +63,14 @@ describe('forged attestation', () => {
     expect(controlPlane.attestation.verifyApproval(
       { ...planEvent, planDigest: 'sha256:forged' },
       expectedBinding()
-    )).toEqual({ ok: false, reason: 'digest-mismatch' });
+    )).toEqual({ ok: false, reason: 'untrusted-origin' });
 
     const graphChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
     const graphEvent = await controlPlane.attestation.recordApproval(graphChallenge.challengeId, 'approved');
     expect(controlPlane.attestation.verifyApproval(
       { ...graphEvent, graphDigest: 'sha256:forged' },
       expectedBinding()
-    )).toEqual({ ok: false, reason: 'digest-mismatch' });
+    )).toEqual({ ok: false, reason: 'untrusted-origin' });
   });
 
   test('wrong project binding fails verification with project-mismatch', async () => {
@@ -80,6 +82,74 @@ describe('forged attestation', () => {
       ...expectedBinding(),
       projectId: 'project:other'
     })).toEqual({ ok: false, reason: 'project-mismatch' });
+  });
+
+  test('wrong revision and principal bindings fail verification', async () => {
+    const controlPlane = createFakeTrustedControlPlane();
+    const revisionChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const revisionEvent = await controlPlane.attestation.recordApproval(
+      revisionChallenge.challengeId,
+      'approved'
+    );
+    expect(controlPlane.attestation.verifyApproval(revisionEvent, {
+      ...expectedBinding(),
+      planRevision: 2
+    })).toEqual({ ok: false, reason: 'revision-mismatch' });
+
+    const principalChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const principalEvent = await controlPlane.attestation.recordApproval(
+      principalChallenge.challengeId,
+      'approved'
+    );
+    expect(controlPlane.attestation.verifyApproval(principalEvent, {
+      ...expectedBinding(),
+      principalRef: 'principal:other'
+    })).toEqual({ ok: false, reason: 'principal-mismatch' });
+  });
+
+  test('copied, synthetic, wrong-kind, and rejected issued events fail closed', async () => {
+    const controlPlane = createFakeTrustedControlPlane();
+    const approvedChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const approved = await controlPlane.attestation.recordApproval(approvedChallenge.challengeId, 'approved');
+    expect(controlPlane.attestation.verifyApproval({ ...approved }, expectedBinding()))
+      .toEqual({ ok: false, reason: 'untrusted-origin' });
+    expect(controlPlane.attestation.verifyApproval({
+      ...approved,
+      eventId: 'event:synthetic'
+    }, expectedBinding())).toEqual({ ok: false, reason: 'untrusted-origin' });
+
+    const modeChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const mode = await controlPlane.attestation.recordModeSelection(modeChallenge.challengeId, 'milestone');
+    expect(controlPlane.attestation.verifyApproval(mode as any, expectedBinding()))
+      .toEqual({ ok: false, reason: 'kind-mismatch' });
+
+    const rejectedChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const rejected = await controlPlane.attestation.recordApproval(rejectedChallenge.challengeId, 'rejected');
+    expect(controlPlane.attestation.verifyApproval(rejected, expectedBinding()))
+      .toEqual({ ok: false, reason: 'decision-rejected' });
+  });
+
+  test('clone, proxy, and getter events fail identity gate without reads or consumption', async () => {
+    const controlPlane = createFakeTrustedControlPlane();
+    const approvalChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const approval = await controlPlane.attestation.recordApproval(approvalChallenge.challengeId, 'approved');
+    const modeChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const mode = await controlPlane.attestation.recordModeSelection(modeChallenge.challengeId, 'autonomous');
+    const getTrap = jest.fn(Reflect.get);
+    const proxy = new Proxy(mode, { get: getTrap });
+    const getter = jest.fn(() => approval.eventId);
+    const getterEvent: Record<string, unknown> = {};
+    Object.defineProperty(getterEvent, 'eventId', { enumerable: true, get: getter });
+
+    expect(controlPlane.attestation.verifyApproval({ ...approval }, expectedBinding()))
+      .toEqual({ ok: false, reason: 'untrusted-origin' });
+    expect(controlPlane.attestation.verifyApproval(getterEvent as any, expectedBinding()))
+      .toEqual({ ok: false, reason: 'untrusted-origin' });
+    expect(controlPlane.attestation.verifyPair(approval, proxy, expectedBinding()))
+      .toEqual({ ok: false, target: 'mode-selection', reason: 'untrusted-origin' });
+    expect(getter).not.toHaveBeenCalled();
+    expect(getTrap).not.toHaveBeenCalled();
+    expect(controlPlane.attestation.verifyPair(approval, mode, expectedBinding())).toEqual({ ok: true });
   });
 
   test('second approval on the same challenge is rejected as replay', async () => {
@@ -118,6 +188,25 @@ describe('forged attestation', () => {
     const staleChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
     current = new Date('2026-09-08T02:00:00.000Z');
     await expect(controlPlane.attestation.recordApproval(staleChallenge.challengeId, 'approved'))
+      .rejects.toThrow(/expired/i);
+  });
+
+  test('challenge and event expire exactly at expiresAt', async () => {
+    let current = new Date('2026-09-08T00:00:00.000Z');
+    const controlPlane = createFakeTrustedControlPlane({
+      now: () => current,
+      challengeTtlMs: 60_000
+    });
+    const eventChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const event = await controlPlane.attestation.recordApproval(eventChallenge.challengeId, 'approved');
+    current = new Date(event.expiresAt);
+    expect(controlPlane.attestation.verifyApproval(event, expectedBinding()))
+      .toEqual({ ok: false, reason: 'expired' });
+
+    current = new Date('2026-09-08T01:00:00.000Z');
+    const recordChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    current = new Date(recordChallenge.expiresAt);
+    await expect(controlPlane.attestation.recordModeSelection(recordChallenge.challengeId, 'milestone'))
       .rejects.toThrow(/expired/i);
   });
 
@@ -320,6 +409,76 @@ describe('mode selection is a separate trusted event', () => {
     // Second mode selection on the same challenge is replay.
     await expect(controlPlane.attestation.recordModeSelection(modeChallenge.challengeId, 'milestone'))
       .rejects.toThrow(/replay/i);
+  });
+
+  test('one challenge cannot mint approval then mode or mode then approval', async () => {
+    const approvalFirst = createFakeTrustedControlPlane();
+    const firstChallenge = await approvalFirst.attestation.beginChallenge(challengeParams());
+    await approvalFirst.attestation.recordApproval(firstChallenge.challengeId, 'approved');
+    await expect(approvalFirst.attestation.recordModeSelection(firstChallenge.challengeId, 'milestone'))
+      .rejects.toThrow(/already minted an event/i);
+
+    const modeFirst = createFakeTrustedControlPlane();
+    const secondChallenge = await modeFirst.attestation.beginChallenge(challengeParams());
+    await modeFirst.attestation.recordModeSelection(secondChallenge.challengeId, 'autonomous');
+    await expect(modeFirst.attestation.recordApproval(secondChallenge.challengeId, 'approved'))
+      .rejects.toThrow(/already minted an event/i);
+  });
+
+  test('challenge binding comes from configured trusted host context and digest view is deeply frozen', async () => {
+    const controlPlane = createFakeTrustedControlPlane();
+    for (const changed of [
+      { principalRef: 'principal:other' },
+      { projectId: 'project:other' },
+      { hostSessionRef: 'host-session:other' }
+    ]) {
+      await expect(controlPlane.attestation.beginChallenge({ ...challengeParams(), ...changed }))
+        .rejects.toThrow(/binding mismatch/i);
+    }
+
+    const challenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    expect(Object.isFrozen(challenge)).toBe(true);
+    expect(Object.isFrozen(challenge.presentedDigests)).toBe(true);
+  });
+
+  test('runtime rejects invalid recording mode and forged invalid mode event', async () => {
+    const controlPlane = createFakeTrustedControlPlane();
+    const challenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    await expect(controlPlane.attestation.recordModeSelection(challenge.challengeId, 'invalid' as any))
+      .rejects.toThrow(/invalid execution mode/i);
+    const mode = await controlPlane.attestation.recordModeSelection(challenge.challengeId, 'milestone');
+    expect(controlPlane.attestation.verifyModeSelection(
+      { ...mode, mode: 'invalid' } as any,
+      expectedBinding()
+    )).toEqual({ ok: false, reason: 'untrusted-origin' });
+  });
+
+  test('atomic pair marks both replayed only after both preflight successfully', async () => {
+    const controlPlane = createFakeTrustedControlPlane();
+    const approvalChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const approval = await controlPlane.attestation.recordApproval(approvalChallenge.challengeId, 'approved');
+    const modeChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const mode = await controlPlane.attestation.recordModeSelection(modeChallenge.challengeId, 'autonomous');
+
+    expect(controlPlane.attestation.verifyPair(approval, mode as any, expectedBinding()))
+      .toEqual({ ok: true });
+    expect(controlPlane.attestation.verifyApproval(approval, expectedBinding()))
+      .toEqual({ ok: false, reason: 'replayed' });
+    expect(controlPlane.attestation.verifyModeSelection(mode, expectedBinding()))
+      .toEqual({ ok: false, reason: 'replayed' });
+  });
+
+  test('atomic pair preflight failure consumes neither event', async () => {
+    const controlPlane = createFakeTrustedControlPlane();
+    const approvalChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const approval = await controlPlane.attestation.recordApproval(approvalChallenge.challengeId, 'approved');
+    const modeChallenge = await controlPlane.attestation.beginChallenge(challengeParams());
+    const mode = await controlPlane.attestation.recordModeSelection(modeChallenge.challengeId, 'autonomous');
+
+    expect(controlPlane.attestation.verifyPair(mode as any, approval as any, expectedBinding()))
+      .toEqual({ ok: false, target: 'approval', reason: 'kind-mismatch' });
+    expect(controlPlane.attestation.verifyApproval(approval, expectedBinding())).toEqual({ ok: true });
+    expect(controlPlane.attestation.verifyModeSelection(mode, expectedBinding())).toEqual({ ok: true });
   });
 });
 
