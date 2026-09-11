@@ -7,6 +7,8 @@
 - [Extensible harness agent architecture](extensible-harness-agents.md)
 - [Directory-v2 validation diagnostics](directory-v2-validation-diagnostics.md)
 - [Hierarchical Run orchestration — specification 2](hierarchical-run-orchestration-spec-2.md)
+- [Measured surface fidelity evaluator](surface-fidelity-evaluator.md)
+- [Protected controller storage](protected-controller-storage.md)
 - [Lossless metadata-only mutation design](lossless-metadata-only-mutations.md)
 - [Plan-gated autonomous Run behavior — specification 1](plan-gated-autonomous-run-spec-1.md)
 - [Wiki index ownership (directory-v2 opt-in)](wiki-index-ownership.md)
