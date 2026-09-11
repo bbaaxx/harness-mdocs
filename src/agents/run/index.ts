@@ -1,2 +1,7 @@
 export * from './trust';
 export * from './compiler';
+export * from './store/types';
+export * from './store/codec';
+export * from './store/protected-store';
+export * from './store/mirror';
+export * from './fidelity';
