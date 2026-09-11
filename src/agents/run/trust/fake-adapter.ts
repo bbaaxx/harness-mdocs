@@ -1,5 +1,7 @@
 import * as crypto from 'crypto';
 
+import { InMemoryProtectedStoreAdapter, ProtectedControllerStore } from '../store';
+
 import {
   AttestationChallenge,
   AttestationChallengeParams,
@@ -21,7 +23,7 @@ import {
   StructuredAction
 } from './mediator';
 import { UsageEstimate, UsageMeter, UsageReservation, UsageSample } from './meter';
-import { CasConflictError, CasRecord, ControllerStore } from './store';
+import { ControllerStore, createLegacyControllerStore } from './store';
 
 export interface FakeTrustedControlPlaneOverrides {
   providerId?: string;
@@ -69,9 +71,9 @@ interface IssuedEventRecord {
 }
 
 /**
- * Fully in-memory trusted control plane for controller-core validation and
- * dogfooding. This adapter IS trusted; `failComponent` scripts individual
- * component outages to prove deterministic plan-only downgrades.
+ * TEST-ONLY in-memory control-plane emulator for controller-core validation.
+ * It does not provide process isolation, durable rollback protection, or proof
+ * of production fidelity. `failComponent` scripts component outages.
  *
  * Unlike the production conservative defaults, this adapter defaults its kill
  * switch flags to enabled so effect paths are exercisable in tests; pass
@@ -328,30 +330,11 @@ export function createFakeTrustedControlPlane(
   };
 
   // --- store -----------------------------------------------------------------
-  const records = new Map<string, CasRecord<unknown>>();
-  const logs = new Map<string, unknown[]>();
-  const store: ControllerStore = {
-    get: async <T>(key: string) => records.get(key) as CasRecord<T> | undefined,
-    compareAndSwap: async <T>(key: string, value: T, expectedGeneration: number) => {
-      const current = records.get(key)?.generation ?? 0;
-      if (current !== expectedGeneration) {
-        throw new CasConflictError(
-          `CAS conflict on "${key}": expected generation ${expectedGeneration}, found ${current}`
-        );
-      }
-      const generation = current + 1;
-      const checksum = crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
-      records.set(key, { value, generation, checksum: `sha256:${checksum}` });
-      return generation;
-    },
-    append: async <T>(key: string, entry: T) => {
-      const log = logs.get(key) ?? [];
-      log.push(entry);
-      logs.set(key, log);
-    },
-    list: async (prefix: string) =>
-      [...records.keys(), ...logs.keys()].filter(key => key.startsWith(prefix)).sort()
-  };
+  const protectedStore = new ProtectedControllerStore({
+    storeId: `fake:${providerId}:${projectId}`,
+    adapter: new InMemoryProtectedStoreAdapter()
+  });
+  const store: ControllerStore = createLegacyControllerStore(protectedStore);
 
   // --- mediator --------------------------------------------------------------
   const reservations = new Map<string, { handle: OpaqueHandle; action: StructuredAction }>();
