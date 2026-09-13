@@ -1,5 +1,3 @@
-import * as crypto from 'crypto';
-
 import { z } from 'zod';
 
 import { canonicalizeJson } from '../../contracts';
@@ -7,6 +5,12 @@ import { DEFAULT_EXECUTION_PLAN_BUDGETS, ExecutionPlanBudgets } from '../compile
 import { UsageSample } from '../trust';
 import { strictRfc3339UtcSchema } from './schema';
 import { canonicalAuthoritySnapshot, snapshotAuthorityData, TicketAuthorityError } from './state';
+import {
+  computeAuthorityUsageSampleDigest,
+  deriveAuthorityUsageActual,
+  authorityUsageSampleSchema,
+  UsageAccountingError
+} from './usage-accounting';
 
 export const BUDGET_DIMENSIONS = Object.freeze(
   Object.keys(DEFAULT_EXECUTION_PLAN_BUDGETS).sort() as (keyof ExecutionPlanBudgets)[]
@@ -114,20 +118,6 @@ const reserveInputSchema = z.object({
   role: z.enum(['PLAN_ROOT', 'EXECUTION', 'LEAF']),
   startedAt: strictRfc3339UtcSchema,
   deadlineAt: strictRfc3339UtcSchema
-}).strict();
-
-const usageSampleSchema = z.object({
-  source: boundedId,
-  provider: boundedId,
-  model: boundedId,
-  inputTokens: z.number().int().nonnegative().safe().optional(),
-  outputTokens: z.number().int().nonnegative().safe().optional(),
-  cacheTokens: z.number().int().nonnegative().safe().optional(),
-  priceTableVersion: boundedId,
-  cost: z.object({ currency: boundedId, value: amountSchema }).strict().optional(),
-  actionCount: z.number().int().nonnegative().safe(),
-  confidence: z.enum(['authoritative', 'estimated', 'unknown']),
-  timestamp: strictRfc3339UtcSchema
 }).strict();
 
 export type BudgetLedger = z.infer<typeof budgetLedgerSchema>;
@@ -452,19 +442,6 @@ export function reserveBudget(ledgerValue: unknown, inputValue: unknown): Readon
   return parseBudgetLedger({ ...ledger, totals, accounts, reservations: [...ledger.reservations, reservation] });
 }
 
-function sampleDigest(sample: UsageSample): string {
-  return `sha256:${crypto.createHash('sha256').update(canonicalizeJson(sample)).digest('hex')}`;
-}
-
-function safeTokenTotal(sample: UsageSample): number {
-  let total = 0;
-  for (const value of [sample.inputTokens ?? 0, sample.outputTokens ?? 0, sample.cacheTokens ?? 0]) {
-    if (!Number.isSafeInteger(value) || value < 0) fail('invalid-input', 'Token value must be a safe non-negative integer');
-    total = checkedAdd(total, value, 'tokensGlobal');
-  }
-  return total;
-}
-
 function rebuildAccounting(
   ledger: Readonly<BudgetLedger>,
   reservations: BudgetLedger['reservations']
@@ -535,14 +512,14 @@ export function reconcileBudget(
   sampleValue: UsageSample
 ): Readonly<BudgetLedger> {
   const ledger = parseBudgetLedger(ledgerValue);
-  const sample = parse(usageSampleSchema, sampleValue);
+  const sample = parse(authorityUsageSampleSchema, sampleValue);
   const reservation = ledger.reservations.find(item => item.reservationId === reservationId);
   if (!reservation) fail('unknown-reservation', `Reservation "${reservationId}" is absent`);
   const sampleTime = Date.parse(sample.timestamp);
   if (sampleTime < Date.parse(reservation.startedAt) || sampleTime > Date.parse(reservation.deadlineAt)) {
     fail('reservation-unresolved', 'Usage sample timestamp is outside reservation authority window');
   }
-  const digest = sampleDigest(sample);
+  const digest = computeAuthorityUsageSampleDigest(sample);
   if (reservation.status === 'committed') {
     if (reservation.sampleDigest === digest) return ledger;
     fail('reservation-conflict', 'Reservation already reconciled with different sample');
@@ -561,30 +538,29 @@ export function reconcileBudget(
       (sample.inputTokens === undefined || sample.outputTokens === undefined)) {
     fail('reservation-unresolved', 'Authoritative input/output token telemetry is required');
   }
-  const tokens = safeTokenTotal(sample);
-  if (Object.keys(reservation.amounts).some(key => COST_DIMENSIONS.has(key as BudgetDimension))) {
-    if (!sample.cost || sample.cost.currency !== ledger.currency) {
-      fail('reservation-unresolved', `Authoritative cost in ${ledger.currency} is required`);
-    }
-  }
-  const actual: BudgetAmounts = {};
   const children = ledger.reservations.filter(item => item.parentTicketHandleId === reservation.ticketHandleId);
-  for (const [dimension, reserved] of Object.entries(reservation.amounts) as [BudgetDimension, number][]) {
-    const measured = TOKEN_DIMENSIONS.has(dimension) ? tokens
-      : COST_DIMENSIONS.has(dimension) ? sample.cost!.value
-        : ACTION_DIMENSIONS.has(dimension) ? sample.actionCount : reserved;
-    if (decimalGreater(measured, reserved)) {
-      fail('budget-exceeded', `Usage exceeds zero-overshoot reservation for ${dimension}`);
-    }
-    const descendantCommitted = children.reduce((sum, child) => checkedAdd(
+  const descendantCommitted = Object.fromEntries(BUDGET_DIMENSIONS.map(dimension => [dimension,
+    children.reduce((sum, child) => checkedAdd(
       sum,
       amountAt(ledger.accounts.find(item => item.ticketHandleId === child.ticketHandleId)!.committed, dimension),
       dimension
-    ), 0);
-    if (decimalGreater(descendantCommitted, measured)) {
-      fail('reservation-conflict', `Descendant usage exceeds measured parent usage for ${dimension}`);
+    ), 0)
+  ]));
+  let actual: Readonly<Record<string, number>>;
+  try {
+    actual = deriveAuthorityUsageActual({
+      amounts: reservation.amounts,
+      currency: ledger.currency,
+      sample,
+      descendantCommitted
+    });
+  } catch (error) {
+    if (!(error instanceof UsageAccountingError)) throw error;
+    if (error.code === 'budget-exceeded') {
+      fail('budget-exceeded', error.message.replace('reservation', 'zero-overshoot reservation'));
     }
-    actual[dimension] = decimalSubtract(measured, descendantCommitted);
+    if (error.code === 'descendant-exceeded') fail('reservation-conflict', error.message);
+    fail('reservation-unresolved', error.message);
   }
   const reservations = ledger.reservations.map(item => item.reservationId === reservationId
     ? { ...item, status: 'committed' as const, sampleDigest: digest, actual: canonicalAmounts(actual) }

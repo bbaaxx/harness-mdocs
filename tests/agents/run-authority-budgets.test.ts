@@ -10,6 +10,10 @@ import {
   unresolvedHardBudgetReservations
 } from '../../src/agents/run/authority/budgets';
 import { TicketAuthorityError } from '../../src/agents/run/authority/state';
+import {
+  deriveAuthorityUsageActual,
+  UsageAccountingError
+} from '../../src/agents/run/authority/usage-accounting';
 
 const WINDOW = {
   scope: 'budget-test', role: 'PLAN_ROOT' as const,
@@ -34,6 +38,30 @@ function errorCode(operation: () => unknown): string | undefined {
 }
 
 describe('run authority budget ledger', () => {
+  test('shared usage derivation rejects invalid and unreserved descendant amounts', () => {
+    const sample = {
+      source: 'meter', provider: 'provider', model: 'model', inputTokens: 2, outputTokens: 3,
+      priceTableVersion: 'price-v1', actionCount: 1, confidence: 'authoritative' as const,
+      timestamp: '2026-09-12T12:00:00.000Z'
+    };
+    const derive = (amounts: Record<string, number>, descendantCommitted: Record<string, number>) =>
+      deriveAuthorityUsageActual({ amounts, descendantCommitted, currency: 'USD', sample });
+    for (const [amounts, descendants] of [
+      [{ toolActionsGlobal: 1 }, { tokensGlobal: 1 }],
+      [{ toolActionsGlobal: Number.NaN }, {}],
+      [{ toolActionsGlobal: -0 }, {}],
+      [{ toolActionsGlobal: 1.5 }, {}],
+      [{ costUsdGlobal: Number.MAX_SAFE_INTEGER + 1 }, {}],
+      [{ costUsdGlobal: 1 }, { toolActionsGlobal: 0.5 }],
+      [{ costUsdGlobal: 1 }, { costUsdGlobal: Number.POSITIVE_INFINITY }],
+      [{ costUsdGlobal: 1 }, { costUsdGlobal: -1 }]
+    ] as Array<[Record<string, number>, Record<string, number>]>) {
+      expect(() => derive(amounts, descendants)).toThrow(UsageAccountingError);
+    }
+    expect(derive({ toolActionsGlobal: 1 }, { tokensGlobal: 0 }))
+      .toEqual({ toolActionsGlobal: 1 });
+  });
+
   test('reserves atomically and denies unknown, non-finite, negative-zero, and excess values', () => {
     const ledger = createBudgetLedger({ ...DEFAULT_EXECUTION_PLAN_BUDGETS, costUsdGlobal: 0.3 });
     const reserved = reserveBudget(ledger, {

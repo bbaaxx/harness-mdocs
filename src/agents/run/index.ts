@@ -6,3 +6,4 @@ export * from './store/protected-store';
 export * from './store/mirror';
 export * from './fidelity';
 export * from './authority';
+export * from './evidence';
