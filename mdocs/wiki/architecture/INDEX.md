@@ -2,6 +2,7 @@
 
 - [Claude Code project MCP lives in .mcp.json, not settings.json](claude-code-project-mcp-location.md)
 - [Claude Code plugin MCP bundling](claude-code-plugin-mcp-bundling.md)
+- [Pure Run receipt and report evidence validation](run-evidence-validation.md)
 - [Workflow state machine driver and bash gate](workflow-driver-and-bash-gate.md)
 - [Directory-v2 compatibility evaluation](directory-v2-compatibility-evaluation.md)
 - [Extensible harness agent architecture](extensible-harness-agents.md)
