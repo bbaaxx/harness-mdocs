@@ -21,3 +21,4 @@ pnpm-debug.log*
 mdocs/audit.log
 mdocs/audit.log.*
 mdocs/.workflow-state.json
+.mdocs-generation.boot

@@ -1,0 +1,413 @@
+{
+  "schemaVersion": 2,
+  "generatorVersion": "2.0.0",
+  "ownershipNamespace": "harness-mdocs.agent-assets",
+  "provenanceAlgorithm": "sha256-json-v1",
+  "sources": [
+    {
+      "id": "claude.agent.orchestrator",
+      "path": "src/generation/fragments/claude-agent-orchestrator.md",
+      "byteDigest": "sha256:84decec81b5c854806e3e624d794010c08c781ce0490d1abc34c80268d0336be"
+    },
+    {
+      "id": "claude.skill.initiative",
+      "path": "src/generation/fragments/claude-skill-initiative.md",
+      "byteDigest": "sha256:3a911c11d047c2eae74099f828b3098f5f1e4cb23922adc3a10d422de964639e"
+    },
+    {
+      "id": "claude.skill.orchestrator",
+      "path": "src/generation/fragments/claude-skill-orchestrator.md",
+      "byteDigest": "sha256:63ce889f409297fee52efe14b6ab8bf766635e4bf0db69e75b6301840d066b25"
+    },
+    {
+      "id": "claude.skill.workflow",
+      "path": "src/generation/fragments/claude-skill-workflow.md",
+      "byteDigest": "sha256:085dd6440beb446256e86eafbe6c50dbe98248ce10c3b1b094bd964a59c4958b"
+    },
+    {
+      "id": "claude.skill.workflow-dogfood",
+      "path": "src/generation/fragments/claude-skill-workflow-dogfood.md",
+      "byteDigest": "sha256:314f1d8f086999d877edee214e80d495c3f7e55d777cda1c5a44605fb51d3d3f"
+    },
+    {
+      "id": "claude.template.mcp",
+      "path": "src/generation/fragments/claude-template-mcp.json",
+      "byteDigest": "sha256:d2a5c2ae09b147387452184f77d9b9c5e7b9b5bfef997ed44492629e44b3b319"
+    },
+    {
+      "id": "claude.template.memory",
+      "path": "src/generation/fragments/claude-template-memory.md",
+      "byteDigest": "sha256:dff287bb70137326319b613ecca3bfb2dc878d15d0dde52d60bbf18b3b74a4af"
+    },
+    {
+      "id": "claude.template.settings",
+      "path": "src/generation/fragments/claude-template-settings.json",
+      "byteDigest": "sha256:c25dbdb40d49d01fd0f8741abdbfd5041f1ad66fa59103e05aa11edbf50a7361"
+    },
+    {
+      "id": "codex.skill.initiative",
+      "path": "src/generation/fragments/codex-skill-initiative.md",
+      "byteDigest": "sha256:4fc92e94470d527af372d2cc7d593539a3776c5102f845842fbac7e3455141e1"
+    },
+    {
+      "id": "codex.skill.orchestrator",
+      "path": "src/generation/fragments/codex-skill-orchestrator.md",
+      "byteDigest": "sha256:d0bc59d59a5617bf6dde76fa3737f688a7695484586bc584230da0b19183fbaf"
+    },
+    {
+      "id": "codex.skill.workflow",
+      "path": "src/generation/fragments/codex-skill-workflow.md",
+      "byteDigest": "sha256:703355dcc0bcb5fccef2718e135652215df5a02b99fbb6ba23fdea55835a9504"
+    },
+    {
+      "id": "opencode.agent.orchestrator",
+      "path": "src/generation/fragments/opencode-agent-orchestrator.md",
+      "byteDigest": "sha256:d454f76c0edd1a15a9405fed4d057c59e1afd9eed20dda5cfa1233d773660ba0"
+    },
+    {
+      "id": "opencode.prompt.initiative",
+      "path": "src/generation/fragments/opencode-prompt-initiative.md",
+      "byteDigest": "sha256:dc72cb43b56321f355c2e919d4e55b97af4558dd6599eb07372cacc7fd220a2e"
+    },
+    {
+      "id": "opencode.prompt.orchestrator",
+      "path": "src/generation/fragments/opencode-prompt-orchestrator.md",
+      "byteDigest": "sha256:4af62280b822ab7ecc54dc6d3e8fbe302d21f5979930fb2f481acb00846e2a16"
+    },
+    {
+      "id": "opencode.prompt.workflow",
+      "path": "src/generation/fragments/opencode-prompt-workflow.md",
+      "byteDigest": "sha256:c76fdbc5443ee093ba758b78fb1f49344e2c30fb2028162900338d593b50882b"
+    },
+    {
+      "id": "opencode.skill.initiative",
+      "path": "src/generation/fragments/opencode-skill-initiative.md",
+      "byteDigest": "sha256:df3573c095e9d79264ae54091b4e71eac51e6f8e08b9513c8cb51e3e34b643f5"
+    },
+    {
+      "id": "opencode.skill.workflow",
+      "path": "src/generation/fragments/opencode-skill-workflow.md",
+      "byteDigest": "sha256:ee508e55458b3b755e62fdae6ac66a6292813809c7a78e3603352499610e6333"
+    },
+    {
+      "id": "pi.skill.initiative",
+      "path": "src/generation/fragments/pi-skill-initiative.md",
+      "byteDigest": "sha256:d2f97c300f3b30dede6b7e57b01afd034ec3be33c3dbebcc403d521503cac998"
+    },
+    {
+      "id": "pi.skill.orchestrator",
+      "path": "src/generation/fragments/pi-skill-orchestrator.md",
+      "byteDigest": "sha256:27f5acec99b476f58af279c4f23fd5f3560d12cc1159866d24bc1553d66d8e63"
+    },
+    {
+      "id": "pi.skill.workflow",
+      "path": "src/generation/fragments/pi-skill-workflow.md",
+      "byteDigest": "sha256:b669d9df8ce6614725291a20ded1cf15e274d2c23b453e614fbc5e655d5359d3"
+    },
+    {
+      "id": "pi.template.memory",
+      "path": "src/generation/fragments/pi-template-memory.md",
+      "byteDigest": "sha256:b31a233b5b8ac5f44c6bfc64b929fb1175a634c1bd83b188f519dc3daab34060"
+    }
+  ],
+  "outputs": [
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.claude.skills.mdocs.initiative.skill.md",
+      "outputPath": ".claude/skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "claude.skill.initiative"
+      ],
+      "byteDigest": "sha256:3a911c11d047c2eae74099f828b3098f5f1e4cb23922adc3a10d422de964639e",
+      "provenanceDigest": "sha256:340df6b8c4268d87f4529e0c6b1a0d873c39f5f510c9ac922d95e9cfdcd22ea4"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.claude.skills.mdocs.orchestrator.skill.md",
+      "outputPath": ".claude/skills/mdocs-orchestrator/SKILL.md",
+      "sourceIds": [
+        "claude.skill.orchestrator"
+      ],
+      "byteDigest": "sha256:63ce889f409297fee52efe14b6ab8bf766635e4bf0db69e75b6301840d066b25",
+      "provenanceDigest": "sha256:6a1e599a276bfb0f2e025f737b6908d0613b4afae1df38047b5ecd978f050f97"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.claude.skills.mdocs.workflow.skill.md",
+      "outputPath": ".claude/skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "claude.skill.workflow-dogfood"
+      ],
+      "byteDigest": "sha256:314f1d8f086999d877edee214e80d495c3f7e55d777cda1c5a44605fb51d3d3f",
+      "provenanceDigest": "sha256:7f0b8539615e0512f0ff0a14b1ec059b0bd971d350da41ab8b55bf66425b469d"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.agents.mdocs.orchestrator.md",
+      "outputPath": "agents/mdocs-orchestrator.md",
+      "sourceIds": [
+        "opencode.agent.orchestrator"
+      ],
+      "byteDigest": "sha256:d454f76c0edd1a15a9405fed4d057c59e1afd9eed20dda5cfa1233d773660ba0",
+      "provenanceDigest": "sha256:7bee5d2282ade12cbd4d7e0fd1abde7587ff464e456c8aca9f2a3240db3f5c2c"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.prompts.mdocs.initiative.md",
+      "outputPath": "prompts/mdocs-initiative.md",
+      "sourceIds": [
+        "opencode.prompt.initiative"
+      ],
+      "byteDigest": "sha256:dc72cb43b56321f355c2e919d4e55b97af4558dd6599eb07372cacc7fd220a2e",
+      "provenanceDigest": "sha256:52158ddaa7a4ff14d44d2843bbeec9902f5af0ef9b5c2a1e7ce85eb795ae5e49"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.prompts.mdocs.orchestrator.md",
+      "outputPath": "prompts/mdocs-orchestrator.md",
+      "sourceIds": [
+        "opencode.prompt.orchestrator"
+      ],
+      "byteDigest": "sha256:4af62280b822ab7ecc54dc6d3e8fbe302d21f5979930fb2f481acb00846e2a16",
+      "provenanceDigest": "sha256:d4a6b8b84fae3c7b75823845460e78e4cd5271ff3957c8ea24af982f454bc196"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.prompts.mdocs.workflow.md",
+      "outputPath": "prompts/mdocs-workflow.md",
+      "sourceIds": [
+        "opencode.prompt.workflow"
+      ],
+      "byteDigest": "sha256:c76fdbc5443ee093ba758b78fb1f49344e2c30fb2028162900338d593b50882b",
+      "provenanceDigest": "sha256:12700294aa06ca76750a4c829fed6d431e794bc8c19cc45d43219120774be99c"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.skills.mdocs.initiative.skill.md",
+      "outputPath": "skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "opencode.skill.initiative"
+      ],
+      "byteDigest": "sha256:df3573c095e9d79264ae54091b4e71eac51e6f8e08b9513c8cb51e3e34b643f5",
+      "provenanceDigest": "sha256:9dabe0bb92de051657aa1019f187d7bdb4ba8081b6bdb4562911ead644578cc6"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.skills.mdocs.workflow.skill.md",
+      "outputPath": "skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "opencode.skill.workflow"
+      ],
+      "byteDigest": "sha256:ee508e55458b3b755e62fdae6ac66a6292813809c7a78e3603352499610e6333",
+      "provenanceDigest": "sha256:3d90cfe51cb33392de5449397fa9ab161f9dfcbe0b9bc75f9094f6ec71b98950"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.assets.agents.mdocs.orchestrator.md",
+      "outputPath": "src/surfaces/claude-code/assets/agents/mdocs-orchestrator.md",
+      "sourceIds": [
+        "claude.agent.orchestrator"
+      ],
+      "byteDigest": "sha256:84decec81b5c854806e3e624d794010c08c781ce0490d1abc34c80268d0336be",
+      "provenanceDigest": "sha256:778c9c35ef90811d3dc469e76eda61fc4f76cd6f4affb0d53f2b5a5d3dcb38d7"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.assets.skills.mdocs.initiative.skill.md",
+      "outputPath": "src/surfaces/claude-code/assets/skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "claude.skill.initiative"
+      ],
+      "byteDigest": "sha256:3a911c11d047c2eae74099f828b3098f5f1e4cb23922adc3a10d422de964639e",
+      "provenanceDigest": "sha256:0b34748a4b2dc97a14f6435f5655be5bd76635ce3fb6db3502c37d169cc68634"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.assets.skills.mdocs.orchestrator.skill.md",
+      "outputPath": "src/surfaces/claude-code/assets/skills/mdocs-orchestrator/SKILL.md",
+      "sourceIds": [
+        "claude.skill.orchestrator"
+      ],
+      "byteDigest": "sha256:63ce889f409297fee52efe14b6ab8bf766635e4bf0db69e75b6301840d066b25",
+      "provenanceDigest": "sha256:d589f279796460941da31abaece0169dc304c80d5f3056af3f4f1c1a53542c05"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.assets.skills.mdocs.workflow.skill.md",
+      "outputPath": "src/surfaces/claude-code/assets/skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "claude.skill.workflow"
+      ],
+      "byteDigest": "sha256:085dd6440beb446256e86eafbe6c50dbe98248ce10c3b1b094bd964a59c4958b",
+      "provenanceDigest": "sha256:24346c89eeb6973e927562ba35be36e780a6390ac947f60ca0a7e9fa2a9e27a7"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.assets.templates.claude.md.snippet.md",
+      "outputPath": "src/surfaces/claude-code/assets/templates/claude-md-snippet.md",
+      "sourceIds": [
+        "claude.template.memory"
+      ],
+      "byteDigest": "sha256:dff287bb70137326319b613ecca3bfb2dc878d15d0dde52d60bbf18b3b74a4af",
+      "provenanceDigest": "sha256:3ec787523d7ef2513b95937bf30de549a46545c30f542494cb3621d9c4f63df0"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.assets.templates.mcp.json",
+      "outputPath": "src/surfaces/claude-code/assets/templates/mcp.json",
+      "sourceIds": [
+        "claude.template.mcp"
+      ],
+      "byteDigest": "sha256:d2a5c2ae09b147387452184f77d9b9c5e7b9b5bfef997ed44492629e44b3b319",
+      "provenanceDigest": "sha256:f09390cf601bae7aa0d19dbceb5d8971cb20375b532fafad5b9c09511eea16dc"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.assets.templates.settings.patch.json",
+      "outputPath": "src/surfaces/claude-code/assets/templates/settings-patch.json",
+      "sourceIds": [
+        "claude.template.settings"
+      ],
+      "byteDigest": "sha256:c25dbdb40d49d01fd0f8741abdbfd5041f1ad66fa59103e05aa11edbf50a7361",
+      "provenanceDigest": "sha256:b9e3390eb4dc2137f7637b9876f9aa31992224c657edbd134da99966c891ac4a"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.plugin.agents.mdocs.orchestrator.md",
+      "outputPath": "src/surfaces/claude-code/plugin/agents/mdocs-orchestrator.md",
+      "sourceIds": [
+        "claude.agent.orchestrator"
+      ],
+      "byteDigest": "sha256:84decec81b5c854806e3e624d794010c08c781ce0490d1abc34c80268d0336be",
+      "provenanceDigest": "sha256:bc49de694b9a1fadb5e9a5490305d08f31d2601116443063cedd0b8ae327096f"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.plugin.skills.mdocs.initiative.skill.md",
+      "outputPath": "src/surfaces/claude-code/plugin/skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "claude.skill.initiative"
+      ],
+      "byteDigest": "sha256:3a911c11d047c2eae74099f828b3098f5f1e4cb23922adc3a10d422de964639e",
+      "provenanceDigest": "sha256:fe901ca2006ad37afadf571c05b4405dcee8e0f6b9ac1f60f54d856af1c154c5"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.plugin.skills.mdocs.orchestrator.skill.md",
+      "outputPath": "src/surfaces/claude-code/plugin/skills/mdocs-orchestrator/SKILL.md",
+      "sourceIds": [
+        "claude.skill.orchestrator"
+      ],
+      "byteDigest": "sha256:63ce889f409297fee52efe14b6ab8bf766635e4bf0db69e75b6301840d066b25",
+      "provenanceDigest": "sha256:2155691cccfa7a4d990c93d39f54459d05a648cd778144e09d92c82bc8f711d9"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.claude.code.plugin.skills.mdocs.workflow.skill.md",
+      "outputPath": "src/surfaces/claude-code/plugin/skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "claude.skill.workflow"
+      ],
+      "byteDigest": "sha256:085dd6440beb446256e86eafbe6c50dbe98248ce10c3b1b094bd964a59c4958b",
+      "provenanceDigest": "sha256:faa472a8c172f382527d2968619d89ad03a51594b21c77f7d00206ebf4e3f4de"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.codex.plugin.skills.mdocs.initiative.skill.md",
+      "outputPath": "src/surfaces/codex/plugin/skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "codex.skill.initiative"
+      ],
+      "byteDigest": "sha256:4fc92e94470d527af372d2cc7d593539a3776c5102f845842fbac7e3455141e1",
+      "provenanceDigest": "sha256:ca066341018b71926b704be960e0c9fecf0fb1a034b30fde9f91f658f3cac767"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.codex.plugin.skills.mdocs.orchestrator.skill.md",
+      "outputPath": "src/surfaces/codex/plugin/skills/mdocs-orchestrator/SKILL.md",
+      "sourceIds": [
+        "codex.skill.orchestrator"
+      ],
+      "byteDigest": "sha256:d0bc59d59a5617bf6dde76fa3737f688a7695484586bc584230da0b19183fbaf",
+      "provenanceDigest": "sha256:7f04f006aa4dca6dddf9a5ed7f3be3dc783d13136981bf2413ad0ea7dc466874"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.codex.plugin.skills.mdocs.workflow.skill.md",
+      "outputPath": "src/surfaces/codex/plugin/skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "codex.skill.workflow"
+      ],
+      "byteDigest": "sha256:703355dcc0bcb5fccef2718e135652215df5a02b99fbb6ba23fdea55835a9504",
+      "provenanceDigest": "sha256:37ab14536e690e302a7dbef6952afafcc09c50f421e841a134ac68fafde48cbb"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.pi.assets.skills.mdocs.initiative.skill.md",
+      "outputPath": "src/surfaces/pi/assets/skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "pi.skill.initiative"
+      ],
+      "byteDigest": "sha256:d2f97c300f3b30dede6b7e57b01afd034ec3be33c3dbebcc403d521503cac998",
+      "provenanceDigest": "sha256:4af320bd70849a42e7a99767361eed7b3456fefcd9c0bebfd740d645f65f7456"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.pi.assets.skills.mdocs.orchestrator.skill.md",
+      "outputPath": "src/surfaces/pi/assets/skills/mdocs-orchestrator/SKILL.md",
+      "sourceIds": [
+        "pi.skill.orchestrator"
+      ],
+      "byteDigest": "sha256:27f5acec99b476f58af279c4f23fd5f3560d12cc1159866d24bc1553d66d8e63",
+      "provenanceDigest": "sha256:ce8bbd66555c1516bad12fb021df4459e3e6d00709b11b970c90edebb0510d7e"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.pi.assets.skills.mdocs.workflow.skill.md",
+      "outputPath": "src/surfaces/pi/assets/skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "pi.skill.workflow"
+      ],
+      "byteDigest": "sha256:b669d9df8ce6614725291a20ded1cf15e274d2c23b453e614fbc5e655d5359d3",
+      "provenanceDigest": "sha256:bc79c5c09bdd7e70c875b229374ddb900d81b631419bcdf8d46080feeedcf26f"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.pi.assets.templates.pi.agents.md.snippet.md",
+      "outputPath": "src/surfaces/pi/assets/templates/pi-agents-md-snippet.md",
+      "sourceIds": [
+        "pi.template.memory"
+      ],
+      "byteDigest": "sha256:b31a233b5b8ac5f44c6bfc64b929fb1175a634c1bd83b188f519dc3daab34060",
+      "provenanceDigest": "sha256:902649ee7c1714ca231b72af87fbcc55eead4b1790b079319bfbeaef1c71196c"
+    }
+  ],
+  "manifestDigest": "sha256:5863bb1d9e2568bcf088a02559848da0697a610c7d78e42b2b9b5809d04c75d0"
+}
