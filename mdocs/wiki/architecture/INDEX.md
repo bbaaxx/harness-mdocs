@@ -15,5 +15,6 @@
 - [Lossless metadata-only mutation design](lossless-metadata-only-mutations.md)
 - [Plan-gated autonomous Run behavior — specification 1](plan-gated-autonomous-run-spec-1.md)
 - [Wiki index ownership (directory-v2 opt-in)](wiki-index-ownership.md)
+- [Protected Run action mediation](run-action-mediation.md)
 - [Project-root resolution](project-root-resolution.md)
 - [Run trust boundary and production fidelity](run-trust-boundary.md)
