@@ -55,3 +55,15 @@ test('built agents subpath resolves through package exports', () => {
   expect(packageRequire.resolve('harness-mdocs/agents')).toBe(runtimeTarget);
   expect(packageRequire('harness-mdocs/agents').canonicalAgentCapabilityRegistry).toBeDefined();
 });
+
+test('built agents declarations omit host-only mediator capabilities', () => {
+  const declarations = fs.readFileSync(path.join(root, 'dist/agents/run/trust/index.d.ts'), 'utf8');
+  for (const privileged of [
+    'ActionAuthorityVerifier', 'ActionEffectGuard', 'ActionExecutorRequest', 'ActionExecutorResult',
+    'ActionMediatorOptions', 'ActionUsageAuthority', 'ResolvedActionAuthority', 'StructuredActionExecutor'
+  ]) {
+    expect(declarations).not.toMatch(new RegExp(`\\b${privileged}\\b`));
+  }
+  expect(declarations).toContain('StructuredAction');
+  expect(declarations).not.toContain("export * from './mediator'");
+});

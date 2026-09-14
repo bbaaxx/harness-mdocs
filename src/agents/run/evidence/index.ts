@@ -10,6 +10,7 @@ export {
 } from './fingerprint';
 export {
   computeNormalizedOperationDigest,
+  EMPTY_EFFECT_PAYLOAD_DIGEST,
   structuredActionSchema
 } from './operation';
 export {

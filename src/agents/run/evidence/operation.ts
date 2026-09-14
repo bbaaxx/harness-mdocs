@@ -16,24 +16,39 @@ const actionBase = {
   sideEffectClass: z.enum(['none', 'workspace', 'external', 'credential'])
 } as const;
 
+/** Canonical digest bound when a staged effect has no payload bytes. */
+export const EMPTY_EFFECT_PAYLOAD_DIGEST = domainDigest('harness-mdocs/effect-payload/v1', null);
+
 export const structuredActionSchema = z.discriminatedUnion('operation', [
-  z.object({ ...actionBase, operation: z.literal('fs.write'), path: canonicalProjectPathSchema }).strict(),
+  z.object({
+    ...actionBase,
+    operation: z.literal('fs.write'),
+    path: canonicalProjectPathSchema,
+    contentDigest: contractDigestSchema,
+    declaredBytes: z.number().int().nonnegative().safe()
+  }).strict(),
   z.object({ ...actionBase, operation: z.literal('fs.delete'), path: canonicalProjectPathSchema }).strict(),
   z.object({ ...actionBase, operation: z.literal('process.exec'), argv: stringArray.min(1) }).strict(),
   z.object({
     ...actionBase,
     operation: z.literal('network.request'),
     url: boundedString,
-    method: z.string().regex(/^[A-Z]+$/).max(32)
+    method: z.string().regex(/^[A-Z]+$/).max(32),
+    payloadDigest: contractDigestSchema
   }).strict(),
   z.object({ ...actionBase, operation: z.literal('git.mutate'), args: stringArray }).strict(),
   z.object({ ...actionBase, operation: z.literal('package.hook'), hook: boundedString }).strict(),
-  z.object({ ...actionBase, operation: z.literal('agent.spawn'), agentRef: boundedString }).strict(),
+  z.object({
+    ...actionBase,
+    operation: z.literal('agent.spawn'),
+    agentRef: boundedString,
+    requestDigest: contractDigestSchema
+  }).strict(),
   z.object({
     ...actionBase,
     operation: z.literal('tool.invoke'),
     tool: boundedString,
-    argumentsDigest: contractDigestSchema.optional()
+    argumentsDigest: contractDigestSchema
   }).strict()
 ]);
 

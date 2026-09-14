@@ -17,6 +17,11 @@ import {
   PlanApprovalEvent,
   UsageSample
 } from '../trust';
+import type {
+  ActionAuthorityVerificationRequest,
+  ActionUsageAuthority,
+  ResolvedActionAuthority
+} from '../trust/mediator';
 import {
   assertRoleBudgetAmounts,
   BudgetLedger,
@@ -403,6 +408,19 @@ export interface RunAuthorityManager {
   recordReplacement(input: BudgetOperationInput): Promise<Readonly<BudgetLedger>>;
   recordResume(input: BudgetOperationInput): Promise<Readonly<BudgetLedger>>;
   cancel(): Promise<RunAuthorityPublicSnapshot>;
+}
+
+export interface RunAuthorityActionBackend {
+  verify(request: ActionAuthorityVerificationRequest): Promise<ResolvedActionAuthority>;
+}
+
+const actionBackends = new WeakMap<RunAuthorityManager, RunAuthorityActionBackend>();
+
+/** Host-internal bridge lookup. Omitted from authority and package barrels. */
+export function runAuthorityActionBackend(manager: RunAuthorityManager): RunAuthorityActionBackend {
+  const backend = actionBackends.get(manager);
+  if (!backend) fail('invalid-input', 'Run authority manager has no action-verification backend');
+  return backend;
 }
 
 function fail(code: TicketAuthorityErrorCode, message: string): never {
@@ -1068,12 +1086,16 @@ function createManager(
   function assertAncestorsActive(state: InitializedRunAuthorityState, handle: string): void {
     let record = state.ticketState.tickets.find(item => item.ticket.ticketHandleId === handle);
     if (!record) fail('unknown-handle', 'Unknown opaque ticket handle');
+    const currentMs = now(state).ms;
     const seen = new Set<string>();
     while (record) {
       const currentHandle = record.ticket.ticketHandleId;
       if (seen.has(currentHandle)) fail('invalid-state', 'Ticket parent cycle');
       seen.add(currentHandle);
       if (record.lifecycle !== 'active') fail('inactive-ticket', 'Ticket or ancestor is revoked');
+      if (currentMs >= Date.parse(record.ticket.expiresAt)) {
+        fail('expired-ticket', 'Ticket or ancestor is expired');
+      }
       record = record.parentTicketHandleId
         ? state.ticketState.tickets.find(item => item.ticket.ticketHandleId === record!.parentTicketHandleId)
         : undefined;
@@ -2443,7 +2465,310 @@ function createManager(
     }
   };
   const manager: RunAuthorityManager = { ...lifecycleManager, ...accountingManager };
-  return Object.freeze(manager);
+  const frozenManager = Object.freeze(manager);
+
+  function actionUsage(
+    state: InitializedRunAuthorityState,
+    reservationIdValue: string
+  ): ActionUsageAuthority {
+    const reservation = state.budgets.reservations.find(item => item.reservationId === reservationIdValue);
+    const provider = state.providerUsage.find(item => item.reservationId === reservationIdValue);
+    if (!reservation || !provider) fail('unknown-reservation', 'Action authority budget reservation is absent');
+    if (reservation.status !== 'pending' || provider.status !== 'reserved') {
+      fail('reservation-unresolved', 'Action authority usage must remain pending until WP-230 reconciliation');
+    }
+    return canonicalAuthoritySnapshot({
+      reservationId: reservation.reservationId,
+      status: 'pending' as const,
+      startedAt: reservation.startedAt,
+      deadlineAt: reservation.deadlineAt,
+      final: null,
+      sampleDigest: null,
+      amounts: reservation.amounts,
+      currency: state.budgets.currency,
+      descendantCommitted: {},
+      actual: {},
+      measuredUsageRequired: false
+    });
+  }
+
+  const actionBackend: RunAuthorityActionBackend = {
+    async verify(requestValue) {
+      const request = snapshotAuthorityData(requestValue);
+      const phases = ['authorize', 'pre-execute', 'effect', 'post-effect'];
+      const operations = [
+        'fs.write', 'fs.delete', 'process.exec', 'network.request', 'git.mutate',
+        'package.hook', 'agent.spawn', 'tool.invoke'
+      ];
+      if (!phases.includes(request.phase) || !operations.includes(request.operation) ||
+          typeof request.handle !== 'string' || request.handle.length === 0 ||
+          typeof request.adapterKind !== 'string' || request.adapterKind.length === 0 ||
+          typeof request.actionId !== 'string' || request.actionId.length === 0 ||
+          typeof request.idempotencyKey !== 'string' || request.idempotencyKey.length === 0 ||
+          typeof request.actionDigest !== 'string' ||
+          !/^sha256:[0-9a-f]{64}$/.test(request.actionDigest)) {
+        fail('invalid-input', 'Action verification request is incomplete');
+      }
+      let snapshot = await repository.read();
+      if (!snapshot) fail('invalid-state', 'Run authority is not initialized');
+      let state = initialized(snapshot.state);
+      const pendingLeaf = state.ticketState.tickets.find(item =>
+        item.ticket.ticketHandleId === request.handle &&
+        item.ticket.recipientRole === 'LEAF' && item.nonceStatus === 'issued');
+      if (pendingLeaf && request.phase === 'effect') {
+        if (request.operation === 'agent.spawn') {
+          fail('topology-denied', 'LEAF authority cannot spawn descendants');
+        }
+        if (!request.leaseProof || request.leaseProof.kind !== 'workstream') {
+          fail('lease-required', 'Leaf action requires workstream lease proof');
+        }
+        const leafLeaseProof = request.leaseProof;
+        let claimed;
+        try {
+          claimed = await repository.transact(request, async (rawState, detached) => {
+            const current = initialized(rawState);
+            await currentIdentity(current);
+            assertAncestorsActive(current, detached.handle);
+            const localBroker = broker(current);
+            const resolved = await localBroker.resolveForAuthority({
+              handle: detached.handle,
+              runId: current.runId,
+              projectId: current.projectId,
+              approvedPlanDigest: current.approvedPlanDigest,
+              approvedGraphDigest: current.approvedGraphDigest,
+              graphId: current.graphId,
+              graphRevision: current.graphRevision,
+              graphEpoch: current.graphEpoch,
+              cancellationGeneration: current.ticketState.cancellationGeneration,
+              lease: {
+                ref: leafLeaseProof.leaseRef,
+                generation: leafLeaseProof.generation,
+                fence: leafLeaseProof.fence
+              }
+            });
+            if (!resolved.ok) fail(resolved.code, resolved.reason);
+            const reading = now(current);
+            return {
+              state: checkedState(current, {
+                ticketState: localBroker.snapshot(),
+                operationSequence: nextSequence(current),
+                wallClockHighWater: reading.at
+              }),
+              result: true
+            };
+          });
+        } catch (error) {
+          if (!(error instanceof TicketAuthorityError) || error.code !== 'commit-unknown') throw error;
+          const recovered = await repository.read();
+          const ticket = recovered?.state.stateKind === 'initialized'
+            ? recovered.state.ticketState.tickets.find(item =>
+                item.ticket.ticketHandleId === request.handle)
+            : undefined;
+          if (!recovered || !ticket || ticket.nonceStatus !== 'claimed') throw error;
+          claimed = recovered;
+        }
+        snapshot = claimed;
+        state = initialized(claimed.state);
+      }
+      const holder = await currentIdentity(state);
+      const reading = now(state);
+      const controller = state.leaseState.controllerLease;
+      if (controller && request.handle === controller.leaseRef) {
+        if (!request.leaseProof || request.leaseProof.kind !== 'controller') {
+          fail('lease-required', 'Controller action requires controller lease proof');
+        }
+        validateControllerLease(state.leaseState, {
+          ...binding(state, holder), proof: request.leaseProof
+        }, leaseSources);
+        const node = request.nodeId
+          ? compiled.graph.payload.nodes.find(item => item.nodeId === request.nodeId)
+          : undefined;
+        if (!node || node.ownerRole !== 'PLAN_ROOT') {
+          fail('topology-denied', 'Controller-root action requires explicit PLAN_ROOT graph node');
+        }
+        let spawnChildTicketRef: string | null = null;
+        if (request.operation === 'agent.spawn') {
+          const target = request.targetNodeId
+            ? compiled.graph.payload.nodes.find(item => item.nodeId === request.targetNodeId)
+            : undefined;
+          const edge = target && compiled.graph.payload.edges.some(item =>
+            item.fromNodeId === node.nodeId && item.toNodeId === target.nodeId);
+          if (!target || target.ownerRole !== 'EXECUTION' || !edge) {
+            fail('topology-denied', 'Controller spawn must follow PLAN_ROOT -> EXECUTION graph edge');
+          }
+          // issueExecutionTicket already charged fanout, descendant, and provider
+          // budget atomically. Mediation only consumes this pre-issued binding.
+          const children = state.ticketState.tickets.filter(item =>
+            item.lifecycle === 'active' && item.nonceStatus === 'issued' &&
+            item.parentTicketHandleId === null && item.ticket.issuerRole === 'PLAN_ROOT' &&
+            item.ticket.recipientRole === 'EXECUTION' && item.ticket.parentNodeId === node.nodeId &&
+            item.lease.ref === controller.leaseRef &&
+            item.lease.generation === controller.generation && item.lease.fence === controller.fence &&
+            item.ticket.nodeId === target.nodeId && reading.ms < Date.parse(item.ticket.expiresAt));
+          if (children.length !== 1) {
+            fail('inactive-ticket', 'Spawn requires exactly one active pre-issued execution ticket');
+          }
+          spawnChildTicketRef = children[0].ticket.ticketHandleId;
+        }
+        return canonicalAuthoritySnapshot({
+          runId: state.runId, projectId: state.projectId,
+          approvedPlanDigest: state.approvedPlanDigest,
+          approvedGraphDigest: state.approvedGraphDigest,
+          graphId: state.graphId, graphRevision: state.graphRevision,
+          graphEpoch: state.graphEpoch, cancellationGeneration: state.cancellationGeneration,
+          authorityKind: 'controller-root' as const,
+          authorityRef: controller.leaseRef, parentAuthorityRef: null,
+          authorityGeneration: null, authorityExpiresAt: state.runDeadlineAt,
+          nodeId: node.nodeId, parentNodeId: null, issuerRole: null,
+          recipientRole: 'PLAN_ROOT' as const, handleLineage: [],
+          spawnChildTicketRef,
+          reportDestination: `controller:${node.nodeId}`,
+          reportSchemaRef: 'execution-report/v1' as const,
+          lease: {
+            kind: 'controller' as const, ref: controller.leaseRef,
+            generation: controller.generation, fence: controller.fence,
+            acquiredAt: controller.acquiredAt, expiresAt: controller.expiresAt
+          },
+          operationClasses: state.ticketState.rootAuthority.operationClasses,
+          toolClasses: state.ticketState.rootAuthority.toolClasses,
+          credentialClasses: state.ticketState.rootAuthority.credentialClasses,
+          approvalRefs: state.ticketState.rootAuthority.approvalRefs,
+          approvalsCurrent: false,
+          writeSet: node.writeSet,
+          criteria: node.localCriteria,
+          globalActionLimit: approved.toolActionsGlobal,
+          localActionLimit: approved.toolActionsGlobal,
+          eoLineageKey: null,
+          eoLineageActionLimit: approved.toolActionsGlobal,
+          // One root-node reservation spans every root action. WP-225 records
+          // pending action receipts; WP-230 reconciles this authority scope once.
+          usage: {
+            reservationId: `root-action-budget:${hash({
+              runId, projectId, nodeId: node.nodeId
+            }).slice(7)}`,
+            status: 'pending' as const,
+            startedAt: state.runStartedAt, deadlineAt: state.runDeadlineAt,
+            final: null, sampleDigest: null,
+            amounts: { toolActionsGlobal: approved.toolActionsGlobal }, currency: state.budgets.currency,
+            descendantCommitted: {}, actual: {}, measuredUsageRequired: false
+          }
+        });
+      }
+
+      assertAncestorsActive(state, request.handle);
+      const record = state.ticketState.tickets.find(item => item.ticket.ticketHandleId === request.handle);
+      if (!record) fail('unknown-handle', 'Unknown opaque ticket handle');
+      if (!request.leaseProof || request.leaseProof.kind !== 'workstream') {
+        fail('lease-required', 'Delegated action requires workstream lease proof');
+      }
+      const leaseNodeId = record.ticket.recipientRole === 'LEAF'
+        ? record.ticket.parentNodeId : record.ticket.nodeId;
+      validateWorkstreamLease(state.leaseState, {
+        ...binding(state, holder), nodeId: leaseNodeId, proof: request.leaseProof
+      }, leaseSources);
+      const lease = state.leaseState.workstreamLeases.find(item => item.nodeId === leaseNodeId);
+      if (!lease) fail('lease-required', 'Current workstream lease is absent');
+      if (record.ticket.recipientRole === 'EXECUTION' && record.nonceStatus !== 'claimed') {
+        fail('inactive-ticket', 'Execution ticket must be claimed before effects');
+      }
+      if (record.ticket.recipientRole === 'LEAF' && request.phase === 'effect' &&
+          record.nonceStatus !== 'claimed') {
+        fail('inactive-ticket', 'Leaf ticket must be claimed before effects');
+      }
+      if (record.ticket.recipientRole === 'LEAF' &&
+          (record.lease.ref !== request.leaseProof.leaseRef ||
+            record.lease.generation !== request.leaseProof.generation ||
+            record.lease.fence !== request.leaseProof.fence)) {
+        fail('stale-lease', 'Leaf ticket is not bound to current workstream lease');
+      }
+      let spawnChildTicketRef: string | null = null;
+      if (request.operation === 'agent.spawn') {
+        const target = request.targetNodeId
+          ? compiled.graph.payload.nodes.find(item => item.nodeId === request.targetNodeId)
+          : undefined;
+        const edge = target && compiled.graph.payload.edges.some(item =>
+          item.fromNodeId === record.ticket.nodeId && item.toNodeId === target.nodeId);
+        if (record.ticket.recipientRole !== 'EXECUTION' || !target || target.ownerRole !== 'LEAF' || !edge) {
+          fail('topology-denied', 'Delegated spawn must follow EXECUTION -> LEAF graph edge');
+        }
+        // issueLeafTicket already charged fanout, descendant, and provider
+        // budget atomically. Mediation cannot mint child authority.
+        const children = state.ticketState.tickets.filter(item =>
+          item.lifecycle === 'active' && item.nonceStatus === 'issued' &&
+          item.parentTicketHandleId === record.ticket.ticketHandleId &&
+          item.ticket.issuerRole === 'EXECUTION' && item.ticket.recipientRole === 'LEAF' &&
+          item.ticket.parentNodeId === record.ticket.nodeId && item.ticket.nodeId === target.nodeId &&
+          item.lease.ref === lease.leaseRef && item.lease.generation === lease.generation &&
+          item.lease.fence === lease.fence &&
+          reading.ms < Date.parse(item.ticket.expiresAt));
+        if (children.length !== 1) {
+          fail('inactive-ticket', 'Spawn requires exactly one active pre-issued leaf ticket');
+        }
+        spawnChildTicketRef = children[0].ticket.ticketHandleId;
+      }
+      const reservation = state.budgets.reservations.find(item =>
+        item.ticketHandleId === record.ticket.ticketHandleId);
+      if (!reservation || reservation.status !== 'pending') {
+        fail('reservation-unresolved', 'Action ticket budget is not pending');
+      }
+      const lineage = record.parentTicketHandleId
+        ? [record.parentTicketHandleId, record.ticket.ticketHandleId]
+        : [record.ticket.ticketHandleId];
+      const dimensions: (keyof ExecutionPlanBudgets)[] = record.ticket.recipientRole === 'LEAF'
+        ? ['toolActionsGlobal', 'toolActionsEo', 'toolActionsLeaf']
+        : ['toolActionsGlobal', 'toolActionsEo'];
+      const localActionLimit = Math.min(...dimensions.map(dimension => reservation.amounts[dimension] ?? 0));
+      const eoLineageKey = record.ticket.recipientRole === 'LEAF'
+        ? record.parentTicketHandleId : record.ticket.ticketHandleId;
+      const eoReservation = record.ticket.recipientRole === 'LEAF'
+        ? state.budgets.reservations.find(item => item.ticketHandleId === record.parentTicketHandleId)
+        : reservation;
+      if (!eoLineageKey || !eoReservation || eoReservation.status !== 'pending') {
+        fail('reservation-unresolved', 'EO lineage action reservation is not pending');
+      }
+      const eoLineageActionLimit = eoReservation.amounts.toolActionsEo ?? 0;
+      return canonicalAuthoritySnapshot({
+        runId: state.runId, projectId: state.projectId,
+        approvedPlanDigest: state.approvedPlanDigest,
+        approvedGraphDigest: state.approvedGraphDigest,
+        graphId: state.graphId, graphRevision: state.graphRevision,
+        graphEpoch: state.graphEpoch, cancellationGeneration: state.cancellationGeneration,
+        authorityKind: 'delegation-ticket' as const,
+        authorityRef: record.ticket.ticketHandleId,
+        parentAuthorityRef: record.parentTicketHandleId,
+        authorityGeneration: record.ticket.generation,
+        authorityExpiresAt: record.ticket.expiresAt,
+        nodeId: record.ticket.nodeId, parentNodeId: record.ticket.parentNodeId,
+        issuerRole: record.ticket.issuerRole as 'PLAN_ROOT' | 'EXECUTION',
+        recipientRole: record.ticket.recipientRole as 'EXECUTION' | 'LEAF',
+        handleLineage: lineage,
+        spawnChildTicketRef,
+        reportDestination: record.ticket.reportDestination,
+        reportSchemaRef: 'execution-report/v1' as const,
+        lease: {
+          kind: 'workstream' as const, ref: lease.leaseRef,
+          generation: lease.generation, fence: lease.fence,
+          acquiredAt: lease.acquiredAt, expiresAt: lease.expiresAt
+        },
+        operationClasses: record.ticket.operationClasses,
+        toolClasses: record.ticket.toolClasses,
+        credentialClasses: record.ticket.credentialClasses,
+        approvalRefs: record.ticket.approvalRefs,
+        approvalsCurrent: false,
+        writeSet: record.ticket.writeSet,
+        criteria: record.ticket.criteria,
+        globalActionLimit: state.budgets.totals.toolActionsGlobal.limit,
+        localActionLimit,
+        eoLineageKey,
+        eoLineageActionLimit,
+        // Ticket usage is cumulative across all actions. ActionMediator must
+        // preserve this pending reservation; WP-230 performs final reconciliation.
+        usage: actionUsage(state, reservation.reservationId)
+      });
+    }
+  };
+  actionBackends.set(frozenManager, Object.freeze(actionBackend));
+  return frozenManager;
 }
 
 export function createRunAuthorityManager(options: RunAuthorityManagerOptions): RunAuthorityManager {

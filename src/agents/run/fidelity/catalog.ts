@@ -72,7 +72,9 @@ export const FIDELITY_ASSERTION_CATALOG = Object.freeze({
     'every-effect-path-gated',
     'every-spawn-path-gated',
     'bypass-corpus-denied',
-    'intent-before-effect'
+    'intent-before-effect',
+    // Production adapters attest guard placement immediately before protected primitive.
+    'effect-boundary-guard'
   ),
   'run.receipt-integrity': assertions(
     'schema-validation',

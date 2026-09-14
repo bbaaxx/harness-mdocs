@@ -429,6 +429,19 @@ describe('opaque claim and live bindings', () => {
     expect(other.broker.revoke(revoked.handle)).toBe(true);
     expect(await other.broker.resolveClaimsOnly(resolveInput(other.broker, revoked.handle)))
       .toMatchObject({ ok: false, code: 'inactive-ticket' });
+
+    const descendant = setup();
+    const parent = await claimedRoot(descendant.broker);
+    const child = await descendant.broker.delegate(leafInput(parent.handle, {
+      expiresAt: TICKET_EXPIRY
+    }));
+    expect(await descendant.broker.resolveForAuthority(authorityInput(descendant.broker, child.handle)))
+      .toMatchObject({ ok: true });
+    expect(descendant.broker.snapshot().tickets.find(record =>
+      record.ticket.ticketHandleId === child.handle)?.nonceStatus).toBe('claimed');
+    descendant.setNow(TICKET_EXPIRY);
+    expect(await descendant.broker.resolveClaimsOnly(resolveInput(descendant.broker, child.handle)))
+      .toMatchObject({ ok: false, code: 'expired-ticket' });
   });
 
   test('parent revocation cascades and standalone child resolution checks ancestors', async () => {

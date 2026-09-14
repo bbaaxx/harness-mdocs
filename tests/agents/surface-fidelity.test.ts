@@ -1171,6 +1171,13 @@ describe('surface fidelity measurement and evaluation', () => {
   });
 
   test('cancellation and topology catalogs require every runtime denial assertion', () => {
+    expect(FIDELITY_ASSERTION_CATALOG['run.action-mediation']).toEqual([
+      'every-effect-path-gated',
+      'every-spawn-path-gated',
+      'bypass-corpus-denied',
+      'intent-before-effect',
+      'effect-boundary-guard'
+    ]);
     expect(FIDELITY_ASSERTION_CATALOG['run.cancellation']).toEqual([
       'generation-committed-before-authorize',
       'pending-effects-denied',

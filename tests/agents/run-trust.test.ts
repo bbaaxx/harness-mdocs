@@ -50,6 +50,8 @@ function issueParams(): HandleIssueParams {
 const writeAction: StructuredAction = {
   operation: 'fs.write',
   path: 'src/file.ts',
+  contentDigest: `sha256:${'0'.repeat(64)}`,
+  declaredBytes: 0,
   writeSet: ['src/file.ts'],
   sideEffectClass: 'workspace'
 };
@@ -342,7 +344,7 @@ describe('kill switch', () => {
     expect(denied).toEqual({
       allowed: false,
       code: 'kill-switch',
-      reason: expect.stringContaining('rollout halt')
+      reason: 'Run effects disabled'
     });
   });
 
@@ -495,7 +497,9 @@ describe('mediator happy path', () => {
 
     const receipt = await controlPlane.mediator.execute(decision.reservationId);
     expect(receipt.resultClass).toBe('success');
-    expect(receipt.idempotencyId).toBe(decision.reservationId);
+    expect(receipt.receiptRef).toMatch(/^receipt:/);
+    expect(receipt.receiptDigest).toMatch(/^sha256:/);
+    expect(receipt).not.toHaveProperty('receipt');
   });
 
   test('unissued handle is denied with no-handle', async () => {
@@ -505,6 +509,18 @@ describe('mediator happy path', () => {
       allowed: false,
       code: 'no-handle',
       reason: expect.any(String)
+    });
+  });
+
+  test('expired fake handle is denied using trusted current time', async () => {
+    let now = new Date('2026-09-13T00:00:00.000Z');
+    const controlPlane = createFakeTrustedControlPlane({ now: () => new Date(now) });
+    const handle = controlPlane.handles.issue({
+      ...issueParams(), expiresAt: '2026-09-13T00:01:00.000Z'
+    });
+    now = new Date('2026-09-13T00:01:00.000Z');
+    expect(await controlPlane.mediator.authorize(handle, writeAction)).toMatchObject({
+      allowed: false, code: 'stale-generation', reason: 'Authority verification denied (stale-generation)'
     });
   });
 });

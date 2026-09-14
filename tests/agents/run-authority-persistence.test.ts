@@ -14,8 +14,13 @@ import * as publicAuthority from '../../src/agents/run/authority';
 import { compilePlanGraph } from '../../src/agents/run/compiler';
 import {
   AttestationChallengeParams,
-  createFakeTrustedControlPlane
+  createFakeTrustedControlPlane,
+  createRunKillSwitch
 } from '../../src/agents/run/trust';
+import type { StructuredActionExecutor } from '../../src/agents/run/trust/mediator';
+import { deriveOperationMetadataBindings } from '../../src/agents/run/evidence';
+import { createRunAuthorityActionVerifier } from '../../src/agents/run/authority/action-verifier-internal';
+import { createActionMediator } from '../../src/agents/run/trust/mediator-internal';
 import {
   IndeterminateStoreCommitError,
   InMemoryProtectedStoreAdapter,
@@ -174,7 +179,7 @@ describe('run authority manager persistence', () => {
         }]
       }],
       integrationCriteria: ['Integrated'], regressionCriteria: [], expectedSideEffects: [],
-      policy: {}, budgets: {
+      policy: { authority: { operationClasses: ['agent.spawn', 'process.exec'] } }, budgets: {
         maxActiveExecutionOrchestrators: 8, maxGlobalDescendants: 16, maxCumulativeSpawns: 32,
         toolActionsGlobal: 300, toolActionsEo: 300, toolActionsLeaf: 300,
         tokensGlobal: 500, tokensEo: 500, tokensLeaf: 500,
@@ -202,6 +207,7 @@ describe('run authority manager persistence', () => {
     let loseFinalizeAck = true;
     let loseLeaseAck = false;
     let loseClaimAck = false;
+    let loseLeafClaimAck = false;
     let loseUsageIntentAck = false;
     let loseUsageFinalizeAck = false;
     let loseProviderReleaseStageAck = false;
@@ -300,6 +306,11 @@ describe('run authority manager persistence', () => {
         if (loseClaimAck) {
           loseClaimAck = false;
           throw new IndeterminateStoreCommitError('lost execution claim acknowledgement');
+        }
+        if (loseLeafClaimAck && (committedInput.value as any).ticketState?.tickets?.some(
+            (item: any) => item.ticket.recipientRole === 'LEAF' && item.nonceStatus === 'claimed')) {
+          loseLeafClaimAck = false;
+          throw new IndeterminateStoreCommitError('lost leaf effect claim acknowledgement');
         }
         if (loseLeaseAck) {
           loseLeaseAck = false;
@@ -440,7 +451,7 @@ describe('run authority manager persistence', () => {
     if (initializedAggregate.status !== 'active') throw new Error('Expected initialized aggregate');
     expect(initializedAggregate.record.value.ticketState.rootAuthority).toEqual({
       roots: compiled.plan.payload.scope,
-      operationClasses: [], toolClasses: [], credentialClasses: [],
+      operationClasses: ['agent.spawn', 'process.exec'], toolClasses: [], credentialClasses: [],
       approvalRefs: [approval.verificationRef, modeSelection.verificationRef].sort(),
       budgets: compiled.plan.payload.budgets,
       expiresAt: '2026-09-12T01:00:00.000Z',
@@ -600,6 +611,7 @@ describe('run authority manager persistence', () => {
       controllerProof: controllerProof(lease),
       ticket: {
         nodeId: 'workstream-4-core-3-api', scope: 'api', roots: ['src/api/**'],
+        operationClasses: ['agent.spawn', 'process.exec'],
         approvalRefs: [approval.verificationRef],
         budgets: EXECUTION_BUDGETS,
         expiresAt: '2026-09-12T00:30:00.000Z', maxChildDepth: 1, maxFanout: 1
@@ -649,6 +661,63 @@ describe('run authority manager persistence', () => {
     );
     expect(await manager.issueExecutionTicket(executionIssue)).toEqual(issued);
     expect((await manager.read()).generation).toBe(persisted.generation);
+    const rootNode = compiled.graph.payload.nodes.find(node => node.ownerRole === 'PLAN_ROOT' &&
+      compiled.graph.payload.edges.some(edge => edge.fromNodeId === node.nodeId &&
+        edge.toNodeId === 'workstream-4-core-3-api'));
+    if (!rootNode) throw new Error('Expected PLAN_ROOT integration node');
+    const spawnExecutor: StructuredActionExecutor = {
+      kind: 'manager-test-spawn', operations: ['agent.spawn'], validate: () => true,
+      requiredCredentialClasses: () => [],
+      execute: jest.fn(async (request, guard) => {
+        await guard.assertCurrent();
+        return {
+          resultClass: 'success' as const, startedAt: now.toISOString(), endedAt: now.toISOString(),
+          actualTargets: [], actualResources: [...request.declaredResources],
+          inputMetadata: deriveOperationMetadataBindings(request.action),
+          resultMetadata: { childTicketRef: request.spawnChildTicketRef },
+          workspaceBefore: { scope: [], entries: [] }, workspaceAfter: { scope: [], entries: [] },
+          mutations: [], artifactHashes: []
+        };
+      })
+    };
+    const spawnMediatorHost = createActionMediator({
+      reader: store.reader(), writer: uncertainWriter,
+      authority: createRunAuthorityActionVerifier({
+        manager,
+        approvals: { areCurrent: async refs => refs.includes(approval.verificationRef) }
+      }),
+      executors: [spawnExecutor],
+      killSwitch: createRunKillSwitch({ routeEnabled: true, runEnabled: true }),
+      now: () => new Date(now)
+    });
+    const ticketsBeforeRootSpawn = (await manager.read()).ticketCount;
+    const rootSpawn = await spawnMediatorHost.mediator.authorize(lease.leaseRef, {
+      operation: 'agent.spawn', agentRef: 'workstream-4-core-3-api',
+      requestDigest: `sha256:${'3'.repeat(64)}`,
+      writeSet: [], sideEffectClass: 'none'
+    }, {
+      actionId: 'manager-root-spawn', idempotencyKey: 'manager-root-spawn-key',
+      adapterKind: 'manager-test-spawn', leaseProof: controllerProof(lease),
+      nodeId: rootNode.nodeId, targetNodeId: 'workstream-4-core-3-api',
+      graphEpoch: persisted.graphEpoch, cancellationGeneration: persisted.cancellationGeneration
+    });
+    expect(rootSpawn.allowed).toBe(true);
+    if (!rootSpawn.allowed) throw new Error('Expected pre-bound root spawn');
+    expect(await spawnMediatorHost.mediator.execute(rootSpawn.reservationId)).toMatchObject({
+      resultClass: 'success'
+    });
+    expect(((await spawnMediatorHost.receiptEvidence(rootSpawn.reservationId))?.payload as any)
+      ?.childTicketRef).toBe(issued.handle);
+    expect((await manager.read()).ticketCount).toBe(ticketsBeforeRootSpawn);
+    expect(await spawnMediatorHost.mediator.authorize(lease.leaseRef, {
+      operation: 'agent.spawn', agentRef: 'workstream-4-core-3-api',
+      requestDigest: `sha256:${'3'.repeat(64)}`,
+      writeSet: [], sideEffectClass: 'none'
+    }, {
+      actionId: 'manager-root-spawn-duplicate', idempotencyKey: 'manager-root-spawn-duplicate-key',
+      adapterKind: 'manager-test-spawn', leaseProof: controllerProof(lease),
+      nodeId: rootNode.nodeId, targetNodeId: 'workstream-4-core-3-api'
+    })).toMatchObject({ allowed: false, code: 'idempotency-conflict' });
     const aggregate = await store.reader().read<any>(authorityRunStoreKey('project:fake', 'run:manager'));
     expect(aggregate.status).toBe('active');
     if (aggregate.status !== 'active') throw new Error('Expected active authority aggregate');
@@ -685,6 +754,126 @@ describe('run authority manager persistence', () => {
     expect(claims.filter(result => result.status === 'rejected').every(result =>
       result.reason?.code !== 'commit-unknown')).toBe(true);
     const workstream = claims.find(result => result.status === 'fulfilled')!.value;
+    let approvalCurrentDuringFinalVerify = true;
+    let approvalRaceChecks = 0;
+    const approvalRaceVerifier = createRunAuthorityActionVerifier({
+      manager,
+      approvals: { areCurrent: async refs => {
+        expect(refs).toEqual([approval.verificationRef]);
+        approvalRaceChecks += 1;
+        if (approvalRaceChecks === 1) {
+          adapter.testOnlyBeforeNext('snapshot', () => { approvalCurrentDuringFinalVerify = false; });
+        }
+        return approvalCurrentDuringFinalVerify;
+      } }
+    });
+    expect(await approvalRaceVerifier.verifyAndReserve({
+      phase: 'effect', handle: issued.handle,
+      actionId: 'manager-final-approval-race', idempotencyKey: 'manager-final-approval-race-key',
+      actionDigest: `sha256:${'4'.repeat(64)}`, operation: 'process.exec',
+      adapterKind: 'manager-test-process', leaseProof: workstreamProof(workstream)
+    })).toMatchObject({ approvalsCurrent: false, approvalRefs: [approval.verificationRef] });
+    expect(approvalRaceChecks).toBe(2);
+    expect(await spawnMediatorHost.mediator.authorize(lease.leaseRef, {
+      operation: 'agent.spawn', agentRef: 'workstream-4-core-3-api',
+      requestDigest: `sha256:${'3'.repeat(64)}`,
+      writeSet: [], sideEffectClass: 'none'
+    }, {
+      actionId: 'manager-root-spawn-inactive', idempotencyKey: 'manager-root-spawn-inactive-key',
+      adapterKind: 'manager-test-spawn', leaseProof: controllerProof(lease),
+      nodeId: rootNode.nodeId, targetNodeId: 'workstream-4-core-3-api'
+    })).toMatchObject({ allowed: false, code: 'stale-generation' });
+    const actionExecute = jest.fn(async (
+      request: Parameters<StructuredActionExecutor['execute']>[0],
+      guard: Parameters<StructuredActionExecutor['execute']>[1]
+    ) => {
+      await guard.assertCurrent();
+      return {
+        resultClass: 'success' as const, startedAt: now.toISOString(), endedAt: now.toISOString(),
+        actualTargets: [], actualResources: [...request.declaredResources],
+        inputMetadata: { argvDigest: deriveOperationMetadataBindings(request.action).argvDigest },
+        resultMetadata: { durationMs: 0, exitCode: 0 },
+        workspaceBefore: { scope: [], entries: [] }, workspaceAfter: { scope: [], entries: [] },
+        mutations: [], artifactHashes: []
+      };
+    });
+    const actionExecutor: StructuredActionExecutor = {
+      kind: 'manager-test-process', operations: ['process.exec'], validate: () => true,
+      requiredCredentialClasses: () => [],
+      execute: actionExecute
+    };
+    const mediatorHost = createActionMediator({
+      reader: store.reader(), writer: uncertainWriter,
+      authority: createRunAuthorityActionVerifier({
+        manager,
+        approvals: { areCurrent: async refs => refs.includes(approval.verificationRef) }
+      }),
+      executors: [actionExecutor],
+      killSwitch: createRunKillSwitch({ routeEnabled: true, runEnabled: true }),
+      now: () => new Date(now)
+    });
+    const usageFinalizeCallsBeforeActions = usageFinalize.mock.calls.length;
+    for (const ordinal of [1, 2]) {
+      const decision = await mediatorHost.mediator.authorize(issued.handle, {
+        operation: 'process.exec', argv: ['manager-test-binary', String(ordinal)],
+        writeSet: [], sideEffectClass: 'external'
+      }, {
+        actionId: `manager-action-${ordinal}`,
+        idempotencyKey: `manager-action-key-${ordinal}`,
+        adapterKind: 'manager-test-process',
+        leaseProof: workstreamProof(workstream),
+        graphEpoch: persisted.graphEpoch,
+        cancellationGeneration: persisted.cancellationGeneration,
+        approvalRefs: [approval.verificationRef]
+      });
+      expect(decision.allowed).toBe(true);
+      if (!decision.allowed) throw new Error('Expected mediated manager action');
+      expect(await mediatorHost.mediator.execute(decision.reservationId)).toMatchObject({
+        resultClass: 'success', receiptRef: expect.stringMatching(/^receipt:/)
+      });
+      expect((await mediatorHost.receiptEvidence(decision.reservationId))?.payload as any)
+        .toMatchObject({ usageStatus: 'pending' });
+    }
+    const afterMediatedActions = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (afterMediatedActions.status !== 'active') throw new Error('Expected active authority aggregate');
+    const mediatedTicketReservation = afterMediatedActions.record.value.budgets.reservations.find(
+      (item: any) => item.ticketHandleId === issued.handle
+    );
+    expect(mediatedTicketReservation).toMatchObject({ status: 'pending' });
+    expect(afterMediatedActions.record.value.providerUsage.find(
+      (item: any) => item.reservationId === mediatedTicketReservation.reservationId
+    )?.status).toBe('reserved');
+    expect(actionExecutor.execute).toHaveBeenCalledTimes(2);
+    expect(usageFinalize).toHaveBeenCalledTimes(usageFinalizeCallsBeforeActions);
+    const rootReceipts = [];
+    for (const ordinal of [1, 2]) {
+      const rootDecision = await mediatorHost.mediator.authorize(lease.leaseRef, {
+        operation: 'process.exec', argv: ['manager-test-binary', `root-${ordinal}`],
+        writeSet: [], sideEffectClass: 'external'
+      }, {
+        actionId: `manager-root-action-${ordinal}`, idempotencyKey: `manager-root-action-key-${ordinal}`,
+        adapterKind: 'manager-test-process', leaseProof: controllerProof(lease),
+        nodeId: rootNode.nodeId,
+        graphEpoch: persisted.graphEpoch, cancellationGeneration: persisted.cancellationGeneration
+      });
+      expect(rootDecision.allowed).toBe(true);
+      if (!rootDecision.allowed) throw new Error('Expected mediated root action');
+      expect(await mediatorHost.mediator.execute(rootDecision.reservationId)).toMatchObject({
+        resultClass: 'success', receiptRef: expect.stringMatching(/^receipt:/)
+      });
+      rootReceipts.push(await mediatorHost.receiptEvidence(rootDecision.reservationId));
+    }
+    expect(rootReceipts.map(receipt => (receipt?.payload as any)?.usageReservationId))
+      .toEqual([rootReceipts[0] && (rootReceipts[0].payload as any).usageReservationId,
+        rootReceipts[0] && (rootReceipts[0].payload as any).usageReservationId]);
+    expect(rootReceipts[0]?.digest).not.toBe(rootReceipts[1]?.digest);
+    expect(rootReceipts[0]?.payload as any).toMatchObject({
+      usageStatus: 'pending', usageReservationId: expect.stringMatching(/^root-action-budget:/),
+      usageAmounts: { toolActionsGlobal: 300 }
+    });
+    expect(usageFinalize).toHaveBeenCalledTimes(usageFinalizeCallsBeforeActions);
     await expect(manager.heartbeatWorkstreamLease(null as any))
       .rejects.toMatchObject({ code: 'invalid-input' });
     const proofGetter = jest.fn(() => workstreamProof(workstream));
@@ -693,19 +882,215 @@ describe('run authority manager persistence', () => {
     });
     await expect(manager.heartbeatWorkstreamLease(hostileHeartbeat as any)).rejects.toThrow(/accessor/i);
     expect(proofGetter).not.toHaveBeenCalled();
+    expect(await spawnMediatorHost.mediator.authorize(issued.handle, {
+      operation: 'agent.spawn', agentRef: 'leaf-4-core-3-api-7-handler',
+      requestDigest: `sha256:${'3'.repeat(64)}`,
+      writeSet: [], sideEffectClass: 'none'
+    }, {
+      actionId: 'manager-eo-spawn-absent', idempotencyKey: 'manager-eo-spawn-absent-key',
+      adapterKind: 'manager-test-spawn', leaseProof: workstreamProof(workstream),
+      targetNodeId: 'leaf-4-core-3-api-7-handler'
+    })).toMatchObject({ allowed: false, code: 'stale-generation' });
     const leaf = await manager.issueLeafTicket({
       operationId: 'manager-issue-leaf-0001', workstreamProof: workstreamProof(workstream),
       ticket: {
         parentHandle: issued.handle, nodeId: 'leaf-4-core-3-api-7-handler', scope: 'handler',
-        roots: ['src/api/handler.ts'], approvalRefs: [approval.verificationRef],
+        roots: ['src/api/handler.ts'], operationClasses: ['process.exec'],
+        approvalRefs: [approval.verificationRef],
         budgets: LEAF_BUDGETS,
-        expiresAt: '2026-09-12T00:10:00.000Z', maxChildDepth: 0, maxFanout: 1
+        expiresAt: '2026-09-12T00:01:00.000Z', maxChildDepth: 0, maxFanout: 1
       }
     });
+    let approvalMode: 'current' | 'denied' | 'throw' = 'current';
+    let executorPolicyCurrent = true;
+    const preEffectExecutor: StructuredActionExecutor = {
+      ...actionExecutor,
+      kind: 'manager-pre-effect-process',
+      validate: () => executorPolicyCurrent
+    };
+    const preEffectHost = createActionMediator({
+      reader: store.reader(), writer: uncertainWriter,
+      authority: createRunAuthorityActionVerifier({
+        manager,
+        approvals: { areCurrent: async () => {
+          if (approvalMode === 'throw') throw new Error('approval provider unavailable');
+          return approvalMode === 'current';
+        } }
+      }),
+      executors: [preEffectExecutor],
+      killSwitch: createRunKillSwitch({ routeEnabled: true, runEnabled: true }),
+      now: () => new Date(now)
+    });
+    for (const [suffix, mode] of [['denied', 'denied'], ['throw', 'throw']] as const) {
+      approvalMode = 'current';
+      const decision = await preEffectHost.mediator.authorize(leaf.handle, {
+        operation: 'process.exec', argv: ['manager-test-binary', suffix],
+        writeSet: [], sideEffectClass: 'external'
+      }, {
+        actionId: `manager-leaf-approval-${suffix}`,
+        idempotencyKey: `manager-leaf-approval-${suffix}-key`,
+        adapterKind: 'manager-pre-effect-process', leaseProof: workstreamProof(workstream)
+      });
+      expect(decision.allowed).toBe(true);
+      if (!decision.allowed) throw new Error('Expected leaf approval-race intent');
+      approvalMode = mode;
+      expect(await preEffectHost.mediator.execute(decision.reservationId)).toMatchObject({
+        resultClass: 'failure', failureReason: 'authority-generation-drift'
+      });
+      const afterDenial = await store.reader().read<any>(
+        authorityRunStoreKey('project:fake', 'run:manager')
+      );
+      if (afterDenial.status !== 'active') throw new Error('Expected active authority aggregate');
+      expect(afterDenial.record.value.ticketState.tickets.find(
+        (item: any) => item.ticket.ticketHandleId === leaf.handle
+      )?.nonceStatus).toBe('issued');
+    }
+    approvalMode = 'current';
+    executorPolicyCurrent = true;
+    const policyDecision = await preEffectHost.mediator.authorize(leaf.handle, {
+      operation: 'process.exec', argv: ['manager-test-binary', 'policy-drift'],
+      writeSet: [], sideEffectClass: 'external'
+    }, {
+      actionId: 'manager-leaf-policy-drift', idempotencyKey: 'manager-leaf-policy-drift-key',
+      adapterKind: 'manager-pre-effect-process', leaseProof: workstreamProof(workstream)
+    });
+    expect(policyDecision.allowed).toBe(true);
+    if (!policyDecision.allowed) throw new Error('Expected leaf policy-race intent');
+    executorPolicyCurrent = false;
+    expect(await preEffectHost.mediator.execute(policyDecision.reservationId)).toMatchObject({
+      resultClass: 'failure', failureReason: 'executor-policy-drift'
+    });
+    const afterPolicyDenial = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (afterPolicyDenial.status !== 'active') throw new Error('Expected active authority aggregate');
+    expect(afterPolicyDenial.record.value.ticketState.tickets.find(
+      (item: any) => item.ticket.ticketHandleId === leaf.handle
+    )?.nonceStatus).toBe('issued');
+    expect(await mediatorHost.mediator.authorize(leaf.handle, {
+      operation: 'process.exec', argv: ['manager-test-binary', 'invalid-policy'],
+      writeSet: [], sideEffectClass: 'workspace'
+    }, {
+      actionId: 'manager-leaf-invalid-policy', idempotencyKey: 'manager-leaf-invalid-policy-key',
+      adapterKind: 'manager-test-process', leaseProof: workstreamProof(workstream)
+    })).toMatchObject({ allowed: false, code: 'policy-denied' });
+    const afterRejectedLeaf = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (afterRejectedLeaf.status !== 'active') throw new Error('Expected active authority aggregate');
+    expect(afterRejectedLeaf.record.value.ticketState.tickets.find(
+      (item: any) => item.ticket.ticketHandleId === leaf.handle
+    )?.nonceStatus).toBe('issued');
+    const eoSpawn = await spawnMediatorHost.mediator.authorize(issued.handle, {
+      operation: 'agent.spawn', agentRef: 'leaf-4-core-3-api-7-handler',
+      requestDigest: `sha256:${'3'.repeat(64)}`,
+      writeSet: [], sideEffectClass: 'none'
+    }, {
+      actionId: 'manager-eo-spawn', idempotencyKey: 'manager-eo-spawn-key',
+      adapterKind: 'manager-test-spawn', leaseProof: workstreamProof(workstream),
+      targetNodeId: 'leaf-4-core-3-api-7-handler'
+    });
+    expect(eoSpawn.allowed).toBe(true);
+    if (!eoSpawn.allowed) throw new Error('Expected pre-bound EO spawn');
+    expect(await spawnMediatorHost.mediator.execute(eoSpawn.reservationId)).toMatchObject({
+      resultClass: 'success'
+    });
+    expect(((await spawnMediatorHost.receiptEvidence(eoSpawn.reservationId))?.payload as any)
+      ?.childTicketRef).toBe(leaf.handle);
+    expect(await spawnMediatorHost.mediator.authorize(issued.handle, {
+      operation: 'agent.spawn', agentRef: 'leaf-4-core-3-api-7-handler',
+      requestDigest: `sha256:${'3'.repeat(64)}`,
+      writeSet: [], sideEffectClass: 'none'
+    }, {
+      actionId: 'manager-eo-spawn-duplicate', idempotencyKey: 'manager-eo-spawn-duplicate-key',
+      adapterKind: 'manager-test-spawn', leaseProof: workstreamProof(workstream),
+      targetNodeId: 'leaf-4-core-3-api-7-handler'
+    })).toMatchObject({ allowed: false, code: 'idempotency-conflict' });
+    expect(await spawnMediatorHost.mediator.authorize(leaf.handle, {
+      operation: 'agent.spawn', agentRef: 'leaf-4-core-3-api-7-handler',
+      requestDigest: `sha256:${'3'.repeat(64)}`,
+      writeSet: [], sideEffectClass: 'none'
+    }, {
+      actionId: 'manager-leaf-spawn', idempotencyKey: 'manager-leaf-spawn-key',
+      adapterKind: 'manager-test-spawn', leaseProof: workstreamProof(workstream),
+      targetNodeId: 'leaf-4-core-3-api-7-handler'
+    })).toMatchObject({ allowed: false, code: 'policy-denied' });
+    const stillIssuedLeaf = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (stillIssuedLeaf.status !== 'active') throw new Error('Expected active authority aggregate');
+    expect(stillIssuedLeaf.record.value.ticketState.tickets.find(
+      (item: any) => item.ticket.ticketHandleId === leaf.handle
+    )?.nonceStatus).toBe('issued');
+    let approvalChecks = 0;
+    const leafClaimHost = createActionMediator({
+      reader: store.reader(), writer: uncertainWriter,
+      authority: createRunAuthorityActionVerifier({
+        manager,
+        approvals: { areCurrent: async () => {
+          approvalChecks += 1;
+          if (approvalChecks === 7) {
+            const beforeClaim = await store.reader().read<any>(
+              authorityRunStoreKey('project:fake', 'run:manager')
+            );
+            if (beforeClaim.status !== 'active') throw new Error('Expected active authority aggregate');
+            expect(beforeClaim.record.value.ticketState.tickets.find(
+              (item: any) => item.ticket.ticketHandleId === leaf.handle
+            )?.nonceStatus).toBe('issued');
+          }
+          return true;
+        } }
+      }),
+      executors: [actionExecutor],
+      killSwitch: createRunKillSwitch({ routeEnabled: true, runEnabled: true }),
+      now: () => new Date(now)
+    });
+    const claimIntent = await leafClaimHost.mediator.authorize(leaf.handle, {
+      operation: 'process.exec', argv: ['manager-test-binary', 'claim-after-approval'],
+      writeSet: [], sideEffectClass: 'external'
+    }, {
+      actionId: 'manager-leaf-effect-claim', idempotencyKey: 'manager-leaf-effect-claim-key',
+      adapterKind: 'manager-test-process', leaseProof: workstreamProof(workstream)
+    });
+    expect(claimIntent.allowed).toBe(true);
+    if (!claimIntent.allowed) throw new Error('Expected leaf effect-claim intent');
+    loseLeafClaimAck = true;
+    expect(await leafClaimHost.mediator.execute(claimIntent.reservationId)).toMatchObject({
+      resultClass: 'success'
+    });
+    expect(approvalChecks).toBe(10);
+    const afterClaim = await store.reader().read<any>(authorityRunStoreKey('project:fake', 'run:manager'));
+    if (afterClaim.status !== 'active') throw new Error('Expected active authority aggregate');
+    expect(afterClaim.record.value.ticketState.tickets.find(
+      (item: any) => item.ticket.ticketHandleId === leaf.handle
+    )?.nonceStatus).toBe('claimed');
     expect(await manager.inspectTicket(leaf.handle)).toEqual({
       authority: false, ticketHandleId: leaf.handle, role: 'LEAF',
-      expiresAt: '2026-09-12T00:10:00.000Z'
+      expiresAt: '2026-09-12T00:01:00.000Z'
     });
+    const leafIntent = await mediatorHost.mediator.authorize(leaf.handle, {
+      operation: 'process.exec', argv: ['manager-test-binary', 'expires-before-effect'],
+      writeSet: [], sideEffectClass: 'external'
+    }, {
+      actionId: 'manager-leaf-expiry', idempotencyKey: 'manager-leaf-expiry-key',
+      adapterKind: 'manager-test-process', leaseProof: workstreamProof(workstream)
+    });
+    expect(leafIntent.allowed).toBe(true);
+    if (!leafIntent.allowed) throw new Error('Expected persisted leaf intent');
+    const effectsBeforeLeafExpiry = actionExecute.mock.calls.length;
+    now.setTime(Date.parse('2026-09-12T00:01:00.000Z'));
+    monotonicMs += 20_000;
+    expect(await mediatorHost.mediator.execute(leafIntent.reservationId)).toMatchObject({
+      resultClass: 'failure', failureReason: 'authority-revalidation-denied:stale-generation'
+    });
+    expect(actionExecute).toHaveBeenCalledTimes(effectsBeforeLeafExpiry);
+    const expiredLeafState = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (expiredLeafState.status !== 'active') throw new Error('Expected active authority aggregate');
+    expect(expiredLeafState.record.value.ticketState.tickets.find(
+      (item: any) => item.ticket.ticketHandleId === leaf.handle
+    )?.nonceStatus).toBe('claimed');
     const afterLeaf = await store.reader().read<any>(authorityRunStoreKey('project:fake', 'run:manager'));
     if (afterLeaf.status !== 'active') throw new Error('Expected active aggregate');
     const leafReservation = afterLeaf.record.value.budgets.reservations.find(

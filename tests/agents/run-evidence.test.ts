@@ -5,6 +5,7 @@ import {
   computeWorkspaceFingerprint,
   DEFAULT_EXECUTION_PLAN_BUDGETS,
   deriveOperationMetadataBindings,
+  EMPTY_EFFECT_PAYLOAD_DIGEST,
   EVIDENCE_DATA_LIMITS,
   EVIDENCE_REASON_CODES,
   evidenceUsageSampleSchema,
@@ -56,6 +57,8 @@ const AFTER_CHILD = {
 const ACTION = {
   operation: 'fs.write' as const,
   path: 'src/a.ts',
+  contentDigest: D2,
+  declaredBytes: 2,
   writeSet: ['src/**'],
   sideEffectClass: 'workspace' as const
 };
@@ -525,7 +528,9 @@ function validChildBundle(options: {
     ticketRef: ticket.parentTicketRef,
     acquiredAt: leaseAcquiredAt
   };
-  const action = { ...ACTION, operation, path };
+  const action = operation === 'fs.write'
+    ? { ...ACTION, operation, path, contentDigest: artifactDigest, declaredBytes: afterEntry.size }
+    : { operation, path, writeSet: ACTION.writeSet, sideEffectClass: ACTION.sideEffectClass };
   const inputMetadata = operation === 'fs.write'
     ? { contentDigest: artifactDigest, declaredBytes: afterEntry.size, path }
     : { path };
@@ -653,6 +658,7 @@ function validSpawnReceipt(
   const action = {
     operation: 'agent.spawn' as const,
     agentRef: child.nodeId,
+    requestDigest: D0,
     writeSet: [],
     sideEffectClass: 'external' as const
   };
@@ -830,6 +836,7 @@ function rootContextForEo(
   const action = {
     operation: 'agent.spawn' as const,
     agentRef: (eoContext as any).authority.nodeId,
+    requestDigest: D0,
     writeSet: [],
     sideEffectClass: 'external' as const
   };
@@ -1274,6 +1281,7 @@ describe('action receipt validation', () => {
 
   test('corroborates fs no-op metadata against exact path transition', () => {
     const noOpWrite = receiptContext({
+      action: { ...ACTION, contentDigest: D1, declaredBytes: 1 },
       metadata: {
         input: { contentDigest: D1, declaredBytes: 1, path: 'src/a.ts' },
         result: { bytesWritten: 1, changed: false }
@@ -1990,6 +1998,7 @@ describe('WP-220 independent review regressions', () => {
       const action = {
         operation: 'agent.spawn' as const,
         agentRef: (leaf.context as any).authority.nodeId,
+        requestDigest: D0,
         writeSet: [],
         sideEffectClass: 'external' as const
       };
@@ -2198,6 +2207,7 @@ describe('WP-220 independent review regressions', () => {
       operation: 'network.request' as const,
       url: 'https://example.test/resource',
       method: 'GET',
+      payloadDigest: D0,
       writeSet: [],
       sideEffectClass: 'external' as const
     };
@@ -2213,13 +2223,70 @@ describe('WP-220 independent review regressions', () => {
     });
     expect(reasons(validateActionReceipt(receiptClaim(networkContext), networkContext)))
       .toContain('operation-metadata-mismatch');
+    const { payloadDigest: _payloadDigest, ...withoutPayloadBinding } = bindings;
+    const missingPayloadContext = receiptContext({
+      action: networkAction,
+      metadata: { input: withoutPayloadBinding, result: { statusCode: 200 } },
+      workspace: { before: AFTER, after: AFTER, mutations: [] }
+    });
+    expect(reasons(validateActionReceipt(receiptClaim(missingPayloadContext), missingPayloadContext)))
+      .toContain('operation-metadata-mismatch');
+  });
+
+  test.each([
+    ['fs.write content', ACTION, { ...ACTION, contentDigest: D3 }],
+    ['fs.write size', ACTION, { ...ACTION, declaredBytes: 3 }],
+    ['network payload', {
+      operation: 'network.request', url: 'https://example.test', method: 'POST', payloadDigest: D0,
+      writeSet: [], sideEffectClass: 'external'
+    }, {
+      operation: 'network.request', url: 'https://example.test', method: 'POST', payloadDigest: D1,
+      writeSet: [], sideEffectClass: 'external'
+    }],
+    ['tool arguments', {
+      operation: 'tool.invoke', tool: 'jest', argumentsDigest: D0,
+      writeSet: [], sideEffectClass: 'external'
+    }, {
+      operation: 'tool.invoke', tool: 'jest', argumentsDigest: D1,
+      writeSet: [], sideEffectClass: 'external'
+    }],
+    ['spawn request', {
+      operation: 'agent.spawn', agentRef: 'leaf', requestDigest: D0,
+      writeSet: [], sideEffectClass: 'none'
+    }, {
+      operation: 'agent.spawn', agentRef: 'leaf', requestDigest: D1,
+      writeSet: [], sideEffectClass: 'none'
+    }]
+  ])('%s changes normalized operation identity', (_name, left, right) => {
+    expect(computeNormalizedOperationDigest(left)).not.toBe(computeNormalizedOperationDigest(right));
+  });
+
+  test('exports canonical digest for effects with no payload bytes', () => {
+    expect(EMPTY_EFFECT_PAYLOAD_DIGEST).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const bindings = deriveOperationMetadataBindings({
+      operation: 'network.request', url: 'https://example.test', method: 'GET',
+      payloadDigest: EMPTY_EFFECT_PAYLOAD_DIGEST, writeSet: [], sideEffectClass: 'external'
+    });
+    expect(bindings.payloadDigest).toBe(EMPTY_EFFECT_PAYLOAD_DIGEST);
+  });
+
+  test.each([
+    { operation: 'fs.write', path: 'src/a.ts', writeSet: ['src/**'], sideEffectClass: 'workspace' },
+    { operation: 'network.request', url: 'https://example.test', method: 'POST',
+      writeSet: [], sideEffectClass: 'external' },
+    { operation: 'tool.invoke', tool: 'jest', writeSet: [], sideEffectClass: 'external' },
+    { operation: 'agent.spawn', agentRef: 'leaf', writeSet: [], sideEffectClass: 'none' },
+    { ...ACTION, body: 'raw-side-channel' }
+  ])('rejects missing payload binding or raw side channel for $operation', action => {
+    expect(() => computeNormalizedOperationDigest(action)).toThrow();
   });
 
   test.each([
     [{ operation: 'process.exec', argv: ['/path with space/bin', '--flag'], writeSet: [], sideEffectClass: 'external' }, 'argvDigest'],
     [{ operation: 'git.mutate', args: ['commit', '-m', 'message'], writeSet: ['src/**'], sideEffectClass: 'workspace' }, 'argsDigest'],
     [{ operation: 'package.hook', hook: 'postinstall', writeSet: [], sideEffectClass: 'external' }, 'hook'],
-    [{ operation: 'agent.spawn', agentRef: 'leaf-1', writeSet: [], sideEffectClass: 'external' }, 'agentRef'],
+    [{ operation: 'agent.spawn', agentRef: 'leaf-1', requestDigest: D0,
+      writeSet: [], sideEffectClass: 'external' }, 'agentRef'],
     [{ operation: 'tool.invoke', tool: 'jest', argumentsDigest: D2, writeSet: [], sideEffectClass: 'external' }, 'toolRef']
   ])('derives and enforces metadata binding for $operation', (action, bindingKey) => {
     const bindings = deriveOperationMetadataBindings(action as any);
@@ -2932,7 +2999,7 @@ describe('WP-220 independent review regressions', () => {
     }), zeroCriteria))).toContain('criteria-mismatch');
   });
 
-  test('blocks completion for failure, noncommitted usage, and blocked child regardless of request', () => {
+  test('blocks final report completion until WP-230 commits pending usage evidence', () => {
     const base = reportContext() as any;
     const failedReceipt = resealReceiptEvidence(base.receipts[0], { resultClass: 'failure' });
     const failed = reportContext({ receipts: [failedReceipt] });
@@ -3234,6 +3301,7 @@ describe('WP-220 independent review regressions', () => {
     const rootAction = {
       operation: 'agent.spawn' as const,
       agentRef: 'workstream-core',
+      requestDigest: D0,
       writeSet: [],
       sideEffectClass: 'external' as const
     };

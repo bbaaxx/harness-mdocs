@@ -1,6 +1,11 @@
 import * as crypto from 'crypto';
 
-import { InMemoryProtectedStoreAdapter, ProtectedControllerStore } from '../store';
+import {
+  InMemoryProtectedStoreAdapter,
+  ProtectedControllerStore,
+  ProtectedControllerStoreWriter
+} from '../store';
+import { deriveOperationMetadataBindings } from '../evidence';
 
 import {
   AttestationChallenge,
@@ -18,10 +23,11 @@ import { HostIdentity, HostIdentityProvider } from './identity';
 import { createRunKillSwitch, RunFeatureFlags, RunKillSwitch } from './kill-switch';
 import {
   ActionMediator,
-  ActionReceiptSummary,
-  MediationDecision,
-  StructuredAction
+  ActionOperation,
+  ResolvedActionAuthority,
+  StructuredActionExecutor
 } from './mediator';
+import { createActionMediator } from './mediator-internal';
 import { UsageEstimate, UsageMeter, UsageReservation, UsageSample } from './meter';
 import { ControllerStore, createLegacyControllerStore } from './store';
 
@@ -334,50 +340,150 @@ export function createFakeTrustedControlPlane(
     storeId: `fake:${providerId}:${projectId}`,
     adapter: new InMemoryProtectedStoreAdapter()
   });
-  const store: ControllerStore = createLegacyControllerStore(protectedStore);
+  const writerPromise = protectedStore.openWriter();
+  const sharedWriter: ProtectedControllerStoreWriter = {
+    writerGeneration: 1,
+    compareAndSwap: async input => (await writerPromise).compareAndSwap(input),
+    append: async input => (await writerPromise).append(input),
+    recover: async input => (await writerPromise).recover(input),
+    resolveRecovery: async input => (await writerPromise).resolveRecovery(input)
+  };
+  const store: ControllerStore = createLegacyControllerStore(protectedStore, writerPromise);
 
   // --- mediator --------------------------------------------------------------
-  const reservations = new Map<string, { handle: OpaqueHandle; action: StructuredAction }>();
-  const mediator: ActionMediator = {
-    authorize: async (handle: OpaqueHandle, action: StructuredAction): Promise<MediationDecision> => {
-      if (!killSwitch.effectsAllowed()) {
-        return {
-          allowed: false,
-          code: 'kill-switch',
-          reason: killSwitch.disableReason() ?? 'Run effects are disabled by feature flags'
-        };
+  const files = new Map<string, { digest: string; size: number }>();
+  const operations: ActionOperation[] = [
+    'fs.write', 'fs.delete', 'process.exec', 'network.request', 'git.mutate',
+    'package.hook', 'agent.spawn', 'tool.invoke'
+  ];
+  const fakeExecutor: StructuredActionExecutor = {
+    kind: 'fake-structured',
+    operations,
+    validate: () => true,
+    requiredCredentialClasses: () => [],
+    async execute(request, guard) {
+      const at = now().toISOString();
+      const action = request.action;
+      const scope = [...action.writeSet].sort();
+      const path = action.operation === 'fs.write' || action.operation === 'fs.delete'
+        ? action.path : null;
+      const prior = path ? files.get(path) : undefined;
+      const beforeEntries = path ? [{
+        path,
+        kind: prior ? 'file' as const : 'missing' as const,
+        contentDigest: prior?.digest ?? null,
+        target: null,
+        size: prior?.size ?? 0
+      }] : [];
+      let changed = false;
+      await guard.assertCurrent();
+      if (action.operation === 'fs.write') {
+        changed = prior?.digest !== action.contentDigest || prior.size !== action.declaredBytes;
+        files.set(action.path, { digest: action.contentDigest, size: action.declaredBytes });
+      } else if (action.operation === 'fs.delete') {
+        changed = files.delete(action.path);
       }
-      if (!inspections.has(handle)) {
-        return { allowed: false, code: 'no-handle', reason: 'Unknown or unissued opaque handle' };
-      }
-      const reservationId = crypto.randomUUID();
-      reservations.set(reservationId, { handle, action });
-      // Intent is persisted BEFORE any effect.
-      await store.append(`intent/${inspections.get(handle)!.runId}`, {
-        reservationId,
-        operation: action.operation,
-        persistedAt: now().toISOString()
-      });
-      return { allowed: true, reservationId };
-    },
-    execute: async (reservationId: string): Promise<ActionReceiptSummary> => {
-      const reservation = reservations.get(reservationId);
-      if (!reservation) throw new Error(`Unknown action reservation "${reservationId}"`);
-      const startedAt = now().toISOString();
-      const receipt: ActionReceiptSummary = {
-        actionId: `action:${crypto.randomUUID()}`,
-        idempotencyId: reservationId,
-        resultClass: 'success',
-        startedAt,
-        endedAt: now().toISOString()
+      const after = path ? files.get(path) : undefined;
+      const afterEntries = path ? [{
+        path,
+        kind: after ? 'file' as const : 'missing' as const,
+        contentDigest: after?.digest ?? null,
+        target: null,
+        size: after?.size ?? 0
+      }] : [];
+      const bindings = deriveOperationMetadataBindings(action);
+      const safeBindings = Object.fromEntries(Object.entries(bindings).filter(([key]) =>
+        key.endsWith('Digest') || key === 'declaredBytes' || key === 'method' || key === 'path'));
+      const inputMetadata = { ...safeBindings };
+      const resultMetadata = action.operation === 'fs.write' ? {
+        changed, bytesWritten: action.declaredBytes,
+        ...(changed ? { artifactHash: action.contentDigest } : {})
+      } : action.operation === 'fs.delete' ? { changed, deleted: changed }
+        : action.operation === 'agent.spawn' ? { childTicketRef: request.spawnChildTicketRef }
+          : {};
+      return {
+        resultClass: 'success', startedAt: at, endedAt: now().toISOString(),
+        actualTargets: path ? [path] : [], actualResources: [...request.declaredResources],
+        inputMetadata, resultMetadata,
+        workspaceBefore: { scope, entries: beforeEntries },
+        workspaceAfter: { scope, entries: afterEntries },
+        mutations: changed && path ? [path] : [],
+        artifactHashes: action.operation === 'fs.write' && changed ? [action.contentDigest] : []
       };
-      await store.append(`receipt/${inspections.get(reservation.handle)!.runId}`, receipt);
-      return receipt;
-    },
-    cancel: async (runId: string, generation: number) => {
-      await store.append(`cancellation/${runId}`, { generation, at: now().toISOString() });
     }
   };
+
+  const mediatorHost = createActionMediator({
+    reader: protectedStore.reader(),
+    writer: sharedWriter,
+    killSwitch,
+    now,
+    executors: [fakeExecutor],
+    authority: {
+      async verifyAndReserve(request): Promise<ResolvedActionAuthority> {
+        const inspection = inspections.get(request.handle as OpaqueHandle);
+        if (!inspection) {
+          const error = new Error('Unknown or unissued opaque handle');
+          Object.assign(error, { code: 'unknown-handle' });
+          throw error;
+        }
+        const expiresAt = inspection.expiresAt;
+        const currentMs = now().getTime();
+        if (!Number.isFinite(currentMs) || currentMs >= Date.parse(expiresAt)) {
+          const error = new Error('Opaque authority expired');
+          Object.assign(error, { code: 'expired-ticket' });
+          throw error;
+        }
+        const at = new Date(Date.parse(expiresAt) - 60_000).toISOString();
+        return {
+          runId: inspection.runId,
+          projectId,
+          approvedPlanDigest: `sha256:${'1'.repeat(64)}`,
+          approvedGraphDigest: `sha256:${'2'.repeat(64)}`,
+          graphId: inspection.graphId,
+          graphRevision: 1,
+          graphEpoch: inspection.generation,
+          cancellationGeneration: inspection.cancellationGeneration,
+          authorityKind: 'delegation-ticket',
+          authorityRef: request.handle,
+          parentAuthorityRef: null,
+          authorityGeneration: inspection.generation,
+          authorityExpiresAt: expiresAt,
+          nodeId: inspection.nodeId,
+          parentNodeId: 'node:root',
+          issuerRole: 'PLAN_ROOT',
+          recipientRole: 'EXECUTION',
+          handleLineage: [request.handle],
+          spawnChildTicketRef: null,
+          reportDestination: `controller:${inspection.nodeId}`,
+          reportSchemaRef: 'execution-report/v1',
+          lease: {
+            kind: 'workstream', ref: `fake-lease:${inspection.nodeId}`,
+            generation: inspection.generation, fence: inspection.generation,
+            acquiredAt: at, expiresAt
+          },
+          operationClasses: [...operations].sort(),
+          toolClasses: request.operation === 'tool.invoke' ? [(request as any).tool ?? 'fake-tool'] : [],
+          credentialClasses: [],
+          approvalRefs: ['fake-approval'],
+          approvalsCurrent: true,
+          writeSet: [...inspection.writeSetSummary].sort(),
+          criteria: ['fake-criterion'],
+          globalActionLimit: 1024,
+          localActionLimit: 1024,
+          eoLineageKey: request.handle,
+          eoLineageActionLimit: 1024,
+          usage: {
+            reservationId: `fake-budget:${request.handle}`,
+            status: 'pending', startedAt: at, deadlineAt: expiresAt,
+            final: null, sampleDigest: null, amounts: { toolActionsEo: 1024 },
+            currency: 'USD', descendantCommitted: {}, actual: {}, measuredUsageRequired: false
+          }
+        };
+      }
+    }
+  });
+  const mediator: ActionMediator = mediatorHost.mediator;
 
   // --- meter -----------------------------------------------------------------
   const usageReservations = new Map<string, UsageReservation>();

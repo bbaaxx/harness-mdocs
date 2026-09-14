@@ -39,8 +39,11 @@ export interface ControllerStore {
 }
 
 /** Compatibility facade for trust components still using the WP-090 API. */
-export function createLegacyControllerStore(store: ProtectedControllerStore): ControllerStore {
-  let writer: Promise<ProtectedControllerStoreWriter> | undefined;
+export function createLegacyControllerStore(
+  store: ProtectedControllerStore,
+  sharedWriter?: Promise<ProtectedControllerStoreWriter>
+): ControllerStore {
+  let writer: Promise<ProtectedControllerStoreWriter> | undefined = sharedWriter;
   const appendQueues = new Map<string, Promise<void>>();
   const getWriter = (): Promise<ProtectedControllerStoreWriter> => {
     if (!writer) {

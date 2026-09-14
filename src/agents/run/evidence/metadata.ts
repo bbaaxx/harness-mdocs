@@ -18,7 +18,7 @@ const POLICY: Readonly<Record<string, Readonly<Record<MetadataSide, readonly str
     result: Object.freeze(['durationMs', 'errorCode', 'exitCode', 'signal'])
   }),
   'network.request': Object.freeze({
-    input: Object.freeze(['method', 'requestDigest', 'urlDigest']),
+    input: Object.freeze(['method', 'payloadDigest', 'requestDigest', 'urlDigest']),
     result: Object.freeze(['durationMs', 'errorCode', 'responseDigest', 'statusCode'])
   }),
   'git.mutate': Object.freeze({
@@ -63,6 +63,7 @@ function validFieldValue(key: string, value: unknown): boolean {
   if (!scalar(value)) return false;
   if (key.endsWith('Digest') || key.endsWith('Hash')) return typeof value === 'string' && DIGEST.test(value);
   if (key === 'executableRef') return typeof value === 'string';
+  if (key === 'childTicketRef') return value === null || typeof value === 'string' && REFERENCE.test(value);
   if (key.endsWith('Ref')) return typeof value === 'string' && REFERENCE.test(value);
   if (key === 'path') return canonicalProjectPathSchema.safeParse(value).success;
   if (['bytesWritten', 'declaredBytes', 'durationMs', 'exitCode', 'statusCode'].includes(key)) {
@@ -97,13 +98,20 @@ export function metadataMatches(
   return canonicalEqual(actual, expected);
 }
 
-/** Deterministic operation-bound metadata values. Callers may omit fields, never contradict them. */
+/** Deterministic operation-bound metadata values. */
 export function deriveOperationMetadataBindings(
   action: StructuredAction
-): Readonly<Record<string, string>> {
-  let bindings: Record<string, string>;
+): Readonly<Record<string, string | number>> {
+  let bindings: Record<string, string | number>;
   switch (action.operation) {
     case 'fs.write':
+      bindings = {
+        path: action.path,
+        pathDigest: domainDigest('harness-mdocs/metadata/path/v1', action.path),
+        contentDigest: action.contentDigest,
+        declaredBytes: action.declaredBytes
+      };
+      break;
     case 'fs.delete':
       bindings = {
         path: action.path,
@@ -119,10 +127,12 @@ export function deriveOperationMetadataBindings(
     case 'network.request':
       bindings = {
         method: action.method,
+        payloadDigest: action.payloadDigest,
         urlDigest: domainDigest('harness-mdocs/metadata/url/v1', action.url),
         requestDigest: domainDigest('harness-mdocs/metadata/network-request/v1', {
           method: action.method,
-          url: action.url
+          url: action.url,
+          payloadDigest: action.payloadDigest
         })
       };
       break;
@@ -135,13 +145,13 @@ export function deriveOperationMetadataBindings(
     case 'agent.spawn':
       bindings = {
         agentRef: action.agentRef,
-        requestDigest: domainDigest('harness-mdocs/metadata/agent-request/v1', action)
+        requestDigest: action.requestDigest
       };
       break;
     case 'tool.invoke':
       bindings = {
         toolRef: action.tool,
-        ...(action.argumentsDigest === undefined ? {} : { argumentsDigest: action.argumentsDigest })
+        argumentsDigest: action.argumentsDigest
       };
       break;
   }
@@ -153,5 +163,13 @@ export function operationMetadataMatches(
   metadata: Record<string, unknown>
 ): boolean {
   const bindings = deriveOperationMetadataBindings(action);
-  return Object.entries(bindings).every(([key, value]) => metadata[key] === undefined || metadata[key] === value);
+  const payloadBindings: Partial<Record<StructuredAction['operation'], readonly string[]>> = {
+    'fs.write': ['contentDigest', 'declaredBytes'],
+    'network.request': ['payloadDigest'],
+    'agent.spawn': ['requestDigest'],
+    'tool.invoke': ['argumentsDigest']
+  };
+  const required = new Set(payloadBindings[action.operation] ?? []);
+  return Object.entries(bindings).every(([key, value]) =>
+    required.has(key) ? metadata[key] === value : metadata[key] === undefined || metadata[key] === value);
 }
