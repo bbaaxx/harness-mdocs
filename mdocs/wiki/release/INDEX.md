@@ -13,3 +13,4 @@
 - [Tag-based npm publishing](tag-based-npm-publishing.md)
 - [harness-mdocs 0.5.3](harness-mdocs-0-5-3.md)
 - [harness-mdocs 0.4.2](harness-mdocs-0-4-2.md)
+- [v2.0.0 Breaking-Change & Migration Matrix (v0.8.1 → HEAD fbd5181)](v2-0-0-migration-matrix.md)
