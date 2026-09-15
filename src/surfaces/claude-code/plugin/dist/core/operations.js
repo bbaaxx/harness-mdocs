@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildInfo = buildInfo;
 exports.advance = advance;
 exports.lookup = lookup;
 exports.resume = resume;
@@ -10,6 +11,34 @@ exports.indexCheck = indexCheck;
 exports.audit = audit;
 exports.sessionContext = sessionContext;
 const utils_1 = require("./commands/utils");
+const child_process_1 = require("child_process");
+const fs_1 = require("fs");
+const path_1 = require("path");
+const build_info_1 = require("./build-info");
+/**
+ * Build fingerprint so any surface can answer "which build are you running?".
+ * Version from the build-time stamp when available, else package.json, else
+ * '0.0.0'; git sha from the build-time stamp, else npm's gitHead field
+ * stamped at publish, else the package's own repo, else null.
+ */
+function buildInfo() {
+    let version = build_info_1.BUILD_VERSION ?? '0.0.0';
+    let gitSha = build_info_1.BUILD_GIT_SHA;
+    try {
+        const pkg = JSON.parse((0, fs_1.readFileSync)((0, path_1.join)(__dirname, '..', '..', 'package.json'), 'utf8'));
+        if (!build_info_1.BUILD_VERSION && typeof pkg.version === 'string')
+            version = pkg.version;
+        if (!gitSha && typeof pkg.gitHead === 'string')
+            gitSha = pkg.gitHead.slice(0, 7);
+    }
+    catch { /* package.json unreadable — keep defaults */ }
+    try {
+        if (!gitSha)
+            gitSha = (0, child_process_1.execSync)('git rev-parse --short HEAD', { cwd: (0, path_1.join)(__dirname, '..', '..'), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || null;
+    }
+    catch { /* not a git checkout — keep null */ }
+    return { version, gitSha };
+}
 function advance(core, step) {
     core.managers.workflow.advance(step);
     return core.managers.workflow.status();
@@ -95,14 +124,15 @@ function dispatch(core, id) {
 }
 function status(core) {
     const state = core.managers.workflow.status();
+    const build = buildInfo();
     if (!state.activeInitiative)
-        return state;
+        return { ...state, build };
     const fileName = (0, utils_1.findInitiativeFilename)(core.mdocsRoot, core.managers.initiatives, state.activeInitiative);
     const initiative = fileName ? core.managers.initiatives.read(fileName) : null;
     if (initiative?.status === 'active')
-        return state;
+        return { ...state, build };
     core.managers.workflow.setActiveInitiative(null);
-    return core.managers.workflow.status();
+    return { ...core.managers.workflow.status(), build };
 }
 function indexCheck(core, repair) {
     const initiativeResult = core.managers.initiatives.checkConsistency();

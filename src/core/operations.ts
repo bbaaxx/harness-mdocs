@@ -1,6 +1,30 @@
 import { MdocsCore } from './factory';
 import { StepName } from './types';
 import { findInitiativeFilename } from './commands/utils';
+import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { BUILD_GIT_SHA, BUILD_VERSION } from './build-info';
+
+/**
+ * Build fingerprint so any surface can answer "which build are you running?".
+ * Version from the build-time stamp when available, else package.json, else
+ * '0.0.0'; git sha from the build-time stamp, else npm's gitHead field
+ * stamped at publish, else the package's own repo, else null.
+ */
+export function buildInfo(): { version: string; gitSha: string | null } {
+  let version = BUILD_VERSION ?? '0.0.0';
+  let gitSha: string | null = BUILD_GIT_SHA;
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
+    if (!BUILD_VERSION && typeof pkg.version === 'string') version = pkg.version;
+    if (!gitSha && typeof pkg.gitHead === 'string') gitSha = pkg.gitHead.slice(0, 7);
+  } catch { /* package.json unreadable — keep defaults */ }
+  try {
+    if (!gitSha) gitSha = execSync('git rev-parse --short HEAD', { cwd: join(__dirname, '..', '..'), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || null;
+  } catch { /* not a git checkout — keep null */ }
+  return { version, gitSha };
+}
 
 export function advance(core: MdocsCore, step: string) {
   core.managers.workflow.advance(step as StepName);
@@ -94,14 +118,15 @@ export function dispatch(core: MdocsCore, id?: string) {
 
 export function status(core: MdocsCore) {
   const state = core.managers.workflow.status();
-  if (!state.activeInitiative) return state;
+  const build = buildInfo();
+  if (!state.activeInitiative) return { ...state, build };
 
   const fileName = findInitiativeFilename(core.mdocsRoot, core.managers.initiatives, state.activeInitiative);
   const initiative = fileName ? core.managers.initiatives.read(fileName) : null;
-  if (initiative?.status === 'active') return state;
+  if (initiative?.status === 'active') return { ...state, build };
 
   core.managers.workflow.setActiveInitiative(null);
-  return core.managers.workflow.status();
+  return { ...core.managers.workflow.status(), build };
 }
 
 export function indexCheck(core: MdocsCore, repair: boolean) {

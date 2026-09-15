@@ -47,10 +47,25 @@ exports.startMcpServer = startMcpServer;
  */
 const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
 const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
+const fs_1 = require("fs");
+const path_1 = require("path");
 const zod_1 = require("zod");
 const core_1 = require("../../core");
 const ops = __importStar(require("../../core/operations"));
+const build_info_1 = require("../../core/build-info");
 const result_1 = require("./result");
+/** Server version: baked-in build info first, package.json fallback, so bundled artifacts report the real build. */
+function packageVersion() {
+    if (build_info_1.BUILD_VERSION)
+        return build_info_1.BUILD_VERSION;
+    try {
+        const pkg = JSON.parse((0, fs_1.readFileSync)((0, path_1.join)(__dirname, '..', '..', '..', 'package.json'), 'utf8'));
+        return typeof pkg.version === 'string' ? pkg.version : '0.0.0';
+    }
+    catch {
+        return '0.0.0';
+    }
+}
 /**
  * Resolve the project root via the shared helper so the MCP server agrees
  * with the PreToolUse / PostToolUse hooks on the same mdocs root. The helper
@@ -78,7 +93,7 @@ async function guard(fn) {
  * Exported so registration can be unit-tested without owning stdio.
  */
 function buildMcpServer() {
-    const server = new mcp_js_1.McpServer({ name: 'mdocs', version: '1.0.0' });
+    const server = new mcp_js_1.McpServer({ name: 'mdocs', version: packageVersion() });
     // --- Aggregate: source of truth -----------------------------------------
     server.tool('mdocs', 'Run any mdocs core command (initiative.*, wiki.*, validate, index.sync).', {
         command: zod_1.z.string().describe('Command name, e.g. initiative.create'),

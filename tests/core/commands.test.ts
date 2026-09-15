@@ -24,7 +24,12 @@ describe('MdocsCommandRegistry', () => {
     });
 
     const today = new Date().toISOString().split('T')[0];
-    expect(result).toEqual({ success: true, filename: `cmd-created--${today}.md`, id: 'cmd-created' });
+    expect(result).toEqual({
+      success: true,
+      filename: `cmd-created--${today}.md`,
+      id: 'cmd-created',
+      hint: 'Initiative created but not active. Run mdocs_resume (or CLI: mdocs resume <id>) to activate it.'
+    });
     expect(fs.existsSync(path.join(projectDir, 'mdocs', 'initiatives', `cmd-created--${today}.md`))).toBe(true);
   });
 

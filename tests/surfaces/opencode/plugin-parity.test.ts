@@ -579,7 +579,12 @@ Legacy filename
       }
     });
 
-    expect(result).toEqual({ success: true, filename: `cmd-created--${today}.md`, id: 'cmd-created' });
+    expect(result).toEqual({
+      success: true,
+      filename: `cmd-created--${today}.md`,
+      id: 'cmd-created',
+      hint: 'Initiative created but not active. Run mdocs_resume (or CLI: mdocs resume <id>) to activate it.'
+    });
 
     const manager = new InitiativeManager(path.join(testDir, 'mdocs'));
     const initiative = manager.read(result.filename);
@@ -1235,12 +1240,14 @@ describe('Config Hook', () => {
 
     expect(Object.keys(plugin.tool).sort()).toEqual([
       'mdocs',
+      'mdocs_advance',
       'mdocs_audit',
       'mdocs_dispatch',
       'mdocs_index_check',
       'mdocs_ingest',
       'mdocs_init',
       'mdocs_lookup',
+      'mdocs_reset',
       'mdocs_resume',
       'mdocs_search',
       'mdocs_status',

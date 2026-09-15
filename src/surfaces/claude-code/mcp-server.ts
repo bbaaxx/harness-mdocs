@@ -10,10 +10,24 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { z } from 'zod';
 import { createMdocsCore, MdocsCore, resolveProjectRoot } from '../../core';
 import * as ops from '../../core/operations';
+import { BUILD_VERSION } from '../../core/build-info';
 import { toMcpResult, toMcpError, McpToolResult } from './result';
+
+/** Server version: baked-in build info first, package.json fallback, so bundled artifacts report the real build. */
+function packageVersion(): string {
+  if (BUILD_VERSION) return BUILD_VERSION;
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', '..', 'package.json'), 'utf8'));
+    return typeof pkg.version === 'string' ? pkg.version : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
 
 /**
  * Resolve the project root via the shared helper so the MCP server agrees
@@ -44,7 +58,7 @@ async function guard(fn: (c: MdocsCore) => unknown | Promise<unknown>): Promise<
  * Exported so registration can be unit-tested without owning stdio.
  */
 export function buildMcpServer(): McpServer {
-  const server = new McpServer({ name: 'mdocs', version: '1.0.0' });
+  const server = new McpServer({ name: 'mdocs', version: packageVersion() });
 
   // --- Aggregate: source of truth -----------------------------------------
   server.tool(

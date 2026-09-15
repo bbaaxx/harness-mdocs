@@ -37,6 +37,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runMdocsCli = runMdocsCli;
 const core_1 = require("../core");
 const operations_1 = require("../core/operations");
+const engine_1 = require("../core/workflow/engine");
 function parseJsonArg(args) {
     const index = args.indexOf('--json');
     if (index === -1)
@@ -164,6 +165,9 @@ async function runMdocsCli(args, projectDir = process.cwd()) {
         }
         const core = (0, core_1.createMdocsCore)(projectDir);
         const [command, subcommand] = args;
+        if (command === '--version' || command === '-v' || command === 'version') {
+            return ok((0, operations_1.buildInfo)());
+        }
         if (command === 'init') {
             core.managers.mdocs.init();
             return { exitCode: 0, stdout: JSON.stringify({ success: true }), stderr: '' };
@@ -196,12 +200,11 @@ async function runMdocsCli(args, projectDir = process.cwd()) {
             return ok((0, operations_1.indexCheck)(core, subcommand === 'repair'));
         }
         if (command === 'step' && subcommand) {
-            try {
-                return ok((0, operations_1.advance)(core, subcommand));
-            }
-            catch (error) {
-                return fail(error.message || String(error));
-            }
+            const result = await core.commands.execute('workflow.advance', { step: subcommand });
+            return result.error ? { exitCode: 1, stdout: json(result), stderr: '' } : ok(result);
+        }
+        if (command === 'step') {
+            return { exitCode: 1, stdout: json({ error: 'usage: mdocs step <STEP>', validSteps: engine_1.STEPS }), stderr: '' };
         }
         if (command === 'command' && (subcommand === '--help' || subcommand === 'help' || !subcommand)) {
             return text(commandHelp());

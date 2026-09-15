@@ -65,7 +65,19 @@ describe('mdocs CLI', () => {
 
     const result = await runMdocsCli(['step', 'PLAN'], projectDir); // skip from IDLE
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toMatch(/skip|back|invalid/i);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toMatch(/"error"/);
+    expect(result.stdout).toMatch(/Cannot (skip|go back)/);
+    expect(JSON.parse(result.stdout)).toMatchObject({ error: expect.stringMatching(/Cannot (skip|go back)/), currentStep: 'IDLE' });
+  });
+
+  test('bare step returns JSON usage with validSteps', async () => {
+    const result = await runMdocsCli(['step'], tempProject());
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    const payload = JSON.parse(result.stdout);
+    expect(payload.error).toBe('usage: mdocs step <STEP>');
+    expect(payload.validSteps).toEqual(['IDLE', 'UNDERSTAND', 'DISCOVER', 'CONTEXT', 'PLAN', 'EXECUTE', 'VERIFY', 'REPORT', 'COMPLETE']);
   });
 
   test('usage lists the mcp, step, and reset subcommands', async () => {

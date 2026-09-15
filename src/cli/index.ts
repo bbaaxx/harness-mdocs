@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createMdocsCore } from '../core';
-import { status, lookup, resume, dispatch, indexCheck, advance, reset } from '../core/operations';
+import { status, lookup, resume, dispatch, indexCheck, reset, buildInfo } from '../core/operations';
+import { STEPS } from '../core/workflow/engine';
 
 export interface CliResult {
   exitCode: number;
@@ -143,6 +144,10 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
     const core = createMdocsCore(projectDir);
     const [command, subcommand] = args;
 
+    if (command === '--version' || command === '-v' || command === 'version') {
+      return ok(buildInfo());
+    }
+
     if (command === 'init') {
       core.managers.mdocs.init();
       return { exitCode: 0, stdout: JSON.stringify({ success: true }), stderr: '' };
@@ -184,11 +189,12 @@ export async function runMdocsCli(args: string[], projectDir = process.cwd()): P
     }
 
     if (command === 'step' && subcommand) {
-      try {
-        return ok(advance(core, subcommand));
-      } catch (error: any) {
-        return fail(error.message || String(error));
-      }
+      const result = await core.commands.execute('workflow.advance', { step: subcommand });
+      return result.error ? { exitCode: 1, stdout: json(result), stderr: '' } : ok(result);
+    }
+
+    if (command === 'step') {
+      return { exitCode: 1, stdout: json({ error: 'usage: mdocs step <STEP>', validSteps: STEPS }), stderr: '' };
     }
 
     if (command === 'command' && (subcommand === '--help' || subcommand === 'help' || !subcommand)) {

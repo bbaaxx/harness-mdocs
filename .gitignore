@@ -22,3 +22,6 @@ mdocs/audit.log
 mdocs/audit.log.*
 mdocs/.workflow-state.json
 .mdocs-generation.boot
+
+# Generated at build time by scripts/write-build-info.js
+src/core/build-info.ts

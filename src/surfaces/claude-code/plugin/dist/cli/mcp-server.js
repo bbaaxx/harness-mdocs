@@ -30962,6 +30962,10 @@ var StdioServerTransport = class {
   }
 };
 
+// src/surfaces/claude-code/mcp-server.ts
+var import_fs2 = require("fs");
+var import_path2 = require("path");
+
 // src/core/types.ts
 function isCompleted(status2) {
   return status2 === "done" || status2 === "complete";
@@ -31446,6 +31450,7 @@ var MdocsCommandRegistry = class {
     "wiki.link",
     "wiki.xref",
     "workflow.advance",
+    "workflow.reset",
     "lifecycle.graduate",
     "validate",
     "index.sync"
@@ -31481,6 +31486,8 @@ var MdocsCommandRegistry = class {
           return this.crossReferenceWiki(args);
         case "workflow.advance":
           return this.advanceWorkflow(args);
+        case "workflow.reset":
+          return this.resetWorkflow();
         case "lifecycle.graduate":
           return this.graduateInitiative(args);
         case "validate":
@@ -31493,6 +31500,15 @@ var MdocsCommandRegistry = class {
     } catch (err) {
       return { error: err.message || String(err) };
     }
+  }
+  resetWorkflow() {
+    this.context.workflow.reset();
+    return {
+      success: true,
+      currentStep: this.context.workflow.getCurrentStep(),
+      activeInitiative: this.context.workflow.status().activeInitiative,
+      stepHistory: this.context.workflow.status().stepHistory
+    };
   }
   advanceWorkflow(args) {
     const step = args.step || args.nextStep;
@@ -31656,7 +31672,12 @@ var MdocsCommandRegistry = class {
       expectedDuration: args.expectedDuration || void 0,
       graduated: args.graduated || void 0
     });
-    return { success: true, filename: path6.basename(filePath), id };
+    return {
+      success: true,
+      filename: path6.basename(filePath),
+      id,
+      hint: "Initiative created but not active. Run mdocs_resume (or CLI: mdocs resume <id>) to activate it."
+    };
   }
   /**
    * initiative.update — explicit mutation result. snake_case inputs are
@@ -35179,6 +35200,30 @@ function mergeOptions(file2, explicit) {
 }
 
 // src/core/operations.ts
+var import_child_process = require("child_process");
+var import_fs = require("fs");
+var import_path = require("path");
+
+// src/core/build-info.ts
+var BUILD_GIT_SHA = "fbd5181";
+var BUILD_VERSION = "0.8.1";
+
+// src/core/operations.ts
+function buildInfo() {
+  let version2 = BUILD_VERSION ?? "0.0.0";
+  let gitSha = BUILD_GIT_SHA;
+  try {
+    const pkg = JSON.parse((0, import_fs.readFileSync)((0, import_path.join)(__dirname, "..", "..", "package.json"), "utf8"));
+    if (!BUILD_VERSION && typeof pkg.version === "string") version2 = pkg.version;
+    if (!gitSha && typeof pkg.gitHead === "string") gitSha = pkg.gitHead.slice(0, 7);
+  } catch {
+  }
+  try {
+    if (!gitSha) gitSha = (0, import_child_process.execSync)("git rev-parse --short HEAD", { cwd: (0, import_path.join)(__dirname, "..", ".."), stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || null;
+  } catch {
+  }
+  return { version: version2, gitSha };
+}
 function lookup(core2, query) {
   const match = core2.managers.initiatives.findByQuery(query);
   if (match) return {
@@ -35243,12 +35288,13 @@ function dispatch(core2, id) {
 }
 function status(core2) {
   const state = core2.managers.workflow.status();
-  if (!state.activeInitiative) return state;
+  const build = buildInfo();
+  if (!state.activeInitiative) return { ...state, build };
   const fileName = findInitiativeFilename(core2.mdocsRoot, core2.managers.initiatives, state.activeInitiative);
   const initiative = fileName ? core2.managers.initiatives.read(fileName) : null;
-  if (initiative?.status === "active") return state;
+  if (initiative?.status === "active") return { ...state, build };
   core2.managers.workflow.setActiveInitiative(null);
-  return core2.managers.workflow.status();
+  return { ...core2.managers.workflow.status(), build };
 }
 function indexCheck(core2, repair) {
   const initiativeResult = core2.managers.initiatives.checkConsistency();
@@ -35284,6 +35330,15 @@ function toMcpError(err) {
 }
 
 // src/surfaces/claude-code/mcp-server.ts
+function packageVersion() {
+  if (BUILD_VERSION) return BUILD_VERSION;
+  try {
+    const pkg = JSON.parse((0, import_fs2.readFileSync)((0, import_path2.join)(__dirname, "..", "..", "..", "package.json"), "utf8"));
+    return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
 function resolveProjectDir() {
   return resolveProjectRoot(process.cwd());
 }
@@ -35298,7 +35353,7 @@ async function guard(fn) {
   }
 }
 function buildMcpServer() {
-  const server = new McpServer({ name: "mdocs", version: "1.0.0" });
+  const server = new McpServer({ name: "mdocs", version: packageVersion() });
   server.tool(
     "mdocs",
     "Run any mdocs core command (initiative.*, wiki.*, validate, index.sync).",

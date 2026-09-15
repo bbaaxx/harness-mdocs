@@ -1,1 +1,1 @@
-{"version":3,"file":"build-info.js","sourceRoot":"","sources":["../../src/core/build-info.ts"],"names":[],"mappings":";;;AAAA,yDAAyD;AAC5C,QAAA,aAAa,GAAkB,SAAS,CAAC"}
+{"version":3,"file":"build-info.js","sourceRoot":"","sources":["../../src/core/build-info.ts"],"names":[],"mappings":";;;AAAA,yDAAyD;AAC5C,QAAA,aAAa,GAAkB,SAAS,CAAC;AACzC,QAAA,aAAa,GAAkB,OAAO,CAAC"}

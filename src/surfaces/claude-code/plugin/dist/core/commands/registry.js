@@ -76,6 +76,7 @@ class MdocsCommandRegistry {
         'wiki.link',
         'wiki.xref',
         'workflow.advance',
+        'workflow.reset',
         'lifecycle.graduate',
         'validate',
         'index.sync'
@@ -114,6 +115,8 @@ class MdocsCommandRegistry {
                     return this.crossReferenceWiki(args);
                 case 'workflow.advance':
                     return this.advanceWorkflow(args);
+                case 'workflow.reset':
+                    return this.resetWorkflow();
                 case 'lifecycle.graduate':
                     return this.graduateInitiative(args);
                 case 'validate':
@@ -127,6 +130,15 @@ class MdocsCommandRegistry {
         catch (err) {
             return { error: err.message || String(err) };
         }
+    }
+    resetWorkflow() {
+        this.context.workflow.reset();
+        return {
+            success: true,
+            currentStep: this.context.workflow.getCurrentStep(),
+            activeInitiative: this.context.workflow.status().activeInitiative,
+            stepHistory: this.context.workflow.status().stepHistory
+        };
     }
     advanceWorkflow(args) {
         const step = args.step || args.nextStep;
@@ -298,7 +310,12 @@ class MdocsCommandRegistry {
             expectedDuration: args.expectedDuration || undefined,
             graduated: args.graduated || undefined
         });
-        return { success: true, filename: path.basename(filePath), id };
+        return {
+            success: true,
+            filename: path.basename(filePath),
+            id,
+            hint: 'Initiative created but not active. Run mdocs_resume (or CLI: mdocs resume <id>) to activate it.'
+        };
     }
     /**
      * initiative.update — explicit mutation result. snake_case inputs are

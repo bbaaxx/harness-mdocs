@@ -1,5 +1,15 @@
 import { MdocsCore } from './factory';
 import { StepName } from './types';
+/**
+ * Build fingerprint so any surface can answer "which build are you running?".
+ * Version from the build-time stamp when available, else package.json, else
+ * '0.0.0'; git sha from the build-time stamp, else npm's gitHead field
+ * stamped at publish, else the package's own repo, else null.
+ */
+export declare function buildInfo(): {
+    version: string;
+    gitSha: string | null;
+};
 export declare function advance(core: MdocsCore, step: string): import("./types").WorkflowState;
 export declare function lookup(core: MdocsCore, query: string): {
     type: string;
@@ -104,7 +114,18 @@ export declare function dispatch(core: MdocsCore, id?: string): {
     relatedWikiCount: number;
     error?: undefined;
 };
-export declare function status(core: MdocsCore): import("./types").WorkflowState;
+export declare function status(core: MdocsCore): {
+    build: {
+        version: string;
+        gitSha: string | null;
+    };
+    currentStep: StepName;
+    activeInitiative: string | null;
+    stepHistory: {
+        step: StepName;
+        timestamp: string;
+    }[];
+};
 export declare function indexCheck(core: MdocsCore, repair: boolean): {
     consistent: boolean;
     initiatives: {

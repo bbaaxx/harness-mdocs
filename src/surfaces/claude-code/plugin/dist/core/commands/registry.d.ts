@@ -24,6 +24,7 @@ export declare class MdocsCommandRegistry {
     readonly supportedCommands: string[];
     constructor(context: MdocsCommandContext);
     execute(command: string, args?: Record<string, any>): Promise<any>;
+    private resetWorkflow;
     private advanceWorkflow;
     /**
      * lifecycle.graduate — record a completed initiative's learning into the
