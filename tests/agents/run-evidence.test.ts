@@ -149,6 +149,8 @@ function receiptContext(overrides: Record<string, unknown> = {}): ActionReceiptV
       result: { artifactHash: D2, bytesWritten: 2, changed: true }
     },
     workspace: { before: BEFORE, after: AFTER, mutations: ['src/a.ts'] },
+    executorCompletionDigest: D3,
+    preliminaryReceiptDigest: D4,
     usage: {
       reservationId: 'ticket-budget-1',
       status: 'committed' as const,
@@ -163,7 +165,11 @@ function receiptContext(overrides: Record<string, unknown> = {}): ActionReceiptV
     },
     artifactHashes: [D2]
   };
-  return { ...base, ...overrides } as ActionReceiptValidationContext;
+  const merged = { ...base, ...overrides } as any;
+  if (!Object.prototype.hasOwnProperty.call(overrides, 'preliminaryReceiptDigest')) {
+    merged.preliminaryReceiptDigest = merged.usage.status === 'committed' ? D4 : null;
+  }
+  return merged as ActionReceiptValidationContext;
 }
 
 function rootReceiptContext(overrides: Record<string, unknown> = {}): ActionReceiptValidationContext {
@@ -240,6 +246,8 @@ function receiptPayload(context: ActionReceiptValidationContext, overrides: Reco
     workspaceAfter: workspaceProjection(value.workspace.after),
     beforeFingerprint: computeWorkspaceFingerprint(value.workspace.before).digest,
     afterFingerprint: computeWorkspaceFingerprint(value.workspace.after).digest,
+    executorCompletionDigest: value.executorCompletionDigest,
+    preliminaryReceiptDigest: value.preliminaryReceiptDigest,
     usageReservationId: value.usage.reservationId,
     usageStatus: value.usage.status,
     usageSampleDigest: value.usage.sampleDigest,
@@ -274,7 +282,10 @@ function resealReceiptEvidence(record: any, overrides: Record<string, unknown>) 
     if (Object.prototype.hasOwnProperty.call(overrides, key)) payload[key] = overrides[key];
   }
   const usageStatus = overrides.usageStatus ?? payload.usageStatus;
-  if (usageStatus !== 'committed') delete payload.usageFinal;
+  if (usageStatus !== 'committed') {
+    delete payload.usageFinal;
+    payload.preliminaryReceiptDigest = null;
+  }
   const ref = typeof overrides.ref === 'string' ? overrides.ref : record.ref;
   const envelope = sealContract('action-receipt/v1', ref, payload);
   return {
@@ -283,6 +294,7 @@ function resealReceiptEvidence(record: any, overrides: Record<string, unknown>) 
     ref,
     envelopeDigest: envelope.digest,
     envelope,
+    preliminaryReceiptDigest: payload.preliminaryReceiptDigest,
     usageFinal: usageStatus === 'committed' ? payload.usageFinal : null
   };
 }
@@ -1058,6 +1070,7 @@ describe('action receipt validation', () => {
     expect(result.classification).toBe('valid');
     expect(result.replay).toBe(false);
     expect(result.evidence.mutations).toEqual(['src/a.ts']);
+    expect(result.evidence.executorCompletionDigest).toBe((context as any).executorCompletionDigest);
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.envelope.payload.inputMetadata)).toBe(true);
     expect(claim).toEqual(original);
@@ -1094,6 +1107,11 @@ describe('action receipt validation', () => {
     const tampered = receiptClaim(context);
     (tampered.payload as any).actionId = 'tampered';
     expect(reasons(validateActionReceipt(tampered, context))).toContain('envelope-digest-mismatch');
+    const missingCompletion = receiptPayload(context) as any;
+    delete missingCompletion.executorCompletionDigest;
+    expect(reasons(validateActionReceipt(
+      sealContract('action-receipt/v1', (context as any).receiptId, missingCompletion), context
+    ))).toContain('malformed-payload');
     let invoked = false;
     const hostile: Record<string, unknown> = {};
     Object.defineProperty(hostile, 'kind', { enumerable: true, get: () => { invoked = true; return 'x'; } });
@@ -1118,6 +1136,8 @@ describe('action receipt validation', () => {
     ['fingerprint', { afterFingerprint: D4 }, 'fingerprint-mismatch'],
     ['artifact', { artifactHashes: [D4] }, 'artifact-mismatch'],
     ['usage', { usageReservationId: 'usage-forged' }, 'usage-reservation-mismatch'],
+    ['executor completion provenance', { executorCompletionDigest: D4 }, 'receipt-continuity-mismatch'],
+    ['preliminary receipt provenance', { preliminaryReceiptDigest: D3 }, 'receipt-continuity-mismatch'],
     ['usage final', { usageFinal: { ...USAGE, actionCount: 2 } }, 'usage-reconciliation-mismatch'],
     ['timestamp order', { startedAt: '2026-09-13T00:00:05.000Z' }, 'timestamp-order-invalid'],
     ['timestamp window', { endedAt: '2026-09-13T00:11:00.000Z' }, 'timestamp-window-invalid']
@@ -2318,18 +2338,28 @@ describe('WP-220 independent review regressions', () => {
     expect(reasons(validateActionReceipt(receiptClaim(context), context))).toContain('trusted-context-invalid');
   });
 
-  test('rejects final usage sampled before effect end or after receipt arrival', () => {
-    for (const timestamp of ['2026-09-13T00:00:03.500Z', '2026-09-13T00:00:07.000Z']) {
-      const usage = { ...USAGE, timestamp };
-      const context = receiptContext({
-        usage: {
-          ...(receiptContext() as any).usage,
-          final: usage,
-          sampleDigest: computeUsageSampleDigest(usage)
-        }
-      });
-      expect(reasons(validateActionReceipt(receiptClaim(context), context))).toContain('timestamp-window-invalid');
-    }
+  test('rejects final usage sampled before effect end', () => {
+    const usage = { ...USAGE, timestamp: '2026-09-13T00:00:03.500Z' };
+    const context = receiptContext({
+      usage: {
+        ...(receiptContext() as any).usage,
+        final: usage,
+        sampleDigest: computeUsageSampleDigest(usage)
+      }
+    });
+    expect(reasons(validateActionReceipt(receiptClaim(context), context))).toContain('timestamp-window-invalid');
+  });
+
+  test('accepts trusted final usage sampled after preliminary receipt arrival within usage deadline', () => {
+    const usage = { ...USAGE, timestamp: '2026-09-13T00:00:07.000Z' };
+    const context = receiptContext({
+      usage: {
+        ...(receiptContext() as any).usage,
+        final: usage,
+        sampleDigest: computeUsageSampleDigest(usage)
+      }
+    });
+    expect(validateActionReceipt(receiptClaim(context), context).ok).toBe(true);
   });
 
   test('receipt evidence retains complete authority and usage lineage', () => {
@@ -2867,6 +2897,7 @@ describe('WP-220 independent review regressions', () => {
         result: { exitCode: 0 }
       },
       workspace: { before: AFTER, after: AFTER, mutations: [] },
+      preliminaryReceiptDigest: D3,
       artifactHashes: []
     });
     const secondResult = validateActionReceipt(receiptClaim(secondContext), secondContext);
@@ -2877,6 +2908,7 @@ describe('WP-220 independent review regressions', () => {
     });
     const result = validateExecutionReport(reportClaim(context), context);
     expect(result.ok).toBe(true);
+    expect(first.preliminaryReceiptDigest).not.toBe(secondResult.evidence.preliminaryReceiptDigest);
     if (result.ok) {
       expect(result.evidence.actionReceipts).toHaveLength(2);
       expect(Object.isFrozen(result.evidence.actionReceipts[0].workspaceBefore.entries)).toBe(true);
@@ -3001,6 +3033,10 @@ describe('WP-220 independent review regressions', () => {
 
   test('blocks final report completion until WP-230 commits pending usage evidence', () => {
     const base = reportContext() as any;
+    const committedResult = validateExecutionReport(reportClaim(base), base);
+    expect(committedResult.ok && committedResult.completionBlocked).toBe(false);
+    if (committedResult.ok) expect(committedResult.authority).toBe(false);
+    expect(base.receipts[0].usageSampleDigest).toBe(base.budgetReconciliation.sampleDigest);
     const failedReceipt = resealReceiptEvidence(base.receipts[0], { resultClass: 'failure' });
     const failed = reportContext({ receipts: [failedReceipt] });
     const failedResult = validateExecutionReport(reportClaim(failed), failed);

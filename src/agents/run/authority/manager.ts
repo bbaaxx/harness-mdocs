@@ -26,6 +26,7 @@ import {
   assertRoleBudgetAmounts,
   BudgetLedger,
   budgetLedgerSchema,
+  committedBudgetUsage,
   createBudgetLedger,
   parseBudgetLedger,
   reconcileBudget,
@@ -33,6 +34,11 @@ import {
   releaseBudget,
   reserveBudget
 } from './budgets';
+import {
+  authorityUsageSampleSchema,
+  computeAuthorityUsageSampleDigest,
+  deriveAuthorityUsageActual
+} from './usage-accounting';
 import {
   acquireControllerLease,
   acquireWorkstreamLease,
@@ -175,8 +181,15 @@ const providerUsageRecordSchema = z.object({
   operationId: boundedString,
   providerReservationId: boundedString,
   opaqueScope: boundedString,
-  status: z.enum(['reserved', 'commit-pending', 'committed', 'release-pending', 'released']),
-  sampleDigest: digestSchema.nullable()
+  status: z.enum([
+    'reserved', 'finalize-claimed', 'commit-pending', 'committed', 'release-pending', 'released'
+  ]),
+  finalizeClaimWriterGeneration: z.number().int().positive().safe().nullable(),
+  finalizeClaimOwnerId: boundedString.nullable(),
+  finalizeConstraintDigest: digestSchema.nullable(),
+  finalizeConstraintKind: z.enum(['strict-action', 'cancellation']).nullable(),
+  sampleDigest: digestSchema.nullable(),
+  finalSample: authorityUsageSampleSchema.nullable()
 }).strict();
 const issueExecutionSchema = z.object({
   operationId: boundedString,
@@ -206,10 +219,11 @@ const authorityPolicySchema = z.object({
 
 const pendingInitializationSchema = z.object({
   format: z.literal('harness-mdocs/run-authority'),
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(6),
   stateKind: z.literal('initialization-pending'),
   runId: boundedString,
   projectId: boundedString,
+  authorityInstanceId: digestSchema,
   idempotencyKey: boundedString,
   initializationRequestDigest: digestSchema,
   attestationReservationId: boundedString,
@@ -223,10 +237,11 @@ const pendingInitializationSchema = z.object({
 
 const activeRunAuthoritySchema = z.object({
   format: z.literal('harness-mdocs/run-authority'),
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(6),
   stateKind: z.literal('initialized'),
   runId: boundedString,
   projectId: boundedString,
+  authorityInstanceId: digestSchema,
   lifecycle: z.enum(['active', 'cancelled']),
   idempotencyKey: boundedString,
   initializationRequestDigest: digestSchema,
@@ -345,6 +360,7 @@ export type UsageSettlementIssue =
       readonly reservationId: string;
       readonly reason:
         | 'provider-release-pending'
+        | 'provider-finalize-pending'
         | 'provider-commit-pending'
         | 'cancelled-without-trusted-final';
     }
@@ -414,7 +430,75 @@ export interface RunAuthorityActionBackend {
   verify(request: ActionAuthorityVerificationRequest): Promise<ResolvedActionAuthority>;
 }
 
+export interface TrustedFinalUsage {
+  readonly runId: string;
+  readonly projectId: string;
+  readonly authorityKind: 'controller-root' | 'delegation-ticket';
+  readonly authorityRef: string | null;
+  readonly nodeId: string;
+  readonly reservationId: string;
+  readonly authorityInstanceId: string;
+  readonly usageBindingDigest: string;
+  readonly settlementConstraintDigest: string | null;
+  readonly status: 'committed';
+  readonly startedAt: string;
+  readonly deadlineAt: string;
+  readonly final: Readonly<UsageSample>;
+  readonly sampleDigest: string;
+  readonly amounts: Readonly<Record<string, number>>;
+  readonly currency: string;
+  readonly descendantCommitted: Readonly<Record<string, number>>;
+  readonly actual: Readonly<Record<string, number>>;
+}
+
+export interface RunAuthorityReportBackend {
+  settleAndReadUsage(constraints: RunAuthoritySettlementConstraints): Promise<Readonly<TrustedFinalUsage>>;
+  readUsage(constraints: RunAuthoritySettlementConstraints): Promise<Readonly<TrustedFinalUsage>>;
+}
+
+/** Strict host-internal settlement binding. Omitted from every barrel. */
+export interface RunAuthoritySettlementConstraints {
+  readonly runId: string;
+  readonly projectId: string;
+  readonly reservationId: string;
+  readonly authorityKind: 'delegation-ticket';
+  readonly authorityRef: string;
+  readonly nodeId: string;
+  readonly authorityInstanceId: string;
+  readonly usageBindingDigest: string;
+  readonly notBefore: string;
+  readonly expectedActionCount: number;
+}
+
+const settlementConstraintsSchema = z.object({
+  runId: boundedString,
+  projectId: boundedString,
+  reservationId: boundedString,
+  authorityKind: z.literal('delegation-ticket'),
+  authorityRef: boundedString,
+  nodeId: boundedString,
+  authorityInstanceId: digestSchema,
+  usageBindingDigest: digestSchema,
+  notBefore: strictRfc3339UtcSchema,
+  expectedActionCount: safeNonNegative
+}).strict();
+
+/** Host-internal deterministic binding for protected mediator settlement state. */
+export function computeRunAuthoritySettlementConstraintDigest(
+  constraintsValue: RunAuthoritySettlementConstraints
+): string {
+  const constraints = settlementConstraintsSchema.parse(snapshotAuthorityData(constraintsValue));
+  return hash({ domain: 'harness-mdocs/usage-settlement-constraint/v1', constraints });
+}
+
 const actionBackends = new WeakMap<RunAuthorityManager, RunAuthorityActionBackend>();
+const reportBackends = new WeakMap<RunAuthorityManager, RunAuthorityReportBackend>();
+const trustedReportBackends = new WeakMap<object, Readonly<{
+  runId: string;
+  projectId: string;
+  usageBindingDigest: string;
+  authorityInstanceId(): Promise<string>;
+}>>();
 
 /** Host-internal bridge lookup. Omitted from authority and package barrels. */
 export function runAuthorityActionBackend(manager: RunAuthorityManager): RunAuthorityActionBackend {
@@ -423,12 +507,47 @@ export function runAuthorityActionBackend(manager: RunAuthorityManager): RunAuth
   return backend;
 }
 
+/** Host-internal accounting/evidence bridge. Omitted from authority and package barrels. */
+export function runAuthorityReportBackend(manager: RunAuthorityManager): RunAuthorityReportBackend {
+  const backend = reportBackends.get(manager);
+  if (!backend) fail('invalid-input', 'Run authority manager has no report backend');
+  return backend;
+}
+
+/** Direct host-internal nominal capability check. Omitted from every barrel. */
+export async function assertRunAuthorityReportBackend(
+  value: unknown,
+  expected: Readonly<{
+    runId: string;
+    projectId: string;
+    authorityInstanceId: string;
+    usageBindingDigest: string;
+  }>
+): Promise<RunAuthorityReportBackend> {
+  const binding = value && typeof value === 'object' ? trustedReportBackends.get(value as object) : undefined;
+  if (!binding) fail('invalid-input', 'Run authority report backend is not a trusted capability');
+  const actual = {
+    runId: binding.runId,
+    projectId: binding.projectId,
+    authorityInstanceId: await binding.authorityInstanceId(),
+    usageBindingDigest: binding.usageBindingDigest
+  };
+  if (canonicalizeJson(actual) !== canonicalizeJson(expected)) {
+    fail('binding-mismatch', 'Run authority report backend belongs to another authority binding');
+  }
+  return value as RunAuthorityReportBackend;
+}
+
 function fail(code: TicketAuthorityErrorCode, message: string): never {
   throw new TicketAuthorityError(code, message);
 }
 
 function hash(value: unknown): string {
   return `sha256:${crypto.createHash('sha256').update(canonicalizeJson(value)).digest('hex')}`;
+}
+
+function usageBindingDigest(binding: UsageAuthorityBinding): string {
+  return hash({ domain: 'harness-mdocs/usage-binding/v1', binding });
 }
 
 function derivedDeadline(startMs: number, minutes: number, description: string): string {
@@ -534,6 +653,10 @@ function parseRunAuthorityState(
   let snapshot: unknown;
   try { snapshot = snapshotAuthorityData(value); } catch (error) {
     fail('invalid-state', error instanceof Error ? error.message : String(error));
+  }
+  const versioned = snapshot as { format?: unknown; schemaVersion?: unknown };
+  if (versioned?.format === 'harness-mdocs/run-authority' && versioned.schemaVersion !== 6) {
+    fail('invalid-state', `Unsupported run-authority schemaVersion ${String(versioned.schemaVersion)}; expected 6`);
   }
   const parsed = runAuthorityStateSchema.safeParse(snapshot);
   if (!parsed.success) fail('invalid-state', parsed.error.issues
@@ -655,13 +778,27 @@ function parseRunAuthorityState(
     if (!reservation || !deadline || !mapping || !providerRecord ||
         providerRecord.reservationId !== reservation.reservationId ||
         providerRecord.operationId !== mapping.operationId ||
-        (providerRecord.status === 'reserved' && reservation.status !== 'pending') ||
+        (['reserved', 'finalize-claimed'].includes(providerRecord.status) && reservation.status !== 'pending') ||
         (['release-pending', 'released'].includes(providerRecord.status) &&
           reservation.status !== 'released') ||
-        (['reserved', 'release-pending', 'released'].includes(providerRecord.status) &&
-          providerRecord.sampleDigest !== null) ||
-        (['commit-pending', 'committed'].includes(providerRecord.status) &&
-          (reservation.status !== 'committed' || providerRecord.sampleDigest !== reservation.sampleDigest)) ||
+        (['reserved', 'finalize-claimed', 'release-pending', 'released'].includes(providerRecord.status) &&
+          (providerRecord.sampleDigest !== null || providerRecord.finalSample !== null)) ||
+        ((['finalize-claimed', 'commit-pending', 'committed'].includes(providerRecord.status)) !==
+          (providerRecord.finalizeClaimWriterGeneration !== null)) ||
+        ((['finalize-claimed', 'commit-pending', 'committed'].includes(providerRecord.status)) !==
+          (providerRecord.finalizeClaimOwnerId !== null)) ||
+        ((['finalize-claimed', 'commit-pending', 'committed'].includes(providerRecord.status)) !==
+          (providerRecord.finalizeConstraintDigest !== null)) ||
+        ((['finalize-claimed', 'commit-pending', 'committed'].includes(providerRecord.status)) !==
+          (providerRecord.finalizeConstraintKind !== null)) ||
+        (providerRecord.status === 'commit-pending' &&
+          (reservation.status !== 'pending' || providerRecord.sampleDigest === null ||
+            providerRecord.finalSample === null ||
+            providerRecord.sampleDigest !== computeAuthorityUsageSampleDigest(providerRecord.finalSample))) ||
+        (providerRecord.status === 'committed' &&
+          (reservation.status !== 'committed' || providerRecord.sampleDigest !== reservation.sampleDigest ||
+            providerRecord.finalSample === null ||
+            providerRecord.sampleDigest !== computeAuthorityUsageSampleDigest(providerRecord.finalSample))) ||
         reservation.parentTicketHandleId !== record.parentTicketHandleId ||
         reservation.scope !== record.ticket.scope || reservation.role !== record.ticket.recipientRole ||
         canonicalizeJson(reservation.amounts) !== canonicalizeJson(record.ticket.budgets) ||
@@ -680,6 +817,37 @@ function parseRunAuthorityState(
         hash(mapping.request) !== mapping.requestDigest || mapping.request === null ||
         typeof mapping.request !== 'object') {
       fail('invalid-state', `Ticket "${handle}" aggregate linkage is inconsistent`);
+    }
+    if (providerRecord.finalSample) {
+      const sample = providerRecord.finalSample;
+      if (sample.source !== state.usageBinding.source || sample.provider !== state.usageBinding.provider ||
+          sample.model !== state.usageBinding.model ||
+          sample.priceTableVersion !== state.usageBinding.priceTableVersion ||
+          (sample.cost && sample.cost.currency !== state.usageBinding.currency) ||
+          sample.confidence !== 'authoritative' ||
+          Date.parse(sample.timestamp) < Date.parse(reservation.startedAt) ||
+          Date.parse(sample.timestamp) > Date.parse(reservation.deadlineAt)) {
+        fail('invalid-state', `Ticket "${handle}" final usage binding is inconsistent`);
+      }
+      try {
+        if (providerRecord.status === 'committed') {
+          const accounting = committedBudgetUsage(state.budgets, reservation.reservationId);
+          const actual = deriveAuthorityUsageActual({
+            amounts: accounting.amounts,
+            currency: accounting.currency,
+            sample,
+            descendantCommitted: accounting.descendantCommitted
+          });
+          if (canonicalizeJson(actual) !== canonicalizeJson(accounting.actual)) {
+            fail('invalid-state', `Ticket "${handle}" committed usage actuals are inconsistent`);
+          }
+        } else {
+          reconcileBudget(state.budgets, reservation.reservationId, sample);
+        }
+      } catch (error) {
+        fail('invalid-state', `Ticket "${handle}" final usage accounting is inconsistent: ${
+          error instanceof Error ? error.message : String(error)}`);
+      }
     }
     assertRoleBudgetAmounts(record.ticket.recipientRole as 'EXECUTION' | 'LEAF', reservation.amounts);
   }
@@ -815,6 +983,8 @@ function publicSnapshot(snapshot: AuthorityRepositorySnapshot<RunAuthorityState>
   for (const usage of state.providerUsage) {
     if (usage.status === 'release-pending') {
       unsettledUsage.push({ reservationId: usage.reservationId, reason: 'provider-release-pending' });
+    } else if (usage.status === 'finalize-claimed') {
+      unsettledUsage.push({ reservationId: usage.reservationId, reason: 'provider-finalize-pending' });
     } else if (usage.status === 'commit-pending') {
       unsettledUsage.push({ reservationId: usage.reservationId, reason: 'provider-commit-pending' });
     } else if (usage.status === 'reserved' && state.lifecycle === 'cancelled') {
@@ -879,6 +1049,8 @@ function createManager(
     }
     return Buffer.from(bytes);
   };
+  const settlementOwnerId = `settlement-owner:${crypto.createHash('sha256')
+    .update(entropy()).digest('base64url')}`;
   const leaseSources: LeaseSources = {
     wallClock: nowSource,
     monotonicClock: testSources.monotonicClock,
@@ -942,10 +1114,18 @@ function createManager(
     return state.operationSequence + 1;
   }
 
-  async function withTimeout<T>(promise: Promise<T>, ms: number, description: string): Promise<T> {
+  async function withTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    description: string,
+    onTimeout?: () => void
+  ): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error(`${description} timed out`)), ms);
+      timer = setTimeout(() => {
+        onTimeout?.();
+        reject(new Error(`${description} timed out`));
+      }, ms);
       timer.unref?.();
     });
     try {
@@ -1019,8 +1199,8 @@ function createManager(
       leaseState: () => leaseState, leaseSources
     });
     const finalState = parseRunAuthorityState({
-      format: 'harness-mdocs/run-authority', schemaVersion: 2, stateKind: 'initialized',
-      runId, projectId, lifecycle: 'active',
+      format: 'harness-mdocs/run-authority', schemaVersion: 6, stateKind: 'initialized',
+      runId, projectId, authorityInstanceId: pending.authorityInstanceId, lifecycle: 'active',
       idempotencyKey: pending.idempotencyKey,
       initializationRequestDigest: pending.initializationRequestDigest,
       approvalEventId: result.approvalEventId, modeSelectionEventId: result.modeSelectionEventId,
@@ -1175,6 +1355,13 @@ function createManager(
       parentHandle = value.ticket.parentHandle;
       assertAncestorsActive(state, parentHandle);
       const parent = state.ticketState.tickets.find(item => item.ticket.ticketHandleId === parentHandle)!;
+      const parentReservation = state.budgets.reservations.find(item =>
+        item.ticketHandleId === parentHandle);
+      const parentUsage = state.providerUsage.find(item =>
+        item.reservationId === parentReservation?.reservationId);
+      if (!parentReservation || parentReservation.status !== 'pending' || parentUsage?.status !== 'reserved') {
+        fail('reservation-unresolved', 'Parent usage settlement prevents new descendant issuance');
+      }
       const parentDeadline = state.ticketDeadlines.find(item => item.ticketHandleId === parentHandle)!;
       validateWorkstreamLease(state.leaseState, {
         ...binding(state, identity), nodeId: parent.ticket.nodeId, proof: value.workstreamProof
@@ -1216,7 +1403,12 @@ function createManager(
       reservationId: id, ticketHandleId: issued.handle, operationId: detached.operationId,
       providerReservationId: providerReservation.providerReservationId,
       opaqueScope: providerReservation.opaqueScope,
-      status: 'reserved' as const, sampleDigest: null
+      status: 'reserved' as const,
+      finalizeClaimWriterGeneration: null,
+      finalizeClaimOwnerId: null,
+      finalizeConstraintDigest: null,
+      finalizeConstraintKind: null,
+      sampleDigest: null, finalSample: null
     }] : state.providerUsage;
     const next = checkedState(state, {
       ticketState, budgets, providerUsage, pendingIssuance: null,
@@ -1890,8 +2082,14 @@ function createManager(
         fail('binding-mismatch', 'Trusted attestation reservation is malformed or expired');
       }
       const pending: PendingRunAuthorityState = {
-        format: 'harness-mdocs/run-authority', schemaVersion: 2,
+        format: 'harness-mdocs/run-authority', schemaVersion: 6,
         stateKind: 'initialization-pending', runId, projectId,
+        authorityInstanceId: hash({
+          domain: 'harness-mdocs/run-authority-instance/v1',
+          runId,
+          projectId,
+          entropy: entropy().toString('hex')
+        }),
         idempotencyKey, initializationRequestDigest, attestationReservationId: reservation.data.reservationId,
         hostIdentity: host, graphEpoch, cancellationGeneration, leaseTtlMs, heartbeatIntervalMs,
         createdAt: created.at
@@ -2115,11 +2313,11 @@ function createManager(
           for (const ticket of [...state.ticketState.tickets].reverse()) {
             if (!handles.has(ticket.ticket.ticketHandleId) || ticket.nonceStatus === 'claimed') continue;
             const reservation = budgets.reservations.find(item => item.ticketHandleId === ticket.ticket.ticketHandleId);
-            if (reservation?.status === 'pending') {
+            const usage = state.providerUsage.find(item => item.reservationId === reservation?.reservationId);
+            if (reservation?.status === 'pending' && usage?.status === 'reserved') {
               budgets = releaseBudget(budgets, reservation.reservationId);
               releases.push(reservation.reservationId);
             }
-            const usage = state.providerUsage.find(item => item.reservationId === reservation?.reservationId);
             if (usage?.status === 'release-pending') releases.push(usage.reservationId);
           }
           const ticketState = localBroker.snapshot();
@@ -2164,120 +2362,481 @@ function createManager(
     }
   };
 
-  async function reconcileReservation(
+  interface SettlementRequirement {
+    readonly digest: string;
+    readonly kind: 'strict-action' | 'cancellation';
+    readonly notBefore: string;
+    readonly expectedActionCount: number | null;
+  }
+
+  function settlementRequirement(
+    state: InitializedRunAuthorityState,
     reservationIdValue: string,
-    prefetchedSample?: UsageSample
+    strictConstraints?: RunAuthoritySettlementConstraints,
+    cancellation = false
+  ): SettlementRequirement {
+    const reservation = state.budgets.reservations.find(item => item.reservationId === reservationIdValue);
+    const ticket = state.ticketState.tickets.find(item =>
+      item.ticket.ticketHandleId === reservation?.ticketHandleId);
+    if (!reservation || !ticket) fail('unknown-reservation', 'Usage reservation binding is absent');
+    if (!strictConstraints) {
+      if (!cancellation) {
+        fail('settlement-constraints-required', 'Mediator-derived settlement constraints are required');
+      }
+      return {
+        digest: hash({
+          domain: 'harness-mdocs/usage-settlement-constraint/v1',
+          mode: 'cancellation',
+          runId: state.runId,
+          projectId: state.projectId,
+          reservationId: reservation.reservationId,
+          authorityKind: 'delegation-ticket',
+          authorityRef: ticket.ticket.ticketHandleId,
+          nodeId: ticket.ticket.nodeId,
+          authorityInstanceId: state.authorityInstanceId,
+          usageBindingDigest: usageBindingDigest(state.usageBinding),
+          notBefore: reservation.startedAt
+        }),
+        kind: 'cancellation',
+        notBefore: reservation.startedAt,
+        expectedActionCount: null
+      };
+    }
+    const constraints = settlementConstraintsSchema.parse(snapshotAuthorityData(strictConstraints));
+    if (constraints.runId !== state.runId || constraints.projectId !== state.projectId ||
+        constraints.reservationId !== reservation.reservationId ||
+        constraints.authorityRef !== ticket.ticket.ticketHandleId ||
+        constraints.nodeId !== ticket.ticket.nodeId ||
+        constraints.authorityInstanceId !== state.authorityInstanceId ||
+        constraints.usageBindingDigest !== usageBindingDigest(state.usageBinding) ||
+        Date.parse(constraints.notBefore) < Date.parse(reservation.startedAt) ||
+        Date.parse(constraints.notBefore) > Date.parse(reservation.deadlineAt)) {
+      fail('binding-mismatch', 'Usage settlement constraints differ from protected authority');
+    }
+    return {
+      digest: computeRunAuthoritySettlementConstraintDigest(constraints),
+      kind: 'strict-action',
+      notBefore: constraints.notBefore,
+      expectedActionCount: constraints.expectedActionCount
+    };
+  }
+
+  function validateFinalSample(
+    sample: UsageSample,
+    reservation: InitializedRunAuthorityState['budgets']['reservations'][number],
+    requirement: SettlementRequirement
+  ): void {
+    if (sample.source !== usageBinding.source || sample.provider !== usageBinding.provider ||
+        sample.model !== usageBinding.model || sample.priceTableVersion !== usageBinding.priceTableVersion ||
+        (sample.cost && sample.cost.currency !== usageBinding.currency) ||
+        sample.confidence !== 'authoritative' ||
+        Date.parse(sample.timestamp) < Date.parse(requirement.notBefore) ||
+        Date.parse(sample.timestamp) > Date.parse(reservation.deadlineAt) ||
+        (requirement.expectedActionCount !== null &&
+          sample.actionCount !== requirement.expectedActionCount)) {
+      fail('reservation-unresolved', 'Trusted usage sample violates settlement constraints');
+    }
+  }
+
+  function assertDescendantsTerminal(
+    state: InitializedRunAuthorityState,
+    reservationIdValue: string
+  ): void {
+    const reservation = state.budgets.reservations.find(item => item.reservationId === reservationIdValue);
+    if (!reservation) fail('unknown-reservation', 'Usage reservation is absent');
+    const descendantHandles = new Set<string>();
+    let frontier = [reservation.ticketHandleId];
+    while (frontier.length > 0) {
+      const parents = new Set(frontier);
+      frontier = state.budgets.reservations
+        .filter(item => item.parentTicketHandleId !== null && parents.has(item.parentTicketHandleId) &&
+          !descendantHandles.has(item.ticketHandleId))
+        .map(item => {
+          descendantHandles.add(item.ticketHandleId);
+          return item.ticketHandleId;
+        });
+    }
+    const pendingParent = (state.pendingIssuance?.request as any)?.ticket?.parentHandle;
+    if (typeof pendingParent === 'string' &&
+        (pendingParent === reservation.ticketHandleId || descendantHandles.has(pendingParent))) {
+      fail('reservation-unresolved', 'Pending descendant issuance blocks parent settlement');
+    }
+    for (const descendant of state.budgets.reservations.filter(item =>
+      descendantHandles.has(item.ticketHandleId))) {
+      const provider = state.providerUsage.find(item => item.reservationId === descendant.reservationId);
+      const terminal = (descendant.status === 'committed' && provider?.status === 'committed') ||
+        (descendant.status === 'released' && provider?.status === 'released');
+      if (!terminal) {
+        fail('reservation-unresolved', 'Every descendant usage reservation must settle before its parent');
+      }
+    }
+  }
+
+  type UsageSettlementFlight = Readonly<{
+    requestKey: string;
+    control: { active: boolean };
+    promise: Promise<Readonly<BudgetLedger>>;
+  }>;
+  const usageSettlementFlights = new Map<string, UsageSettlementFlight>();
+
+  function assertUsageSettlementFlight(
+    reservationIdValue: string,
+    control: UsageSettlementFlight['control']
+  ): void {
+    if (!control.active || usageSettlementFlights.get(reservationIdValue)?.control !== control) {
+      fail('reservation-unresolved', 'Usage settlement flight was superseded');
+    }
+  }
+
+  function fenceUsageSettlementFlight(
+    reservationIdValue: string,
+    flight: UsageSettlementFlight
+  ): void {
+    flight.control.active = false;
+    if (usageSettlementFlights.get(reservationIdValue) === flight) {
+      usageSettlementFlights.delete(reservationIdValue);
+    }
+    void flight.promise.catch(() => undefined);
+  }
+
+  async function reconcileReservationOwned(
+    reservationIdValue: string,
+    flightControl: UsageSettlementFlight['control'],
+    strictConstraints?: RunAuthoritySettlementConstraints,
+    cancellation = false
   ): Promise<Readonly<BudgetLedger>> {
-      const initial = await repository.read();
-      if (!initial) fail('invalid-state', 'Run authority is not initialized');
-      const initialState = initializedForAccounting(initial.state);
-      const reservation = initialState.budgets.reservations.find(item =>
-        item.reservationId === reservationIdValue);
-      if (!reservation) fail('unknown-reservation', 'Usage reservation absent');
-      let usage = initialState.providerUsage.find(item => item.reservationId === reservationIdValue);
-      if (!usage) fail('invalid-state', 'Provider usage reservation absent');
-      if (reservation.status === 'committed' && usage.status === 'committed') {
-        return initialState.budgets;
+    const initial = await repository.read();
+    assertUsageSettlementFlight(reservationIdValue, flightControl);
+    if (!initial) fail('invalid-state', 'Run authority is not initialized');
+    const initialState = initializedForAccounting(initial.state);
+    const reservation = initialState.budgets.reservations.find(item =>
+      item.reservationId === reservationIdValue);
+    if (!reservation) fail('unknown-reservation', 'Usage reservation absent');
+    let usage = initialState.providerUsage.find(item => item.reservationId === reservationIdValue);
+    if (!usage) fail('invalid-state', 'Provider usage reservation absent');
+    const requirement = settlementRequirement(
+      initialState, reservationIdValue, strictConstraints, cancellation
+    );
+    if (reservation.status === 'committed' && usage.status === 'committed') {
+      if (strictConstraints && (usage.finalizeConstraintKind !== requirement.kind ||
+          usage.finalizeConstraintDigest !== requirement.digest)) {
+        fail('reservation-conflict', 'Committed usage has different settlement constraints');
       }
-      if (reservation.status === 'released') {
-        fail('reservation-conflict', 'Released reservation cannot reconcile');
-      }
-      if (usage.status === 'reserved') {
-        let sample: UsageSample;
-        if (prefetchedSample) {
-          sample = prefetchedSample;
-        } else {
-          try { sample = await usageMeter.finalize(usage.providerReservationId); } catch {
-            fail('reservation-unresolved', 'Trusted usage meter failed');
-          }
-        }
-        const detachedSample = snapshotAuthorityData(sample!);
-        if (detachedSample.source !== usageBinding.source || detachedSample.provider !== usageBinding.provider ||
-            detachedSample.model !== usageBinding.model ||
-            detachedSample.priceTableVersion !== usageBinding.priceTableVersion ||
-            (detachedSample.cost && detachedSample.cost.currency !== usageBinding.currency)) {
-          fail('reservation-unresolved', 'Trusted usage sample binding mismatch');
-        }
-        try {
-          const reconciled = await repository.transact({
-            reservationId: reservationIdValue,
-            providerReservationId: usage.providerReservationId,
-            opaqueScope: usage.opaqueScope,
-            sample: detachedSample
-          }, async (rawState, input) => {
-            const state = initializedForAccounting(rawState);
-            const current = state.budgets.reservations.find(item => item.reservationId === input.reservationId);
-            const currentUsage = state.providerUsage.find(item => item.reservationId === input.reservationId);
-            if (!current || !currentUsage || current.ticketHandleId !== reservation.ticketHandleId ||
-                currentUsage.providerReservationId !== input.providerReservationId ||
-                currentUsage.opaqueScope !== input.opaqueScope) {
-              fail('reservation-conflict', 'Usage reservation changed during metering');
-            }
-            if (current.status === 'committed') {
-              return { state: state as RunAuthorityState, result: state.budgets };
-            }
-            const budgets = reconcileBudget(state.budgets, input.reservationId, input.sample);
-            const committed = budgets.reservations.find(item => item.reservationId === input.reservationId)!;
-            const providerUsage = state.providerUsage.map(item => item.reservationId === input.reservationId
-              ? { ...item, status: 'commit-pending' as const, sampleDigest: committed.sampleDigest }
-              : item);
-            const reading = now(state);
-            return {
-              state: checkedState(state, {
-                budgets, providerUsage, operationSequence: nextSequence(state),
-                wallClockHighWater: reading.at
-              }), result: budgets
-            };
-          });
-          usage = (reconciled.state as InitializedRunAuthorityState).providerUsage.find(
-            item => item.reservationId === reservationIdValue)!;
-        } catch (error) {
-          if (!(error instanceof TicketAuthorityError) || error.code !== 'commit-unknown') throw error;
-          const recovered = await repository.read();
-          if (recovered?.state.stateKind !== 'initialized') throw error;
-          usage = recovered.state.providerUsage.find(item => item.reservationId === reservationIdValue)!;
-          if (!usage || usage.status === 'reserved') throw error;
-        }
-      }
-      if (!usage.sampleDigest) fail('invalid-state', 'Provider commit lacks usage sample digest');
-      try { await usageMeter.commit(usage.providerReservationId, usage.sampleDigest); } catch {
-        fail('reservation-unresolved', 'Trusted usage commit failed');
-      }
+      if (usage.finalSample) validateFinalSample(usage.finalSample, reservation, requirement);
+      return initialState.budgets;
+    }
+    if (reservation.status === 'released' || usage.status === 'released' || usage.status === 'release-pending') {
+      fail('reservation-conflict', 'Released reservation cannot reconcile');
+    }
+    assertDescendantsTerminal(initialState, reservationIdValue);
+    if (['reserved', 'finalize-claimed', 'commit-pending'].includes(usage.status)) {
       try {
-        const committed = await repository.transact({
+        assertUsageSettlementFlight(reservationIdValue, flightControl);
+        const claimed = await repository.transact({
           reservationId: reservationIdValue,
-          providerReservationId: usage.providerReservationId,
-          sampleDigest: usage.sampleDigest
+          writerGeneration: options.writer.writerGeneration,
+          ownerId: settlementOwnerId,
+          constraintDigest: requirement.digest,
+          constraintKind: requirement.kind
         }, async (rawState, input) => {
+          assertUsageSettlementFlight(reservationIdValue, flightControl);
           const state = initializedForAccounting(rawState);
+          assertDescendantsTerminal(state, input.reservationId);
           const currentUsage = state.providerUsage.find(item => item.reservationId === input.reservationId);
-          if (!currentUsage || currentUsage.providerReservationId !== input.providerReservationId ||
-              currentUsage.sampleDigest !== input.sampleDigest) {
-            fail('reservation-conflict', 'Provider usage commit binding changed');
-          }
+          if (!currentUsage) fail('unknown-reservation', 'Provider usage reservation is absent');
           if (currentUsage.status === 'committed') {
-            return { state: state as RunAuthorityState, result: state.budgets };
+            if (currentUsage.finalizeConstraintKind !== input.constraintKind ||
+                currentUsage.finalizeConstraintDigest !== input.constraintDigest) {
+              fail('reservation-conflict', 'Committed usage has different settlement constraints');
+            }
+            return { state: state as RunAuthorityState, result: true };
+          }
+          if (!['reserved', 'finalize-claimed', 'commit-pending'].includes(currentUsage.status)) {
+            fail('reservation-conflict', 'Provider usage cannot be claimed for finalization');
+          }
+          if (currentUsage.status !== 'reserved') {
+            if (currentUsage.finalizeConstraintKind !== input.constraintKind ||
+                currentUsage.finalizeConstraintDigest !== input.constraintDigest) {
+              fail('reservation-conflict', 'Usage settlement constraints changed after claim');
+            }
+            if (currentUsage.finalizeClaimWriterGeneration! > input.writerGeneration ||
+                (currentUsage.finalizeClaimWriterGeneration === input.writerGeneration &&
+                  currentUsage.finalizeClaimOwnerId !== input.ownerId)) {
+              fail('reservation-unresolved', 'Usage finalization claim belongs to another settlement owner');
+            }
+            if (currentUsage.finalizeClaimWriterGeneration === input.writerGeneration &&
+                currentUsage.finalizeClaimOwnerId === input.ownerId) {
+              return { state: state as RunAuthorityState, result: true };
+            }
           }
           const reading = now(state);
-          const providerUsage = state.providerUsage.map(item => item.reservationId === input.reservationId
-            ? { ...item, status: 'committed' as const }
-            : item);
           return {
             state: checkedState(state, {
-              providerUsage, operationSequence: nextSequence(state), wallClockHighWater: reading.at
-            }), result: state.budgets
+              providerUsage: state.providerUsage.map(item => item.reservationId === input.reservationId
+                ? { ...item,
+                  status: item.status === 'reserved' ? 'finalize-claimed' as const : item.status,
+                  finalizeClaimWriterGeneration: input.writerGeneration,
+                  finalizeClaimOwnerId: input.ownerId,
+                  finalizeConstraintDigest: input.constraintDigest,
+                  finalizeConstraintKind: input.constraintKind }
+                : item),
+              operationSequence: nextSequence(state), wallClockHighWater: reading.at
+            }),
+            result: true
           };
         });
-        return committed.result;
+        usage = (claimed.state as InitializedRunAuthorityState).providerUsage.find(
+          item => item.reservationId === reservationIdValue)!;
+        assertUsageSettlementFlight(reservationIdValue, flightControl);
       } catch (error) {
         if (!(error instanceof TicketAuthorityError) || error.code !== 'commit-unknown') throw error;
         const recovered = await repository.read();
-        if (recovered?.state.stateKind === 'initialized' && recovered.state.providerUsage.some(item =>
-          item.reservationId === reservationIdValue && item.status === 'committed')) {
-          return recovered.state.budgets;
-        }
-        throw error;
+        if (recovered?.state.stateKind !== 'initialized') throw error;
+        usage = recovered.state.providerUsage.find(item => item.reservationId === reservationIdValue)!;
+        if (!usage || (['finalize-claimed', 'commit-pending', 'committed'].includes(usage.status) &&
+            (usage.finalizeClaimWriterGeneration !== options.writer.writerGeneration ||
+              usage.finalizeClaimOwnerId !== settlementOwnerId ||
+              usage.finalizeConstraintKind !== requirement.kind ||
+              usage.finalizeConstraintDigest !== requirement.digest)) ||
+            !['finalize-claimed', 'commit-pending', 'committed'].includes(usage.status)) throw error;
+        assertUsageSettlementFlight(reservationIdValue, flightControl);
       }
+    }
+    if (usage.status === 'finalize-claimed') {
+      if (usage.finalizeClaimWriterGeneration !== options.writer.writerGeneration ||
+          usage.finalizeClaimOwnerId !== settlementOwnerId ||
+          usage.finalizeConstraintKind !== requirement.kind ||
+          usage.finalizeConstraintDigest !== requirement.digest) {
+        fail('reservation-unresolved', 'Usage finalization claim was fenced by another writer');
+      }
+      let sampleValue: UsageSample;
+      assertUsageSettlementFlight(reservationIdValue, flightControl);
+      try { sampleValue = await usageMeter.finalize(usage.providerReservationId); } catch {
+        fail('reservation-unresolved', 'Trusted usage meter failed');
+      }
+      assertUsageSettlementFlight(reservationIdValue, flightControl);
+      let sample: UsageSample;
+      try {
+        sample = authorityUsageSampleSchema.parse(snapshotAuthorityData(sampleValue!));
+      } catch {
+        fail('reservation-unresolved', 'Trusted usage meter returned malformed final sample');
+      }
+      validateFinalSample(sample, reservation, requirement);
+      // Validate exact accounting before durably recording provider commit intent,
+      // but do not commit the ledger until provider commit succeeds.
+      reconcileBudget(initialState.budgets, reservationIdValue, sample);
+      const sampleDigest = computeAuthorityUsageSampleDigest(sample);
+      try {
+        assertUsageSettlementFlight(reservationIdValue, flightControl);
+        const staged = await repository.transact({
+          reservationId: reservationIdValue,
+          providerReservationId: usage.providerReservationId,
+          opaqueScope: usage.opaqueScope,
+          sample,
+          sampleDigest,
+          writerGeneration: options.writer.writerGeneration,
+          ownerId: settlementOwnerId,
+          constraintDigest: requirement.digest,
+          constraintKind: requirement.kind
+        }, async (rawState, input) => {
+          assertUsageSettlementFlight(reservationIdValue, flightControl);
+          const state = initializedForAccounting(rawState);
+          const current = state.budgets.reservations.find(item => item.reservationId === input.reservationId);
+          const currentUsage = state.providerUsage.find(item => item.reservationId === input.reservationId);
+          if (!current || !currentUsage || current.ticketHandleId !== reservation.ticketHandleId ||
+              currentUsage.providerReservationId !== input.providerReservationId ||
+              currentUsage.opaqueScope !== input.opaqueScope) {
+            fail('reservation-conflict', 'Usage reservation changed during metering');
+          }
+          if (currentUsage.status === 'commit-pending' || currentUsage.status === 'committed') {
+            if (currentUsage.finalizeConstraintKind !== input.constraintKind ||
+                currentUsage.finalizeConstraintDigest !== input.constraintDigest ||
+                currentUsage.sampleDigest !== input.sampleDigest ||
+                canonicalizeJson(currentUsage.finalSample) !== canonicalizeJson(input.sample)) {
+              fail('reservation-conflict', 'Trusted final usage conflicts with persisted sample');
+            }
+            if (currentUsage.finalizeClaimWriterGeneration !== input.writerGeneration ||
+                currentUsage.finalizeClaimOwnerId !== input.ownerId) {
+              fail('reservation-unresolved', 'Provider commit belongs to another settlement owner');
+            }
+            return { state: state as RunAuthorityState, result: true };
+          }
+          if (current.status !== 'pending' || currentUsage.status !== 'finalize-claimed' ||
+              currentUsage.finalizeClaimWriterGeneration !== input.writerGeneration ||
+              currentUsage.finalizeClaimOwnerId !== input.ownerId ||
+              currentUsage.finalizeConstraintKind !== input.constraintKind ||
+              currentUsage.finalizeConstraintDigest !== input.constraintDigest) {
+            fail('reservation-conflict', 'Usage reservation lifecycle changed during metering');
+          }
+          reconcileBudget(state.budgets, input.reservationId, input.sample);
+          const providerUsage = state.providerUsage.map(item => item.reservationId === input.reservationId
+            ? { ...item, status: 'commit-pending' as const,
+              sampleDigest: input.sampleDigest, finalSample: input.sample }
+            : item);
+          const reading = now(state);
+          return {
+            state: checkedState(state, {
+              providerUsage, operationSequence: nextSequence(state), wallClockHighWater: reading.at
+            }), result: true
+          };
+        });
+        usage = (staged.state as InitializedRunAuthorityState).providerUsage.find(
+          item => item.reservationId === reservationIdValue)!;
+        assertUsageSettlementFlight(reservationIdValue, flightControl);
+      } catch (error) {
+        if (!(error instanceof TicketAuthorityError) || error.code !== 'commit-unknown') throw error;
+        const recovered = await repository.read();
+        if (recovered?.state.stateKind !== 'initialized') throw error;
+        usage = recovered.state.providerUsage.find(item => item.reservationId === reservationIdValue)!;
+        if (!usage || !['commit-pending', 'committed'].includes(usage.status) ||
+            usage.finalizeClaimWriterGeneration !== options.writer.writerGeneration ||
+            usage.finalizeClaimOwnerId !== settlementOwnerId ||
+            usage.finalizeConstraintKind !== requirement.kind ||
+            usage.finalizeConstraintDigest !== requirement.digest ||
+            usage.sampleDigest !== sampleDigest ||
+            canonicalizeJson(usage.finalSample) !== canonicalizeJson(sample)) throw error;
+        assertUsageSettlementFlight(reservationIdValue, flightControl);
+      }
+    }
+    const beforeProviderCommit = await repository.read();
+    assertUsageSettlementFlight(reservationIdValue, flightControl);
+    if (!beforeProviderCommit) fail('invalid-state', 'Run authority is absent');
+    const commitState = initializedForAccounting(beforeProviderCommit.state);
+    const currentReservation = commitState.budgets.reservations.find(item =>
+      item.reservationId === reservationIdValue);
+    const currentUsage = commitState.providerUsage.find(item => item.reservationId === reservationIdValue);
+    if (!currentReservation || !currentUsage) fail('invalid-state', 'Provider commit binding is absent');
+    const currentRequirement = settlementRequirement(
+      commitState, reservationIdValue, strictConstraints, cancellation
+    );
+    if (currentUsage.status === 'committed' && currentReservation.status === 'committed') {
+      if (currentUsage.finalSample === null || currentUsage.sampleDigest === null ||
+          currentUsage.sampleDigest !== computeAuthorityUsageSampleDigest(currentUsage.finalSample) ||
+          currentUsage.finalizeConstraintKind !== currentRequirement.kind ||
+          currentUsage.finalizeConstraintDigest !== currentRequirement.digest) {
+        fail('reservation-conflict', 'Committed usage differs from current settlement requirement');
+      }
+      validateFinalSample(currentUsage.finalSample, currentReservation, currentRequirement);
+      return commitState.budgets;
+    }
+    if (currentUsage.status !== 'commit-pending' || currentReservation.status !== 'pending' ||
+        currentUsage.finalSample === null || currentUsage.sampleDigest === null ||
+        currentUsage.sampleDigest !== computeAuthorityUsageSampleDigest(currentUsage.finalSample) ||
+        currentUsage.finalizeClaimWriterGeneration !== options.writer.writerGeneration ||
+        currentUsage.finalizeClaimOwnerId !== settlementOwnerId ||
+        currentUsage.finalizeConstraintKind !== currentRequirement.kind ||
+        currentUsage.finalizeConstraintDigest !== currentRequirement.digest ||
+        currentRequirement.kind !== requirement.kind || currentRequirement.digest !== requirement.digest) {
+      fail('reservation-unresolved', 'Persisted provider commit evidence failed revalidation');
+    }
+    validateFinalSample(currentUsage.finalSample, currentReservation, currentRequirement);
+    reconcileBudget(commitState.budgets, reservationIdValue, currentUsage.finalSample);
+    const providerReservationId = currentUsage.providerReservationId;
+    const persistedSampleDigest = currentUsage.sampleDigest;
+    assertUsageSettlementFlight(reservationIdValue, flightControl);
+    try { await usageMeter.commit(providerReservationId, persistedSampleDigest); } catch {
+      fail('reservation-unresolved', 'Trusted usage commit failed');
+    }
+    assertUsageSettlementFlight(reservationIdValue, flightControl);
+    try {
+      const committed = await repository.transact({
+        reservationId: reservationIdValue,
+        providerReservationId,
+        sampleDigest: persistedSampleDigest,
+        writerGeneration: options.writer.writerGeneration,
+        ownerId: settlementOwnerId,
+        constraintDigest: requirement.digest,
+        constraintKind: requirement.kind
+      }, async (rawState, input) => {
+        assertUsageSettlementFlight(reservationIdValue, flightControl);
+        const state = initializedForAccounting(rawState);
+        const currentUsage = state.providerUsage.find(item => item.reservationId === input.reservationId);
+          if (!currentUsage || currentUsage.providerReservationId !== input.providerReservationId ||
+              currentUsage.sampleDigest !== input.sampleDigest || currentUsage.finalSample === null ||
+              currentUsage.finalizeConstraintKind !== input.constraintKind ||
+              currentUsage.finalizeConstraintDigest !== input.constraintDigest) {
+          fail('reservation-conflict', 'Provider usage commit binding changed');
+        }
+        if (currentUsage.status === 'committed') {
+          if (currentUsage.finalizeClaimWriterGeneration !== input.writerGeneration ||
+              currentUsage.finalizeClaimOwnerId !== input.ownerId) {
+            fail('reservation-unresolved', 'Committed usage belongs to another settlement owner');
+          }
+          return { state: state as RunAuthorityState, result: state.budgets };
+        }
+          if (currentUsage.status !== 'commit-pending') {
+            fail('reservation-conflict', 'Provider usage is not pending commit');
+          }
+          if (currentUsage.finalizeClaimWriterGeneration !== input.writerGeneration ||
+              currentUsage.finalizeClaimOwnerId !== input.ownerId) {
+            fail('reservation-unresolved', 'Provider commit belongs to another settlement owner');
+          }
+        const budgets = reconcileBudget(state.budgets, input.reservationId, currentUsage.finalSample);
+        const reading = now(state);
+        const providerUsage = state.providerUsage.map(item => item.reservationId === input.reservationId
+          ? { ...item, status: 'committed' as const }
+          : item);
+        return {
+          state: checkedState(state, {
+            budgets, providerUsage, operationSequence: nextSequence(state), wallClockHighWater: reading.at
+          }), result: budgets
+        };
+      });
+      return committed.result;
+    } catch (error) {
+      if (!(error instanceof TicketAuthorityError) || error.code !== 'commit-unknown') throw error;
+      const recovered = await repository.read();
+      if (recovered?.state.stateKind === 'initialized' && recovered.state.providerUsage.some(item =>
+        item.reservationId === reservationIdValue && item.status === 'committed' &&
+        item.providerReservationId === providerReservationId &&
+        item.sampleDigest === persistedSampleDigest &&
+        item.finalizeConstraintKind === requirement.kind &&
+        item.finalizeConstraintDigest === requirement.digest &&
+        item.finalizeClaimWriterGeneration === options.writer.writerGeneration &&
+        item.finalizeClaimOwnerId === settlementOwnerId)) {
+        return recovered.state.budgets;
+      }
+      throw error;
+    }
+  }
+
+  function usageSettlementFlight(
+    reservationIdValue: string,
+    strictConstraints?: RunAuthoritySettlementConstraints,
+    cancellation = false
+  ): UsageSettlementFlight {
+    const requestKey = strictConstraints
+      ? hash({ domain: 'harness-mdocs/usage-settlement-request/v1', constraints: strictConstraints })
+      : cancellation ? 'cancellation' : 'constraints-required';
+    const existing = usageSettlementFlights.get(reservationIdValue);
+    if (existing) {
+      if (existing.requestKey !== requestKey) {
+        fail('reservation-conflict', 'Concurrent usage settlement constraints differ');
+      }
+      return existing;
+    }
+    const control = { active: true };
+    let flight!: UsageSettlementFlight;
+    const promise = reconcileReservationOwned(
+      reservationIdValue, control, strictConstraints, cancellation
+    ).finally(() => {
+      control.active = false;
+      if (usageSettlementFlights.get(reservationIdValue) === flight) {
+        usageSettlementFlights.delete(reservationIdValue);
+      }
+    });
+    flight = { requestKey, control, promise };
+    usageSettlementFlights.set(reservationIdValue, flight);
+    void promise.catch(() => undefined);
+    return flight;
+  }
+
+  function reconcileReservation(
+    reservationIdValue: string,
+    strictConstraints?: RunAuthoritySettlementConstraints,
+    cancellation = false
+  ): Promise<Readonly<BudgetLedger>> {
+    return usageSettlementFlight(reservationIdValue, strictConstraints, cancellation).promise;
   }
 
   async function releaseReservationInternal(reservationIdValue: string): Promise<Readonly<BudgetLedger>> {
@@ -2295,6 +2854,9 @@ function createManager(
           }
           if (ticket.nonceStatus !== 'issued' && state.lifecycle !== 'cancelled') {
             fail('reservation-conflict', 'Claimed ticket reservation cannot be released');
+          }
+          if (existingUsage?.status === 'finalize-claimed' || existingUsage?.status === 'commit-pending') {
+            fail('reservation-conflict', 'Claimed or finalized usage cannot be released');
           }
           const hasDescendants = state.ticketState.tickets.some(item =>
             item.parentTicketHandleId === reservation.ticketHandleId && item.lifecycle === 'active');
@@ -2330,6 +2892,67 @@ function createManager(
       return released.state.budgets;
   }
 
+  function trustedFinalUsage(
+    state: InitializedRunAuthorityState,
+    reservationIdValue: string
+  ): Readonly<TrustedFinalUsage> {
+    const reservation = state.budgets.reservations.find(item => item.reservationId === reservationIdValue);
+    const provider = state.providerUsage.find(item => item.reservationId === reservationIdValue);
+    if (!reservation || !provider) fail('unknown-reservation', 'Usage reservation absent');
+    if (reservation.status === 'released' || provider.status === 'released' ||
+        provider.status === 'release-pending') {
+      fail('reservation-conflict', 'Released reservation has no committed report usage');
+    }
+    if (reservation.status !== 'committed' || provider.status !== 'committed') {
+      fail('reservation-unresolved', 'Usage reservation is not fully committed');
+    }
+    if (!provider.finalSample || !provider.sampleDigest || !provider.finalizeConstraintDigest) {
+      fail('recovery-required', 'Committed usage lacks persisted final sample');
+    }
+    const accounting = committedBudgetUsage(state.budgets, reservationIdValue);
+    if (accounting.sampleDigest !== provider.sampleDigest ||
+        computeAuthorityUsageSampleDigest(provider.finalSample) !== provider.sampleDigest) {
+      fail('recovery-required', 'Committed usage sample conflicts with ledger accounting');
+    }
+    let derived: Readonly<Record<string, number>>;
+    try {
+      derived = deriveAuthorityUsageActual({
+        amounts: accounting.amounts,
+        currency: accounting.currency,
+        sample: provider.finalSample,
+        descendantCommitted: accounting.descendantCommitted
+      });
+    } catch {
+      fail('recovery-required', 'Committed usage cannot be reproduced');
+    }
+    if (canonicalizeJson(derived) !== canonicalizeJson(accounting.actual)) {
+      fail('recovery-required', 'Committed usage actuals do not reproduce exactly');
+    }
+    const ticket = state.ticketState.tickets.find(item =>
+      item.ticket.ticketHandleId === reservation.ticketHandleId);
+    if (!ticket) fail('recovery-required', 'Committed usage ticket identity is absent');
+    return canonicalAuthoritySnapshot({
+      runId: state.runId,
+      projectId: state.projectId,
+      authorityKind: 'delegation-ticket' as const,
+      authorityRef: ticket.ticket.ticketHandleId,
+      nodeId: ticket.ticket.nodeId,
+      reservationId: reservationIdValue,
+      authorityInstanceId: state.authorityInstanceId,
+      usageBindingDigest: usageBindingDigest(state.usageBinding),
+      settlementConstraintDigest: provider.finalizeConstraintDigest,
+      status: 'committed' as const,
+      startedAt: accounting.startedAt,
+      deadlineAt: accounting.deadlineAt,
+      final: provider.finalSample,
+      sampleDigest: provider.sampleDigest,
+      amounts: accounting.amounts,
+      currency: accounting.currency,
+      descendantCommitted: accounting.descendantCommitted,
+      actual: accounting.actual
+    });
+  }
+
   /**
    * Bounded best-effort settlement for a claimed reservation after cancellation:
    * finalize trusted usage within the settlement deadline and commit it, or
@@ -2341,29 +2964,42 @@ function createManager(
     if (!snapshot || snapshot.state.stateKind !== 'initialized') return;
     const usage = snapshot.state.providerUsage.find(item => item.reservationId === reservationIdValue);
     if (!usage) return;
-    if (usage.status === 'commit-pending') {
-      // Persisted saga already holds a trusted sample digest: finish the
-      // idempotent provider commit, then complete accounting.
-      await reconcileReservation(reservationIdValue);
-      return;
-    }
-    if (usage.status !== 'reserved') return;
-    let sample: UsageSample;
+    if (!['reserved', 'finalize-claimed', 'commit-pending'].includes(usage.status)) return;
+    const flight = usageSettlementFlight(reservationIdValue, undefined, true);
     try {
-      sample = await withTimeout(
-        usageMeter.finalize(usage.providerReservationId),
+      await withTimeout(
+        flight.promise,
         usageSettlementTimeoutMs,
-        'Trusted usage settlement'
+        'Trusted usage settlement',
+        () => fenceUsageSettlementFlight(reservationIdValue, flight)
       );
     } catch {
-      await releaseReservationInternal(reservationIdValue);
-      return;
+      const recovered = await repository.read();
+      const current = recovered?.state.stateKind === 'initialized'
+        ? recovered.state.providerUsage.find(item => item.reservationId === reservationIdValue)
+        : undefined;
+      if (current?.status === 'reserved') await releaseReservationInternal(reservationIdValue);
     }
-    await reconcileReservation(reservationIdValue, sample);
   }
 
   async function settleClaimedReservations(reservationIds: readonly string[]): Promise<void> {
-    for (const reservationIdValue of [...new Set(reservationIds)].sort()) {
+    const snapshot = await repository.read();
+    const reservations = snapshot?.state.stateKind === 'initialized'
+      ? snapshot.state.budgets.reservations : [];
+    const byId = new Map(reservations.map(item => [item.reservationId, item]));
+    const byHandle = new Map(reservations.map(item => [item.ticketHandleId, item]));
+    const depth = (reservationIdValue: string): number => {
+      let current = byId.get(reservationIdValue);
+      let value = 0;
+      while (current?.parentTicketHandleId) {
+        value += 1;
+        current = byHandle.get(current.parentTicketHandleId);
+      }
+      return value;
+    };
+    const ordered = [...new Set(reservationIds)].sort((left, right) =>
+      depth(right) - depth(left) || (left < right ? -1 : left > right ? 1 : 0));
+    for (const reservationIdValue of ordered) {
       try {
         await settleClaimedReservation(reservationIdValue);
       } catch {
@@ -2372,20 +3008,36 @@ function createManager(
     }
   }
 
-  function claimedPendingReservations(state: InitializedRunAuthorityState): string[] {
+  function reservationsToSettle(state: InitializedRunAuthorityState): string[] {
     return state.ticketState.tickets
-      .filter(ticket => ticket.nonceStatus === 'claimed')
-      .map(ticket => state.providerUsage.find(item =>
-        item.ticketHandleId === ticket.ticket.ticketHandleId))
-      .filter((usage): usage is NonNullable<typeof usage> =>
-        usage?.status === 'reserved' || usage?.status === 'commit-pending')
-      .map(usage => usage.reservationId);
+      .map(ticket => ({ ticket, usage: state.providerUsage.find(item =>
+        item.ticketHandleId === ticket.ticket.ticketHandleId) }))
+      .filter(item => ['finalize-claimed', 'commit-pending'].includes(item.usage?.status ?? '') ||
+        (item.ticket.nonceStatus === 'claimed' && item.usage?.status === 'reserved'))
+      .map(({ usage }) => usage!.reservationId);
   }
 
   const accountingManager: Pick<RunAuthorityManager,
     'reconcileUsage' | 'releaseReservation' | 'recordRetry' | 'recordLocalFix' |
     'recordReplacement' | 'recordResume' | 'cancel'> = {
-    reconcileUsage: (reservationId: string) => reconcileReservation(reservationId),
+    async reconcileUsage(reservationId: string) {
+      const snapshot = await repository.read();
+      if (!snapshot) fail('invalid-state', 'Run authority is not initialized');
+      const state = initializedForAccounting(snapshot.state);
+      const reservation = state.budgets.reservations.find(item => item.reservationId === reservationId);
+      const usage = state.providerUsage.find(item => item.reservationId === reservationId);
+      if (!reservation || !usage) fail('unknown-reservation', 'Usage reservation is absent');
+      if (reservation.status === 'committed' && usage.status === 'committed' &&
+          usage.finalizeConstraintKind === 'strict-action') {
+        return state.budgets;
+      }
+      if (reservation.status === 'released' || usage.status === 'released' ||
+          usage.status === 'release-pending') {
+        fail('reservation-conflict', 'Released reservation cannot reconcile');
+      }
+      fail('settlement-constraints-required',
+        'Pending action usage requires mediator-derived settlement constraints');
+    },
     releaseReservation: (reservationId: string) => releaseReservationInternal(reservationId),
     recordRetry: input => recordOperation(input, 'retry'),
     recordLocalFix: input => recordOperation(input, 'local-fix'),
@@ -2412,7 +3064,7 @@ function createManager(
               result: {
                 releases: rawState.providerUsage.filter(item => item.status === 'release-pending')
                   .map(item => item.reservationId),
-                settlements: claimedPendingReservations(rawState)
+                settlements: reservationsToSettle(rawState)
               }
             };
           }
@@ -2427,7 +3079,9 @@ function createManager(
           const releases: string[] = [];
           for (const ticket of [...rawState.ticketState.tickets].reverse()) {
             const reservation = budgets.reservations.find(item => item.ticketHandleId === ticket.ticket.ticketHandleId);
-            if (reservation?.status === 'pending' && ticket.nonceStatus === 'issued') {
+            const usage = rawState.providerUsage.find(item => item.reservationId === reservation?.reservationId);
+            if (reservation?.status === 'pending' && ticket.nonceStatus === 'issued' &&
+                usage?.status === 'reserved') {
               budgets = releaseBudget(budgets, reservation.reservationId);
               releases.push(reservation.reservationId);
             }
@@ -2443,7 +3097,7 @@ function createManager(
           });
           return {
             state: next as RunAuthorityState,
-            result: { releases, settlements: claimedPendingReservations(rawState) }
+            result: { releases, settlements: reservationsToSettle(rawState) }
           };
         });
         outcome = transaction.result;
@@ -2454,7 +3108,7 @@ function createManager(
         outcome = {
           releases: recovered.state.providerUsage.filter(item => item.status === 'release-pending')
             .map(item => item.reservationId),
-          settlements: claimedPendingReservations(recovered.state)
+          settlements: reservationsToSettle(recovered.state)
         };
       }
       await finishProviderReleases(outcome.releases);
@@ -2467,18 +3121,78 @@ function createManager(
   const manager: RunAuthorityManager = { ...lifecycleManager, ...accountingManager };
   const frozenManager = Object.freeze(manager);
 
+  const reportBackend: RunAuthorityReportBackend = Object.freeze({
+    async settleAndReadUsage(constraintsValue: RunAuthoritySettlementConstraints) {
+      const constraints = settlementConstraintsSchema.parse(snapshotAuthorityData(constraintsValue));
+      await reconcileReservation(constraints.reservationId, constraints);
+      const snapshot = await repository.read();
+      if (!snapshot) fail('invalid-state', 'Run authority is not initialized');
+      const state = initializedForAccounting(snapshot.state);
+      const requirement = settlementRequirement(state, constraints.reservationId, constraints);
+      const usage = trustedFinalUsage(state, constraints.reservationId);
+      const provider = state.providerUsage.find(item => item.reservationId === constraints.reservationId);
+      if (!provider || provider.finalizeConstraintKind !== 'strict-action' ||
+          provider.finalizeConstraintDigest !== requirement.digest) {
+        fail('reservation-conflict', 'Committed usage has different settlement constraints');
+      }
+      validateFinalSample(usage.final, state.budgets.reservations.find(item =>
+        item.reservationId === constraints.reservationId)!, requirement);
+      return usage;
+    },
+    async readUsage(constraintsValue: RunAuthoritySettlementConstraints) {
+      const constraints = settlementConstraintsSchema.parse(snapshotAuthorityData(constraintsValue));
+      const snapshot = await repository.read();
+      if (!snapshot) fail('invalid-state', 'Run authority is not initialized');
+      const state = initializedForAccounting(snapshot.state);
+      const requirement = settlementRequirement(state, constraints.reservationId, constraints);
+      const usage = trustedFinalUsage(state, constraints.reservationId);
+      const provider = state.providerUsage.find(item => item.reservationId === constraints.reservationId);
+      if (!provider || provider.finalizeConstraintKind !== 'strict-action' ||
+          provider.finalizeConstraintDigest !== requirement.digest) {
+        fail('reservation-conflict', 'Committed usage has different settlement constraints');
+      }
+      validateFinalSample(usage.final, state.budgets.reservations.find(item =>
+        item.reservationId === constraints.reservationId)!, requirement);
+      return usage;
+    }
+  });
+
   function actionUsage(
     state: InitializedRunAuthorityState,
-    reservationIdValue: string
+    reservationIdValue: string,
+    phase: ActionAuthorityVerificationRequest['phase']
   ): ActionUsageAuthority {
     const reservation = state.budgets.reservations.find(item => item.reservationId === reservationIdValue);
     const provider = state.providerUsage.find(item => item.reservationId === reservationIdValue);
     if (!reservation || !provider) fail('unknown-reservation', 'Action authority budget reservation is absent');
+    if (reservation.status === 'committed' && provider.status === 'committed') {
+      if (phase !== 'authorize') {
+        fail('reservation-unresolved', 'Committed usage cannot authorize a new effect phase');
+      }
+      const usage = trustedFinalUsage(state, reservationIdValue);
+      return canonicalAuthoritySnapshot({
+        reservationId: usage.reservationId,
+        authorityInstanceId: usage.authorityInstanceId,
+        usageBindingDigest: usage.usageBindingDigest,
+        status: usage.status,
+        startedAt: usage.startedAt,
+        deadlineAt: usage.deadlineAt,
+        final: usage.final,
+        sampleDigest: usage.sampleDigest,
+        amounts: usage.amounts,
+        currency: usage.currency,
+        descendantCommitted: usage.descendantCommitted,
+        actual: usage.actual,
+        measuredUsageRequired: false
+      });
+    }
     if (reservation.status !== 'pending' || provider.status !== 'reserved') {
-      fail('reservation-unresolved', 'Action authority usage must remain pending until WP-230 reconciliation');
+      fail('reservation-unresolved', 'Action authority usage is not available for mediation');
     }
     return canonicalAuthoritySnapshot({
       reservationId: reservation.reservationId,
+      authorityInstanceId: state.authorityInstanceId,
+      usageBindingDigest: usageBindingDigest(state.usageBinding),
       status: 'pending' as const,
       startedAt: reservation.startedAt,
       deadlineAt: reservation.deadlineAt,
@@ -2512,6 +3226,18 @@ function createManager(
       let snapshot = await repository.read();
       if (!snapshot) fail('invalid-state', 'Run authority is not initialized');
       let state = initialized(snapshot.state);
+      if (request.phase !== 'authorize') {
+        const phaseTicket = state.ticketState.tickets.find(item =>
+          item.ticket.ticketHandleId === request.handle);
+        const phaseReservation = state.budgets.reservations.find(item =>
+          item.ticketHandleId === phaseTicket?.ticket.ticketHandleId);
+        const phaseUsage = state.providerUsage.find(item =>
+          item.reservationId === phaseReservation?.reservationId);
+        if (phaseTicket && (!phaseReservation || phaseReservation.status !== 'pending' ||
+            phaseUsage?.status !== 'reserved')) {
+          fail('reservation-unresolved', 'Action effect phase requires pending trusted usage');
+        }
+      }
       const pendingLeaf = state.ticketState.tickets.find(item =>
         item.ticket.ticketHandleId === request.handle &&
         item.ticket.recipientRole === 'LEAF' && item.nonceStatus === 'issued');
@@ -2646,6 +3372,8 @@ function createManager(
             reservationId: `root-action-budget:${hash({
               runId, projectId, nodeId: node.nodeId
             }).slice(7)}`,
+            authorityInstanceId: state.authorityInstanceId,
+            usageBindingDigest: usageBindingDigest(state.usageBinding),
             status: 'pending' as const,
             startedAt: state.runStartedAt, deadlineAt: state.runDeadlineAt,
             final: null, sampleDigest: null,
@@ -2708,8 +3436,10 @@ function createManager(
       }
       const reservation = state.budgets.reservations.find(item =>
         item.ticketHandleId === record.ticket.ticketHandleId);
-      if (!reservation || reservation.status !== 'pending') {
-        fail('reservation-unresolved', 'Action ticket budget is not pending');
+      if (!reservation || (request.phase === 'authorize'
+        ? !['pending', 'committed'].includes(reservation.status)
+        : reservation.status !== 'pending')) {
+        fail('reservation-unresolved', 'Action ticket budget is unavailable');
       }
       const lineage = record.parentTicketHandleId
         ? [record.parentTicketHandleId, record.ticket.ticketHandleId]
@@ -2723,8 +3453,10 @@ function createManager(
       const eoReservation = record.ticket.recipientRole === 'LEAF'
         ? state.budgets.reservations.find(item => item.ticketHandleId === record.parentTicketHandleId)
         : reservation;
-      if (!eoLineageKey || !eoReservation || eoReservation.status !== 'pending') {
-        fail('reservation-unresolved', 'EO lineage action reservation is not pending');
+      if (!eoLineageKey || !eoReservation || (request.phase === 'authorize'
+        ? !['pending', 'committed'].includes(eoReservation.status)
+        : eoReservation.status !== 'pending')) {
+        fail('reservation-unresolved', 'EO lineage action reservation is unavailable');
       }
       const eoLineageActionLimit = eoReservation.amounts.toolActionsEo ?? 0;
       return canonicalAuthoritySnapshot({
@@ -2763,11 +3495,22 @@ function createManager(
         eoLineageActionLimit,
         // Ticket usage is cumulative across all actions. ActionMediator must
         // preserve this pending reservation; WP-230 performs final reconciliation.
-        usage: actionUsage(state, reservation.reservationId)
+        usage: actionUsage(state, reservation.reservationId, request.phase)
       });
     }
   };
   actionBackends.set(frozenManager, Object.freeze(actionBackend));
+  reportBackends.set(frozenManager, reportBackend);
+  trustedReportBackends.set(reportBackend, Object.freeze({
+    runId,
+    projectId,
+    usageBindingDigest: usageBindingDigest(usageBinding),
+    async authorityInstanceId() {
+      const snapshot = await repository.read();
+      if (!snapshot) fail('invalid-state', 'Run authority is not initialized');
+      return snapshot.state.authorityInstanceId;
+    }
+  }));
   return frozenManager;
 }
 

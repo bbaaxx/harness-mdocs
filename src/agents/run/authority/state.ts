@@ -51,6 +51,7 @@ export type TicketAuthorityErrorCode =
   | 'budget-exceeded'
   | 'reservation-conflict'
   | 'reservation-unresolved'
+  | 'settlement-constraints-required'
   | 'unknown-reservation'
   | 'store-unavailable'
   | 'commit-unknown'

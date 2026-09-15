@@ -1,3 +1,5 @@
+import * as crypto from 'crypto';
+
 import {
   authorityRunStoreKey,
   createProtectedAuthorityRepository
@@ -8,6 +10,7 @@ import {
   createRunAuthorityManager,
   createRunAuthorityManagerForTest,
   parseRunAuthorityState,
+  runAuthorityReportBackend,
   RunAuthorityManagerOptions
 } from '../../src/agents/run/authority/manager';
 import * as publicAuthority from '../../src/agents/run/authority';
@@ -21,6 +24,7 @@ import type { StructuredActionExecutor } from '../../src/agents/run/trust/mediat
 import { deriveOperationMetadataBindings } from '../../src/agents/run/evidence';
 import { createRunAuthorityActionVerifier } from '../../src/agents/run/authority/action-verifier-internal';
 import { createActionMediator } from '../../src/agents/run/trust/mediator-internal';
+import { computeAuthorityUsageSampleDigest } from '../../src/agents/run/authority/usage-accounting';
 import {
   IndeterminateStoreCommitError,
   InMemoryProtectedStoreAdapter,
@@ -210,6 +214,9 @@ describe('run authority manager persistence', () => {
     let loseLeafClaimAck = false;
     let loseUsageIntentAck = false;
     let loseUsageFinalizeAck = false;
+    let loseFinalizeClaimAck = false;
+    let loseSampleIntentAck = false;
+    let loseUsageAccountingAck = false;
     let loseProviderReleaseStageAck = false;
     let loseProviderReleaseFinalizeAck = false;
     let loseBindAckBeforeCommit = false;
@@ -276,6 +283,21 @@ describe('run authority manager persistence', () => {
           await gate;
         }
         const record = await writer.compareAndSwap(committedInput);
+        if (loseFinalizeClaimAck && (committedInput.value as any).providerUsage?.some(
+          (item: any) => item.status === 'finalize-claimed')) {
+          loseFinalizeClaimAck = false;
+          throw new IndeterminateStoreCommitError('lost finalization claim acknowledgement');
+        }
+        if (loseSampleIntentAck && (committedInput.value as any).providerUsage?.some(
+          (item: any) => item.status === 'commit-pending')) {
+          loseSampleIntentAck = false;
+          throw new IndeterminateStoreCommitError('lost final usage intent acknowledgement');
+        }
+        if (loseUsageAccountingAck && (committedInput.value as any).providerUsage?.some(
+          (item: any) => item.status === 'committed')) {
+          loseUsageAccountingAck = false;
+          throw new IndeterminateStoreCommitError('lost committed usage acknowledgement');
+        }
         if ((committedInput.value as any).pendingIssuance?.operationId === inFlightOpId &&
             (committedInput.value as any).pendingIssuance?.status === 'provider-reserved') {
           markBBound?.();
@@ -420,7 +442,7 @@ describe('run authority manager persistence', () => {
     };
     let entropy = 0;
     let monotonicMs = 1000;
-    const manager = createRunAuthorityManagerForTest(managerOptions, {
+    let manager = createRunAuthorityManagerForTest(managerOptions, {
       now: () => new Date(now), monotonicClock: () => monotonicMs,
       clockDomainId: () => 'manager-clock-domain',
       randomBytes: () => Buffer.alloc(32, ++entropy)
@@ -459,6 +481,9 @@ describe('run authority manager persistence', () => {
       maxFanout: compiled.plan.payload.budgets.maxActiveExecutionOrchestrators
     });
     expect(publicAuthority).not.toHaveProperty('createTicketAuthorityBroker');
+    expect(publicAuthority).not.toHaveProperty('runAuthorityReportBackend');
+    expect(publicAuthority).not.toHaveProperty('assertRunAuthorityReportBackend');
+    expect(publicAuthority).not.toHaveProperty('computeRunAuthoritySettlementConstraintDigest');
     await expect(manager.initialize({ ...initialization, rootAuthority: {} } as any))
       .rejects.toMatchObject({ code: 'invalid-input' });
     const pendingManager = createRunAuthorityManagerForTest({
@@ -1096,7 +1121,63 @@ describe('run authority manager persistence', () => {
     const leafReservation = afterLeaf.record.value.budgets.reservations.find(
       (item: any) => item.ticketHandleId === leaf.handle
     );
-    await manager.reconcileUsage(leafReservation.reservationId);
+    const leafMediation = await store.reader().read<any>('intent/run:manager');
+    if (leafMediation.status !== 'active') throw new Error('Expected leaf mediation aggregate');
+    const usageIdentity = leafMediation.record.value.actions.find(
+      (item: any) => item.reservationId === claimIntent.reservationId
+    ).authority.usage;
+    const settlementConstraints = (
+      reservation: any,
+      authorityRef: string,
+      nodeId: string,
+      expectedActionCount = 0
+    ) => ({
+      runId: 'run:manager', projectId: 'project:fake', reservationId: reservation.reservationId,
+      authorityKind: 'delegation-ticket' as const, authorityRef, nodeId,
+      authorityInstanceId: usageIdentity.authorityInstanceId,
+      usageBindingDigest: usageIdentity.usageBindingDigest,
+      notBefore: reservation.startedAt,
+      expectedActionCount
+    });
+    const leafSettlementConstraints = settlementConstraints(
+      leafReservation, leaf.handle, 'leaf-4-core-3-api-7-handler'
+    );
+    const rootReservation = afterLeaf.record.value.budgets.reservations.find(
+      (item: any) => item.ticketHandleId === issued.handle
+    );
+    const rootSettlementConstraints = settlementConstraints(
+      rootReservation, issued.handle, executionIssue.ticket.nodeId
+    );
+    const reportBackend = runAuthorityReportBackend(manager);
+    const parentFinalizeCalls = usageFinalize.mock.calls.filter(call =>
+      String(call[0]).includes('manager-issue-execution-0001')).length;
+    await expect(reportBackend.settleAndReadUsage(rootSettlementConstraints))
+      .rejects.toMatchObject({ code: 'reservation-unresolved' });
+    expect(usageFinalize.mock.calls.filter(call =>
+      String(call[0]).includes('manager-issue-execution-0001'))).toHaveLength(parentFinalizeCalls);
+    await expect(reportBackend.readUsage(leafSettlementConstraints))
+      .rejects.toMatchObject({ code: 'reservation-unresolved' });
+    loseFinalizeClaimAck = true;
+    loseSampleIntentAck = true;
+    loseUsageAccountingAck = true;
+    const finalLeafUsage = await reportBackend.settleAndReadUsage(leafSettlementConstraints);
+    expect(finalLeafUsage).toMatchObject({
+      runId: 'run:manager',
+      projectId: 'project:fake',
+      authorityKind: 'delegation-ticket',
+      authorityRef: leaf.handle,
+      reservationId: leafReservation.reservationId,
+      authorityInstanceId: expect.stringMatching(/^sha256:/),
+      usageBindingDigest: expect.stringMatching(/^sha256:/),
+      status: 'committed',
+      final: { confidence: 'authoritative' },
+      sampleDigest: expect.stringMatching(/^sha256:/),
+      amounts: leafReservation.amounts,
+      actual: expect.any(Object)
+    });
+    expect(Object.isFrozen(finalLeafUsage.final)).toBe(true);
+    expect(JSON.stringify(finalLeafUsage)).not.toContain('provider-usage:');
+    expect(JSON.stringify(finalLeafUsage)).not.toContain('settlement-owner:');
     const leafProviderUsage = afterLeaf.record.value.providerUsage.find(
       (item: any) => item.reservationId === leafReservation.reservationId
     );
@@ -1106,10 +1187,7 @@ describe('run authority manager persistence', () => {
     expect((await manager.read()).generation).toBe(afterLeafReconcile.generation);
     expect(usageFinalize).toHaveBeenCalledTimes(1);
     expect(usageCommit).toHaveBeenCalledTimes(1);
-    const rootReservation = afterLeaf.record.value.budgets.reservations.find(
-      (item: any) => item.ticketHandleId === issued.handle
-    );
-    await manager.reconcileUsage(rootReservation.reservationId);
+    await reportBackend.settleAndReadUsage(rootSettlementConstraints);
     await expect(manager.releaseReservation(rootReservation.reservationId))
       .rejects.toMatchObject({ code: 'reservation-conflict' });
     expect(await manager.revokeTicket(issued.handle)).toBe(true);
@@ -1313,7 +1391,10 @@ describe('run authority manager persistence', () => {
     const interleavedReservation = interleavedAggregate.record.value.budgets.reservations.find(
       (item: any) => item.ticketHandleId === interleavedHandle.handle
     );
-    await expect(manager.reconcileUsage(interleavedReservation.reservationId)).resolves.toBeDefined();
+    const finalizeCallsBeforeUnconstrained = usageFinalize.mock.calls.length;
+    await expect(manager.reconcileUsage(interleavedReservation.reservationId))
+      .rejects.toMatchObject({ code: 'settlement-constraints-required' });
+    expect(usageFinalize).toHaveBeenCalledTimes(finalizeCallsBeforeUnconstrained);
     expect((await manager.read()).unsettledUsage).toEqual([]);
 
     const inFlightIssue = {
@@ -1382,6 +1463,11 @@ describe('run authority manager persistence', () => {
     );
     if (semanticallyValid.status !== 'active') throw new Error('Expected active aggregate');
     const base = semanticallyValid.record.value;
+    const staleV5 = JSON.parse(JSON.stringify(base));
+    staleV5.schemaVersion = 5;
+    expect(() => parseRunAuthorityState(staleV5, compiled, {
+      runId: 'run:manager', projectId: 'project:fake', usageBinding: managerOptions.usageBinding
+    })).toThrow(/schemaVersion 5.*expected 6/);
     const corruptions = [
       (value: any) => { value.approvedPlanDigest = `sha256:${'0'.repeat(64)}`; },
       (value: any) => { value.ticketState.tickets[1].parentTicketHandleId = 'missing-parent'; },
@@ -1399,6 +1485,27 @@ describe('run authority manager persistence', () => {
       (value: any) => { value.ticketState.rootAuthority.operationClasses = ['forged']; },
       (value: any) => { value.providerUsage.pop(); },
       (value: any) => { value.providerUsage[0].opaqueScope = value.providerUsage[1].opaqueScope; },
+      (value: any) => {
+        const usage = value.providerUsage.find((item: any) => item.finalSample !== null);
+        usage.finalSample.actionCount += 1;
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+        value.budgets.reservations.find((item: any) =>
+          item.reservationId === usage.reservationId).sampleDigest = usage.sampleDigest;
+      },
+      (value: any) => {
+        const usage = value.providerUsage.find((item: any) => item.finalSample !== null);
+        usage.finalSample.timestamp = '2026-09-11T23:59:59.999Z';
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+        value.budgets.reservations.find((item: any) =>
+          item.reservationId === usage.reservationId).sampleDigest = usage.sampleDigest;
+      },
+      (value: any) => {
+        const usage = value.providerUsage.find((item: any) => item.finalSample !== null);
+        usage.finalSample.source = 'malicious-meter';
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+        value.budgets.reservations.find((item: any) =>
+          item.reservationId === usage.reservationId).sampleDigest = usage.sampleDigest;
+      },
       (value: any) => { value.leaseState.workstreamLeases[0].ticketHandleId = 'other-ticket'; }
     ];
     for (const corrupt of corruptions) {
@@ -1470,10 +1577,13 @@ describe('run authority manager persistence', () => {
     const commitPendingReservation = preCancelAggregateForCommit.record.value.budgets.reservations.find(
       (item: any) => item.ticketHandleId === commitPendingIssue.handle
     );
+    const commitPendingConstraints = settlementConstraints(
+      commitPendingReservation, commitPendingIssue.handle, executionIssue.ticket.nodeId
+    );
     usageCommit.mockImplementationOnce(async () => {
       throw new Error('provider commit acknowledgement lost');
     });
-    await expect(manager.reconcileUsage(commitPendingReservation.reservationId))
+    await expect(runAuthorityReportBackend(manager).settleAndReadUsage(commitPendingConstraints))
       .rejects.toMatchObject({ code: 'reservation-unresolved' });
     const commitPendingAggregate = await store.reader().read<any>(
       authorityRunStoreKey('project:fake', 'run:manager')
@@ -1481,11 +1591,328 @@ describe('run authority manager persistence', () => {
     if (commitPendingAggregate.status !== 'active') throw new Error('Expected active aggregate');
     expect(commitPendingAggregate.record.value.providerUsage.find(
       (item: any) => item.reservationId === commitPendingReservation.reservationId
-    )).toMatchObject({ status: 'commit-pending' });
+    )).toMatchObject({
+      status: 'commit-pending', sampleDigest: expect.stringMatching(/^sha256:/),
+      finalSample: { confidence: 'authoritative' }
+    });
+    expect(commitPendingAggregate.record.value.budgets.reservations.find(
+      (item: any) => item.reservationId === commitPendingReservation.reservationId
+    )).toMatchObject({ status: 'pending', sampleDigest: null, actual: {} });
+    const recoveryEntropy = Buffer.alloc(32, 201);
+    const recoveryOwner = `settlement-owner:${crypto.createHash('sha256')
+      .update(recoveryEntropy).digest('base64url')}`;
+    const commitPendingCorruptions: Array<[string, (usage: any) => void]> = [
+      ['timestamp', usage => {
+        usage.finalSample.timestamp = '2026-09-11T23:59:59.999Z';
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+      }],
+      ['action-count', usage => {
+        usage.finalSample.actionCount += 1;
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+      }],
+      ['provider', usage => {
+        usage.finalSample.provider = 'malicious-provider';
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+      }],
+      ['model', usage => {
+        usage.finalSample.model = 'malicious-model';
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+      }],
+      ['price-table', usage => {
+        usage.finalSample.priceTableVersion = 'malicious-prices';
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+      }],
+      ['currency', usage => {
+        usage.finalSample.cost.currency = 'EUR';
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+      }],
+      ['confidence', usage => {
+        usage.finalSample.confidence = 'estimated';
+        usage.sampleDigest = computeAuthorityUsageSampleDigest(usage.finalSample);
+      }],
+      ['sample-digest', usage => { usage.sampleDigest = `sha256:${'0'.repeat(64)}`; }],
+      ['constraint-kind', usage => { usage.finalizeConstraintKind = 'cancellation'; }],
+      ['constraint-digest', usage => { usage.finalizeConstraintDigest = `sha256:${'0'.repeat(64)}`; }],
+      ['claim-owner', usage => { usage.finalizeClaimOwnerId = 'settlement-owner:malicious'; }],
+      ['claim-fence', usage => { usage.finalizeClaimWriterGeneration = 3; }]
+    ];
+    for (const [label, corrupt] of commitPendingCorruptions) {
+      const value = JSON.parse(JSON.stringify(commitPendingAggregate.record.value));
+      const provider = value.providerUsage.find(
+        (item: any) => item.reservationId === commitPendingReservation.reservationId
+      );
+      provider.finalizeClaimWriterGeneration = 2;
+      provider.finalizeClaimOwnerId = recoveryOwner;
+      corrupt(provider);
+      const tamperedStore = new ProtectedControllerStore({
+        storeId: `commit-pending-tamper-${label}`,
+        adapter: new InMemoryProtectedStoreAdapter()
+      });
+      const stagingWriter = await tamperedStore.openWriter();
+      await stagingWriter.compareAndSwap({
+        key: authorityRunStoreKey('project:fake', 'run:manager'), expectedGeneration: 0, value
+      });
+      const recoveryWriter = await tamperedStore.openWriter();
+      const providerCommit = jest.fn(async () => undefined);
+      const restarted = createRunAuthorityManagerForTest({
+        ...managerOptions,
+        reader: tamperedStore.reader(),
+        writer: recoveryWriter,
+        usageMeter: { ...usageMeter, commit: providerCommit }
+      }, {
+        now: () => new Date(now), monotonicClock: () => monotonicMs,
+        clockDomainId: () => 'manager-clock-domain',
+        randomBytes: () => Buffer.from(recoveryEntropy)
+      });
+      await expect(runAuthorityReportBackend(restarted)
+        .settleAndReadUsage(commitPendingConstraints)).rejects.toBeInstanceOf(TicketAuthorityError);
+      expect(providerCommit).not.toHaveBeenCalled();
+      const afterTamper = await tamperedStore.reader().read<any>(
+        authorityRunStoreKey('project:fake', 'run:manager')
+      );
+      if (afterTamper.status !== 'active') throw new Error('Expected tampered aggregate');
+      expect(afterTamper.record.value.budgets).toEqual(value.budgets);
+    }
+    const commitRecoveryWriter = await store.openWriter();
+    const restartedCommitPending = createRunAuthorityManagerForTest({
+      ...managerOptions,
+      writer: commitRecoveryWriter
+    }, {
+      now: () => new Date(now), monotonicClock: () => monotonicMs,
+      clockDomainId: () => 'manager-clock-domain',
+      randomBytes: () => Buffer.alloc(32, ++entropy)
+    });
+    await expect(runAuthorityReportBackend(restartedCommitPending)
+      .settleAndReadUsage(commitPendingConstraints))
+      .resolves.toMatchObject({ status: 'committed' });
+    expect(usageFinalize.mock.calls.filter(call =>
+      String(call[0]).includes('manager-commit-pending-settlement'))).toHaveLength(1);
+    manager = restartedCommitPending;
     await manager.releaseWorkstreamLease({
       nodeId: commitPendingWorkstream.nodeId,
       proof: workstreamProof(commitPendingWorkstream)
     });
+
+    const concurrentIssue = await manager.issueExecutionTicket({
+      ...executionIssue,
+      operationId: 'manager-concurrent-settlement',
+      controllerProof: controllerProof(settlementController),
+      ticket: { ...executionIssue.ticket, scope: 'concurrent-settlement' }
+    });
+    const concurrentWorkstream = await manager.claimExecutionAndAcquireWorkstream({
+      handle: concurrentIssue.handle,
+      controllerProof: controllerProof(settlementController)
+    });
+    let concurrentAggregate = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (concurrentAggregate.status !== 'active') throw new Error('Expected active aggregate');
+    const concurrentReservation = concurrentAggregate.record.value.budgets.reservations.find(
+      (item: any) => item.ticketHandleId === concurrentIssue.handle
+    );
+    const concurrentConstraints = settlementConstraints(
+      concurrentReservation, concurrentIssue.handle, executionIssue.ticket.nodeId
+    );
+    await Promise.all([
+      runAuthorityReportBackend(manager).settleAndReadUsage(concurrentConstraints),
+      runAuthorityReportBackend(manager).settleAndReadUsage(concurrentConstraints),
+      runAuthorityReportBackend(manager).settleAndReadUsage(concurrentConstraints)
+    ]);
+    expect(usageFinalize.mock.calls.filter(call =>
+      String(call[0]).includes('manager-concurrent-settlement'))).toHaveLength(1);
+    await manager.releaseWorkstreamLease({
+      nodeId: concurrentWorkstream.nodeId,
+      proof: workstreamProof(concurrentWorkstream)
+    });
+    expect(await manager.revokeTicket(concurrentIssue.handle)).toBe(true);
+
+    const sharedWriterIssue = await manager.issueExecutionTicket({
+      ...executionIssue,
+      operationId: 'manager-shared-writer-settlement',
+      controllerProof: controllerProof(settlementController),
+      ticket: { ...executionIssue.ticket, scope: 'shared-writer-settlement' }
+    });
+    const sharedWriterWorkstream = await manager.claimExecutionAndAcquireWorkstream({
+      handle: sharedWriterIssue.handle,
+      controllerProof: controllerProof(settlementController)
+    });
+    const sharedWriterAggregate = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (sharedWriterAggregate.status !== 'active') throw new Error('Expected active aggregate');
+    const sharedWriterReservation = sharedWriterAggregate.record.value.budgets.reservations.find(
+      (item: any) => item.ticketHandleId === sharedWriterIssue.handle
+    );
+    const sharedWriterConstraints = settlementConstraints(
+      sharedWriterReservation, sharedWriterIssue.handle, executionIssue.ticket.nodeId
+    );
+    const sharedWriterManager = createRunAuthorityManagerForTest({
+      ...managerOptions,
+      writer: commitRecoveryWriter
+    }, {
+      now: () => new Date(now), monotonicClock: () => monotonicMs,
+      clockDomainId: () => 'manager-clock-domain',
+      randomBytes: () => Buffer.alloc(32, ++entropy)
+    });
+    const sharedPriorFinalize = usageFinalize.getMockImplementation()!;
+    let releaseSharedFinalize!: () => void;
+    let markSharedFinalizeStarted!: () => void;
+    const sharedFinalizeStarted = new Promise<void>(resolve => { markSharedFinalizeStarted = resolve; });
+    const sharedFinalizeGate = new Promise<void>(resolve => { releaseSharedFinalize = resolve; });
+    usageFinalize.mockImplementation(async (providerReservationId: string) => {
+      if (providerReservationId.includes('manager-shared-writer-settlement')) {
+        markSharedFinalizeStarted();
+        await sharedFinalizeGate;
+      }
+      return sharedPriorFinalize(providerReservationId);
+    });
+    const owningSettlement = runAuthorityReportBackend(manager)
+      .settleAndReadUsage(sharedWriterConstraints);
+    await sharedFinalizeStarted;
+    await expect(runAuthorityReportBackend(sharedWriterManager)
+      .settleAndReadUsage(sharedWriterConstraints))
+      .rejects.toMatchObject({ code: 'reservation-unresolved' });
+    expect(usageFinalize.mock.calls.filter(call =>
+      String(call[0]).includes('manager-shared-writer-settlement'))).toHaveLength(1);
+    releaseSharedFinalize();
+    await expect(owningSettlement).resolves.toMatchObject({ status: 'committed' });
+    usageFinalize.mockImplementation(sharedPriorFinalize);
+    expect(JSON.stringify(await manager.read())).not.toContain('settlement-owner:');
+    await manager.releaseWorkstreamLease({
+      nodeId: sharedWriterWorkstream.nodeId,
+      proof: workstreamProof(sharedWriterWorkstream)
+    });
+    expect(await manager.revokeTicket(sharedWriterIssue.handle)).toBe(true);
+
+    const takeoverIssue = await manager.issueExecutionTicket({
+      ...executionIssue,
+      operationId: 'manager-finalize-claim-takeover',
+      controllerProof: controllerProof(settlementController),
+      ticket: { ...executionIssue.ticket, scope: 'finalize-claim-takeover' }
+    });
+    const takeoverWorkstream = await manager.claimExecutionAndAcquireWorkstream({
+      handle: takeoverIssue.handle,
+      controllerProof: controllerProof(settlementController)
+    });
+    const takeoverAggregate = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (takeoverAggregate.status !== 'active') throw new Error('Expected active aggregate');
+    const takeoverReservation = takeoverAggregate.record.value.budgets.reservations.find(
+      (item: any) => item.ticketHandleId === takeoverIssue.handle
+    );
+    const priorFinalize = usageFinalize.getMockImplementation()!;
+    let releaseAbandonedFinalize!: () => void;
+    let markAbandonedFinalizeStarted!: () => void;
+    const abandonedFinalizeStarted = new Promise<void>(resolve => { markAbandonedFinalizeStarted = resolve; });
+    const abandonedFinalizeGate = new Promise<void>(resolve => { releaseAbandonedFinalize = resolve; });
+    let firstTakeoverFinalize = true;
+    usageFinalize.mockImplementation(async (providerReservationId: string) => {
+      if (providerReservationId.includes('manager-finalize-claim-takeover') && firstTakeoverFinalize) {
+        firstTakeoverFinalize = false;
+        markAbandonedFinalizeStarted();
+        await abandonedFinalizeGate;
+      }
+      return priorFinalize(providerReservationId);
+    });
+    const takeoverConstraints = settlementConstraints(
+      takeoverReservation, takeoverIssue.handle, executionIssue.ticket.nodeId
+    );
+    const abandonedSettlement = runAuthorityReportBackend(manager)
+      .settleAndReadUsage(takeoverConstraints);
+    await abandonedFinalizeStarted;
+    const claimedAggregate = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (claimedAggregate.status !== 'active') throw new Error('Expected active aggregate');
+    expect(claimedAggregate.record.value.providerUsage.find(
+      (item: any) => item.reservationId === takeoverReservation.reservationId
+    )).toMatchObject({
+      status: 'finalize-claimed',
+      finalizeClaimWriterGeneration: commitRecoveryWriter.writerGeneration,
+      finalizeClaimOwnerId: expect.stringMatching(/^settlement-owner:/),
+      finalizeConstraintDigest: expect.stringMatching(/^sha256:/),
+      finalizeConstraintKind: 'strict-action',
+      finalSample: null,
+      sampleDigest: null
+    });
+    const takeoverBaseWriter = await store.openWriter();
+    const takeoverWriter: ProtectedControllerStoreWriter = {
+      ...takeoverBaseWriter,
+      async compareAndSwap(input) {
+        let committedInput = input;
+        if (redirectClaimToHandle) {
+          const value: any = JSON.parse(JSON.stringify(input.value));
+          const workstream = value.leaseState?.workstreamLeases?.find(
+            (item: any) => item.lifecycle === 'active'
+          );
+          const claimed = workstream && value.ticketState?.tickets?.find(
+            (item: any) => item.ticket.ticketHandleId === workstream.ticketHandleId
+          );
+          const redirected = value.ticketState?.tickets?.find(
+            (item: any) => item.ticket.ticketHandleId === redirectClaimToHandle
+          );
+          if (!workstream || !claimed || !redirected) throw new Error('claim redirect fixture is invalid');
+          claimed.nonceStatus = 'issued';
+          redirected.nonceStatus = 'claimed';
+          workstream.ticketHandleId = redirectClaimToHandle;
+          workstream.authorityDeadlineAt = redirected.ticket.expiresAt;
+          redirectClaimToHandle = null;
+          committedInput = { ...input, value };
+          await takeoverBaseWriter.compareAndSwap(committedInput);
+          throw new IndeterminateStoreCommitError('lost redirected execution claim acknowledgement');
+        }
+        const record = await takeoverBaseWriter.compareAndSwap(committedInput);
+        if (loseProviderReleaseStageAck && (committedInput.value as any).providerUsage?.some(
+          (item: any) => item.status === 'release-pending')) {
+          loseProviderReleaseStageAck = false;
+          throw new IndeterminateStoreCommitError('lost provider release stage acknowledgement');
+        }
+        if (loseProviderReleaseFinalizeAck && (committedInput.value as any).providerUsage?.some(
+          (item: any) => item.status === 'released')) {
+          loseProviderReleaseFinalizeAck = false;
+          throw new IndeterminateStoreCommitError('lost provider release finalize acknowledgement');
+        }
+        return record;
+      }
+    };
+    const takeoverManager = createRunAuthorityManagerForTest({
+      ...managerOptions,
+      writer: takeoverWriter,
+      usageSettlementTimeoutMs: 2_000
+    }, {
+      now: () => new Date(now), monotonicClock: () => monotonicMs,
+      clockDomainId: () => 'manager-clock-domain',
+      randomBytes: () => Buffer.alloc(32, ++entropy)
+    });
+    await expect(runAuthorityReportBackend(takeoverManager)
+      .settleAndReadUsage(takeoverConstraints)).resolves.toBeDefined();
+    releaseAbandonedFinalize();
+    const [abandonedResult] = await Promise.allSettled([abandonedSettlement]);
+    expect(abandonedResult.status).toBe('rejected');
+    expect(usageFinalize.mock.calls.filter(call =>
+      String(call[0]).includes('manager-finalize-claim-takeover'))).toHaveLength(2);
+    expect(usageCommit.mock.calls.filter(call =>
+      String(call[0]).includes('manager-finalize-claim-takeover'))).toHaveLength(1);
+    const takenOver = await store.reader().read<any>(authorityRunStoreKey('project:fake', 'run:manager'));
+    if (takenOver.status !== 'active') throw new Error('Expected active aggregate');
+    expect(takenOver.record.writerGeneration).toBe(takeoverWriter.writerGeneration);
+    expect(takenOver.record.value.providerUsage.find(
+      (item: any) => item.reservationId === takeoverReservation.reservationId
+    )).toMatchObject({
+      status: 'committed',
+      finalizeClaimWriterGeneration: takeoverWriter.writerGeneration,
+      finalizeClaimOwnerId: expect.stringMatching(/^settlement-owner:/),
+      finalizeConstraintDigest: expect.stringMatching(/^sha256:/),
+      finalizeConstraintKind: 'strict-action'
+    });
+    manager = takeoverManager;
+    usageFinalize.mockImplementation(priorFinalize);
+    await manager.releaseWorkstreamLease({
+      nodeId: takeoverWorkstream.nodeId,
+      proof: workstreamProof(takeoverWorkstream)
+    });
+    expect(await manager.revokeTicket(takeoverIssue.handle)).toBe(true);
 
     const accountingIssue = await manager.issueExecutionTicket({
       ...executionIssue,
@@ -1519,10 +1946,29 @@ describe('run authority manager persistence', () => {
     );
 
     const defaultFinalize = usageFinalize.getMockImplementation()!;
-    usageFinalize.mockImplementation(async (providerReservationId: string) =>
-      providerReservationId.includes('manager-hung-settlement')
-        ? new Promise<any>(() => {})
-        : defaultFinalize(providerReservationId));
+    let releaseFirstHungFinalize!: () => void;
+    let rejectSecondHungFinalize!: (error: Error) => void;
+    let releaseReplacementFinalize!: () => void;
+    let markReplacementFinalizeStarted!: () => void;
+    const firstHungFinalizeGate = new Promise<void>(resolve => { releaseFirstHungFinalize = resolve; });
+    const secondHungFinalizeGate = new Promise<void>((_resolve, reject) => {
+      rejectSecondHungFinalize = reject;
+    });
+    const replacementFinalizeGate = new Promise<void>(resolve => { releaseReplacementFinalize = resolve; });
+    const replacementFinalizeStarted = new Promise<void>(resolve => { markReplacementFinalizeStarted = resolve; });
+    let hungFinalizeAttempts = 0;
+    usageFinalize.mockImplementation(async (providerReservationId: string) => {
+      if (providerReservationId.includes('manager-hung-settlement')) {
+        hungFinalizeAttempts += 1;
+        if (hungFinalizeAttempts === 1) await firstHungFinalizeGate;
+        if (hungFinalizeAttempts === 2) await secondHungFinalizeGate;
+        if (hungFinalizeAttempts === 3) {
+          markReplacementFinalizeStarted();
+          await replacementFinalizeGate;
+        }
+      }
+      return defaultFinalize(providerReservationId);
+    });
     let hungReleaseFails = true;
     usageRelease.mockImplementation(async (providerReservationId: string) => {
       if (hungReleaseFails && providerReservationId.includes('manager-hung-settlement')) {
@@ -1538,21 +1984,65 @@ describe('run authority manager persistence', () => {
     const cancelled = await manager.cancel();
     expect(cancelled.lifecycle).toBe('cancelled');
     expect(cancelled.cancellationGeneration).toBe(1);
-    expect(cancelled.generation).toBe(beforeCancel.generation + 8);
+    expect(cancelled.generation).toBe(beforeCancel.generation + 9);
     expect(cancelled.unsettledUsage).toEqual([
-      { reservationId: hungReservation.reservationId, reason: 'provider-release-pending' }
+      { reservationId: hungReservation.reservationId, reason: 'provider-finalize-pending' }
     ]);
-    const settled = await manager.cancel();
+    const sameWriterRetry = await manager.cancel();
+    expect(sameWriterRetry.unsettledUsage).toEqual([
+      { reservationId: hungReservation.reservationId, reason: 'provider-finalize-pending' }
+    ]);
+    expect(sameWriterRetry.generation).toBe(cancelled.generation);
+    const replacementSettlement = manager.cancel();
+    await replacementFinalizeStarted;
+    releaseFirstHungFinalize();
+    rejectSecondHungFinalize(new Error('abandoned provider finalization failed'));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    const beforeReplacementCommit = await store.reader().read<any>(
+      authorityRunStoreKey('project:fake', 'run:manager')
+    );
+    if (beforeReplacementCommit.status !== 'active') throw new Error('Expected active aggregate');
+    expect(beforeReplacementCommit.record.value.providerUsage.find(
+      (item: any) => item.reservationId === hungReservation.reservationId
+    )).toMatchObject({ status: 'finalize-claimed', finalSample: null, sampleDigest: null });
+    expect(usageCommit.mock.calls.filter(call =>
+      String(call[0]).includes('manager-hung-settlement'))).toHaveLength(0);
+    const sharedReplacementSettlement = manager.cancel();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(usageFinalize.mock.calls.filter(call =>
+      String(call[0]).includes('manager-hung-settlement'))).toHaveLength(3);
+    releaseReplacementFinalize();
+    const [settled, sharedSettled] = await Promise.all([
+      replacementSettlement, sharedReplacementSettlement
+    ]);
+    expect(usageCommit.mock.calls.filter(call =>
+      String(call[0]).includes('manager-hung-settlement'))).toHaveLength(1);
     expect(settled.unsettledUsage).toEqual([]);
-    expect(settled.generation).toBe(cancelled.generation + 1);
-    expect((await manager.cancel()).generation).toBe(settled.generation);
+    expect(sharedSettled.unsettledUsage).toEqual([]);
+    expect(sharedSettled.generation).toBe(settled.generation);
+    usageFinalize.mockImplementation(defaultFinalize);
+    const recoveryWriter = await store.openWriter();
+    const recoveryManager = createRunAuthorityManagerForTest({
+      ...managerOptions,
+      writer: recoveryWriter
+    }, {
+      now: () => new Date(now), monotonicClock: () => monotonicMs,
+      clockDomainId: () => 'manager-clock-domain',
+      randomBytes: () => Buffer.alloc(32, ++entropy)
+    });
+    const recoveredSettlement = await recoveryManager.cancel();
+    manager = recoveryManager;
+    expect(recoveredSettlement.unsettledUsage).toEqual([]);
+    expect(settled.generation).toBeGreaterThan(cancelled.generation);
+    expect(recoveredSettlement.generation).toBe(settled.generation);
+    expect((await manager.cancel()).generation).toBe(recoveredSettlement.generation);
     expect(usageRelease).toHaveBeenCalledWith(
       expect.stringContaining('manager-account-after-cancel'),
       `ticket-usage-release:project:fake:run:manager:${cancellationReleaseReservation.reservationId}`
     );
-    expect(usageRelease).toHaveBeenCalledWith(
+    expect(usageCommit).toHaveBeenCalledWith(
       expect.stringContaining('manager-hung-settlement'),
-      `ticket-usage-release:project:fake:run:manager:${hungReservation.reservationId}`
+      expect.stringMatching(/^sha256:/)
     );
     expect(usageCommit).toHaveBeenCalledWith(
       expect.stringContaining('manager-commit-pending-settlement'),
@@ -1564,7 +2054,7 @@ describe('run authority manager persistence', () => {
     if (postCancelAggregate.status !== 'active') throw new Error('Expected active aggregate');
     expect(postCancelAggregate.record.value.budgets.reservations.find(
       (item: any) => item.reservationId === hungReservation.reservationId
-    )).toMatchObject({ status: 'released' });
+    )).toMatchObject({ status: 'committed' });
     expect(postCancelAggregate.record.value.budgets.reservations.find(
       (item: any) => item.reservationId === accountingReservation.reservationId
     )).toMatchObject({ status: 'committed' });
@@ -1577,11 +2067,12 @@ describe('run authority manager persistence', () => {
     });
     expect((await restartedManager.read()).generation).toBe(settled.generation);
     await expect(restartedManager.releaseReservation(hungReservation.reservationId))
-      .resolves.toBeDefined();
+      .rejects.toMatchObject({ code: 'reservation-conflict' });
     expect((await restartedManager.read()).generation).toBe(settled.generation);
     now.setTime(Date.parse('2026-09-12T02:00:00.000Z'));
     monotonicMs += 2 * 60 * 60 * 1000;
-    await expect(manager.reconcileUsage(accountingReservation.reservationId)).resolves.toBeDefined();
+    await expect(manager.reconcileUsage(accountingReservation.reservationId))
+      .rejects.toMatchObject({ code: 'settlement-constraints-required' });
     const afterLateAccounting = await manager.read();
     const reopened = createRunAuthorityManager(managerOptions);
     expect(await reopened.read()).toEqual(afterLateAccounting);
@@ -1595,11 +2086,11 @@ describe('run authority manager persistence', () => {
       authorityRunStoreKey('project:fake', 'run:manager')
     ) as any).record.value));
     corrupted.totalDescendants += 1;
-    await writer.compareAndSwap({
+    await recoveryWriter.compareAndSwap({
       key: authorityRunStoreKey('project:fake', 'run:manager'),
       expectedGeneration: afterLateAccounting.generation,
       value: corrupted
     });
     await expect(reopened.read()).rejects.toMatchObject({ code: 'recovery-required' });
-  }, 30_000);
+  }, 90_000);
 });

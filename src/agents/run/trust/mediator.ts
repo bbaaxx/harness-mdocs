@@ -76,6 +76,8 @@ export type MediationDecision =
 
 export interface ActionUsageAuthority {
   readonly reservationId: string;
+  readonly authorityInstanceId: string;
+  readonly usageBindingDigest: string;
   readonly status: 'pending' | 'committed' | 'released' | 'unresolved';
   readonly startedAt: string;
   readonly deadlineAt: string;

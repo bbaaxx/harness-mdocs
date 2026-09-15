@@ -190,6 +190,8 @@ export const evidenceActionReceiptPayloadSchema = actionReceiptPayloadSchema.ext
   workspaceAfter: workspaceSnapshotInputSchema,
   beforeFingerprint: contractDigestSchema,
   afterFingerprint: contractDigestSchema,
+  executorCompletionDigest: contractDigestSchema,
+  preliminaryReceiptDigest: contractDigestSchema.nullable(),
   usageFinal: evidenceUsageSampleSchema.optional(),
   usageStatus: z.enum(['pending', 'committed', 'released', 'unresolved']),
   usageSampleDigest: contractDigestSchema.nullable(),
@@ -212,12 +214,12 @@ export const evidenceActionReceiptPayloadSchema = actionReceiptPayloadSchema.ext
   }
   if (receipt.usageStatus === 'committed') {
     if (receipt.usageFinal === undefined || receipt.usageFinal.confidence !== 'authoritative' ||
-        receipt.usageSampleDigest === null) {
-      context.addIssue({ code: 'custom', message: 'Committed receipt requires authoritative final usage and digest' });
+        receipt.usageSampleDigest === null || receipt.preliminaryReceiptDigest === null) {
+      context.addIssue({ code: 'custom', message: 'Committed receipt requires authoritative final usage and provenance' });
     }
   } else if (receipt.usageFinal !== undefined || receipt.usageSampleDigest !== null ||
-      Object.keys(receipt.usageActual).length !== 0) {
-    context.addIssue({ code: 'custom', message: 'Noncommitted receipt cannot carry final usage, digest, or actuals' });
+      receipt.preliminaryReceiptDigest !== null || Object.keys(receipt.usageActual).length !== 0) {
+    context.addIssue({ code: 'custom', message: 'Noncommitted receipt cannot carry final usage, provenance, or actuals' });
   }
   if (receipt.operation !== 'agent.spawn' && receipt.childTicketRef !== null) {
     context.addIssue({ code: 'custom', message: 'Spawn child ticket closure is inconsistent' });
@@ -353,6 +355,8 @@ export const actionReceiptValidationContextSchema = z.object({
   endedAt: canonicalTimestamp,
   metadata: z.object({ input: metadataSchema, result: metadataSchema }).strict(),
   workspace: workspaceContextSchema,
+  executorCompletionDigest: contractDigestSchema,
+  preliminaryReceiptDigest: contractDigestSchema.nullable(),
   usage: z.object({
     reservationId: boundedString,
     status: z.enum(['pending', 'committed', 'released', 'unresolved']),
@@ -433,9 +437,11 @@ export const receiptEvidenceRecordSchema = z.object({
   mutations: canonicalSet(canonicalProjectPathSchema),
   beforeFingerprint: contractDigestSchema,
   afterFingerprint: contractDigestSchema,
+  executorCompletionDigest: contractDigestSchema,
   startedAt: canonicalTimestamp,
   endedAt: canonicalTimestamp,
   resultClass: z.enum(['success', 'failure', 'uncertain']),
+  preliminaryReceiptDigest: contractDigestSchema.nullable(),
   usageReservationId: boundedString,
   usageStatus: z.enum(['pending', 'committed', 'released', 'unresolved']),
   usageFinal: evidenceUsageSampleSchema.nullable(),
@@ -450,8 +456,8 @@ export const receiptEvidenceRecordSchema = z.object({
     context.addIssue({ code: 'custom', message: 'Receipt end must not precede start' });
   }
   if (receipt.usageStatus === 'committed') {
-    if (receipt.usageSampleDigest === null) {
-      context.addIssue({ code: 'custom', message: 'Committed receipt usage requires sample digest' });
+    if (receipt.usageSampleDigest === null || receipt.preliminaryReceiptDigest === null) {
+      context.addIssue({ code: 'custom', message: 'Committed receipt usage requires sample and preliminary digests' });
     }
     const amountKeys = Object.keys(receipt.usageAmounts).sort();
     const actualKeys = Object.keys(receipt.usageActual).sort();
@@ -459,8 +465,9 @@ export const receiptEvidenceRecordSchema = z.object({
       receipt.usageActual[key] > receipt.usageAmounts[key])) {
       context.addIssue({ code: 'custom', message: 'Receipt usage actuals must fit exact reservation dimensions' });
     }
-  } else if (receipt.usageSampleDigest !== null || Object.keys(receipt.usageActual).length !== 0) {
-    context.addIssue({ code: 'custom', message: 'Noncommitted receipt usage cannot carry digest or actuals' });
+  } else if (receipt.usageSampleDigest !== null || receipt.preliminaryReceiptDigest !== null ||
+      Object.keys(receipt.usageActual).length !== 0) {
+    context.addIssue({ code: 'custom', message: 'Noncommitted receipt usage cannot carry provenance or actuals' });
   }
   if ((receipt.operation !== 'agent.spawn' && receipt.childTicketRef !== null) ||
       (receipt.operation === 'agent.spawn' &&

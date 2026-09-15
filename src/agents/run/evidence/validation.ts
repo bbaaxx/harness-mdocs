@@ -572,9 +572,11 @@ function projectReceiptEvidence(envelope: ReceiptEnvelope): ReceiptEvidenceRecor
     mutations: payload.mutations,
     beforeFingerprint: payload.beforeFingerprint,
     afterFingerprint: payload.afterFingerprint,
+    executorCompletionDigest: payload.executorCompletionDigest,
     startedAt: payload.startedAt,
     endedAt: payload.endedAt,
     resultClass: payload.resultClass,
+    preliminaryReceiptDigest: payload.preliminaryReceiptDigest,
     usageReservationId: payload.usageReservationId,
     usageStatus: payload.usageStatus,
     usageFinal: payload.usageFinal ?? null,
@@ -693,6 +695,12 @@ function validateReceiptUsage(
 ): void {
   const authority = authorityBinding(context);
   if (payload.usageReservationId !== context.usage.reservationId) reasons.add('usage-reservation-mismatch');
+  if (payload.preliminaryReceiptDigest !== context.preliminaryReceiptDigest) {
+    reasons.add('receipt-continuity-mismatch');
+  }
+  if (payload.executorCompletionDigest !== context.executorCompletionDigest) {
+    reasons.add('receipt-continuity-mismatch');
+  }
   // Manager exposes ledger reservationId for ticket usage; providerReservationId stays adapter-private.
   if (context.usage.reservationId !== authority.budgetReservationId) {
     reasons.add('trusted-context-invalid');
@@ -732,7 +740,7 @@ function validateReceiptUsage(
       reasons.add('trusted-context-invalid');
     }
     const sampleTime = Date.parse(context.usage.final.timestamp);
-    if (sampleTime < Date.parse(payload.endedAt) || sampleTime > Date.parse(context.receivedAt) ||
+    if (sampleTime < Date.parse(payload.endedAt) ||
         sampleTime > Date.parse(context.usage.deadlineAt)) reasons.add('timestamp-window-invalid');
   }
 }

@@ -568,6 +568,44 @@ export function reconcileBudget(
   return rebuildAccounting(ledger, reservations);
 }
 
+/** Host-internal exact committed reservation projection for report evidence. */
+export function committedBudgetUsage(
+  ledgerValue: unknown,
+  reservationId: string
+): Readonly<{
+  amounts: Readonly<BudgetAmounts>;
+  currency: string;
+  descendantCommitted: Readonly<BudgetAmounts>;
+  actual: Readonly<BudgetAmounts>;
+  startedAt: string;
+  deadlineAt: string;
+  sampleDigest: string;
+}> {
+  const ledger = parseBudgetLedger(ledgerValue);
+  const reservation = ledger.reservations.find(item => item.reservationId === reservationId);
+  if (!reservation) fail('unknown-reservation', `Reservation "${reservationId}" is absent`);
+  if (reservation.status !== 'committed' || reservation.sampleDigest === null) {
+    fail('reservation-unresolved', 'Reservation does not have committed usage');
+  }
+  const children = ledger.reservations.filter(item => item.parentTicketHandleId === reservation.ticketHandleId);
+  const descendantCommitted = Object.fromEntries(BUDGET_DIMENSIONS.map(dimension => [dimension,
+    children.reduce((sum, child) => checkedAdd(
+      sum,
+      amountAt(ledger.accounts.find(item => item.ticketHandleId === child.ticketHandleId)!.committed, dimension),
+      dimension
+    ), 0)
+  ]));
+  return canonicalAuthoritySnapshot({
+    amounts: reservation.amounts,
+    currency: ledger.currency,
+    descendantCommitted,
+    actual: reservation.actual,
+    startedAt: reservation.startedAt,
+    deadlineAt: reservation.deadlineAt,
+    sampleDigest: reservation.sampleDigest
+  });
+}
+
 export function releaseBudget(ledgerValue: unknown, reservationId: string): Readonly<BudgetLedger> {
   const ledger = parseBudgetLedger(ledgerValue);
   const reservation = ledger.reservations.find(item => item.reservationId === reservationId);

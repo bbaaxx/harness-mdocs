@@ -475,6 +475,8 @@ export function createFakeTrustedControlPlane(
           eoLineageActionLimit: 1024,
           usage: {
             reservationId: `fake-budget:${request.handle}`,
+            authorityInstanceId: `sha256:${'4'.repeat(64)}`,
+            usageBindingDigest: `sha256:${'3'.repeat(64)}`,
             status: 'pending', startedAt: at, deadlineAt: expiresAt,
             final: null, sampleDigest: null, amounts: { toolActionsEo: 1024 },
             currency: 'USD', descendantCommitted: {}, actual: {}, measuredUsageRequired: false
