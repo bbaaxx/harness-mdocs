@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MdocsCore } from '../../core';
-import { dispatch as dispatchOperation, indexCheck as indexCheckOperation } from '../../core/operations';
+import { dispatch as dispatchOperation, indexCheck as indexCheckOperation, reset as resetOperation, buildInfo } from '../../core/operations';
 
 export function createOpencodeTools(core: MdocsCore) {
   const { mdocs, workflow, initiatives, search, audit } = core.managers;
@@ -32,6 +32,7 @@ export function createOpencodeTools(core: MdocsCore) {
       execute: async () => {
         try {
           const state = workflow.status();
+          const build = buildInfo();
           const allInitiatives = initiatives.list();
           const activeInitiatives = allInitiatives.filter(initiative => initiative.status === 'active');
           const blocked = initiatives.findBlocked();
@@ -62,6 +63,7 @@ export function createOpencodeTools(core: MdocsCore) {
           }
 
           return {
+            build,
             workflow: {
               currentStep: state.currentStep || 'IDLE',
               activeInitiative: state.activeInitiative || '',
@@ -269,6 +271,31 @@ export function createOpencodeTools(core: MdocsCore) {
             latestProgress: initiative.progressLog.at(-1) || '',
             validation: core.commands.validationResult()
           };
+        } catch (err: any) {
+          return { error: err.message || String(err) };
+        }
+      }
+    }
+    ,
+    mdocs_reset: {
+      description: 'Reset the workflow to IDLE and clear the active initiative (full clean slate). Use to abandon an initiative mid-flight, force-reset for testing, or begin a fresh initiative cycle after COMPLETE.',
+      args: {},
+      execute: async () => {
+        try {
+          return resetOperation(core);
+        } catch (err: any) {
+          return { error: err.message || String(err) };
+        }
+      }
+    },
+    mdocs_advance: {
+      description: 'Advance the workflow to the next step (UNDERSTAND, DISCOVER, CONTEXT, PLAN, EXECUTE, VERIFY, REPORT, COMPLETE). Drives the gates that block Write/Edit before PLAN.',
+      args: {
+        step: z.string().describe('Next workflow step, e.g. PLAN')
+      },
+      execute: async (args: { step: string }) => {
+        try {
+          return await core.commands.execute('workflow.advance', { step: args.step });
         } catch (err: any) {
           return { error: err.message || String(err) };
         }

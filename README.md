@@ -11,6 +11,10 @@ Surface-neutral initiative and wiki memory for AI coding harnesses.
 | pi | extension custom tools | enforced (`tool_call` event) | enforced (`tool_result` event) | prompted |
 | Codex v1 | `mdocs` CLI | advisory (instructions) | command-level | prompted |
 
+All tool-bearing surfaces (OpenCode, Claude Code, pi) register the same canonical tool set: `mdocs`, `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_ingest`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`, `mdocs_advance`, `mdocs_reset`. A contract test (`tests/surfaces/parity.test.ts`) fails CI if any surface drifts. Codex reaches the same capabilities through the `mdocs` CLI instead of native tools.
+
+Every surface reports its build fingerprint (`version` + `gitSha`) — via `mdocs_status` output, the MCP handshake version, or `mdocs --version` — so you can always tell which build a session is running.
+
 ## What It Does
 
 mdocs brings durable structure to AI-assisted development:
@@ -375,6 +379,7 @@ errors. Use `mdocs validate` without `--human` for machine-readable JSON.
 - `harness-mdocs/pi` - pi surface: extension factory, tools, orientation, skills, capability declaration. The pi package manifest (`package.json#pi`) loads the compiled extension at `./dist/surfaces/pi/extension.js`.
 - `mdocs` - CLI command for surfaces that do not expose native tools.
 - `mdocs mcp` - starts the Claude Code MCP server over stdio.
+- `harness-mdocs/agents` - agent contracts, capability registry, and the Run controller/trust runtime. This is a **library API** for programmatic consumers; it is intentionally not exposed as surface tools.
 
 Programmatic API consumers can import from the API subpath:
 

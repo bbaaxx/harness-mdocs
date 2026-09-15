@@ -25,28 +25,18 @@ async function callTool(server: any, name: string, args: Record<string, unknown>
   return cb(args, {});
 }
 
-const EXPECTED_TOOLS = [
-  'mdocs',
-  'mdocs_init',
-  'mdocs_status',
-  'mdocs_validate',
-  'mdocs_search',
-  'mdocs_lookup',
-  'mdocs_dispatch',
-  'mdocs_audit',
-  'mdocs_index_check',
-  'mdocs_resume',
-  'mdocs_advance'
-];
+import { CANONICAL_TOOL_NAMES } from '../parity.test';
+
+const EXPECTED_TOOLS = [...CANONICAL_TOOL_NAMES];
 
 describe('Claude Code MCP server registration', () => {
-  test('registers all 11 mdocs tools', () => {
+  test('registers the canonical mdocs tool set', () => {
     const server = buildMcpServer();
     const names = Object.keys(registeredTools(server));
     for (const expected of EXPECTED_TOOLS) {
       expect(names).toContain(expected);
     }
-    expect(EXPECTED_TOOLS.length).toBe(11);
+    expect(EXPECTED_TOOLS.length).toBe(CANONICAL_TOOL_NAMES.length);
   });
 });
 
@@ -190,7 +180,8 @@ describe('Claude Code MCP stdio startup', () => {
 
       await startMcpServer();
 
-      expect(McpServer).toHaveBeenCalledWith({ name: 'mdocs', version: '1.0.0' });
+      const expectedVersion = require('../../../package.json').version;
+      expect(McpServer).toHaveBeenCalledWith({ name: 'mdocs', version: expectedVersion });
       expect(StdioServerTransport).toHaveBeenCalledTimes(1);
       expect(connect).toHaveBeenCalledWith(transport);
     });
