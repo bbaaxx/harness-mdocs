@@ -13,6 +13,7 @@
 - [Deterministic agent asset generator foundation](generator-foundation.md)
 - [Protected controller storage](protected-controller-storage.md)
 - [Lossless metadata-only mutation design](lossless-metadata-only-mutations.md)
+- [Protected RunController core and fake host driver](run-controller-runtime.md)
 - [Plan-gated autonomous Run behavior — specification 1](plan-gated-autonomous-run-spec-1.md)
 - [Wiki index ownership (directory-v2 opt-in)](wiki-index-ownership.md)
 - [Protected Run action mediation](run-action-mediation.md)
