@@ -45,6 +45,7 @@
 - **Sync GitHub Releases with npm publishing** (done) — sync-github-releases-with-npm-publishing--2026-06-21.md — 2026-06-21 — [release, github-actions, github-releases, npm, publishing]
 - **Prepare release 0.8.1** (done) — prepare-release-0-8-1--2026-08-11.md — 2026-08-11 — [release, 0.8.1, npm, github-actions, github-issue-8]
 - **Add tag based npm publishing** (done) — add-tag-based-npm-publishing--2026-06-19.md — 2026-06-19 — [ci, publishing, npm, release, github-actions]
+- **Release harness-mdocs 2.0.0** (active) — release-2-0-0--2026-09-15.md — 2026-09-15 — [release, 2.0.0, major, migration, agents, run, publishing]
 - **Prepare release 0.5.1** (done) — prepare-release-0-5-1--2026-06-24.md — 2026-06-24 — [release, 0.5.1, consumer-schema, compat]
 - **Fresh Codex Thread Plugin Smoke Test** (done) — fresh-codex-thread-plugin-smoke-test--2026-06-10.md — 2026-06-10 — [codex, plugin, smoke-test]
 - **Workspace-glue / layering documentation** (done) — consumer-layering-docs--2026-06-23.md — 2026-06-23 — [docs, integration, layering, 0.4.3]

@@ -9,6 +9,7 @@
 - [harness-mdocs 0.8.0](harness-mdocs-0-8-0.md)
 - [harness-mdocs 0.7.0](harness-mdocs-0-7-0.md)
 - [harness-mdocs 0.6.0](harness-mdocs-0-6-0.md)
+- [harness-mdocs 0.7.1](harness-mdocs-0-7-1.md)
 - [Tag-based npm publishing](tag-based-npm-publishing.md)
 - [harness-mdocs 0.5.3](harness-mdocs-0-5-3.md)
 - [harness-mdocs 0.4.2](harness-mdocs-0-4-2.md)
