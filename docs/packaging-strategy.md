@@ -65,6 +65,12 @@ Phase 2 will add actual npm publishing on version tags after release checks and 
 
 ## Publish checklist
 
+Version bumps: edit `package.json` only. `scripts/stamp-versions.js` (run by
+`npm run build`, therefore also `prepack`) stamps the version into
+`src/surfaces/claude-code/plugin/.claude-plugin/plugin.json` and
+`.claude-plugin/marketplace.json`. `npm run check:versions` (part of
+`quality`) fails CI if either manifest drifts.
+
 Before publish:
 
 1. Run `npm run release:check` locally or confirm the GitHub `release` environment check passed.

@@ -5,6 +5,7 @@
 - [harness-mdocs 0.8.1](harness-mdocs-0-8-1.md)
 - [harness-mdocs 0.4.1 release](harness-mdocs-0-4-1.md)
 - [harness-mdocs 0.5.1](harness-mdocs-0-5-1.md)
+- [Build-time version stamping (plugin.json + marketplace.json)](version-stamping.md)
 - [harness-mdocs 0.4.0 release prep](harness-mdocs-0-4-0.md)
 - [harness-mdocs 0.8.0](harness-mdocs-0-8-0.md)
 - [harness-mdocs 0.7.0](harness-mdocs-0-7-0.md)

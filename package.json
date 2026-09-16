@@ -73,7 +73,7 @@
     ]
   },
   "scripts": {
-    "build": "node scripts/write-build-info.js && tsc",
+    "build": "node scripts/write-build-info.js && node scripts/stamp-versions.js && tsc",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "lint": "npm run typecheck",
@@ -88,8 +88,9 @@
     "mdocs:validate": "npm run mdocs:lint",
     "generate:agents": "node scripts/generate-agent-assets.js --generate",
     "check:agents": "node scripts/generate-agent-assets.js --check",
+    "check:versions": "node scripts/stamp-versions.js --check",
     "pack:check": "npm pack --dry-run",
-    "quality": "npm run build:claude-plugin && npm run check:agents && npm run lint && npm test && npm run coverage && npm run mdocs:validate",
+    "quality": "npm run build:claude-plugin && npm run check:agents && npm run check:versions && npm run lint && npm test && npm run coverage && npm run mdocs:validate",
     "release:check": "npm run quality && npm run pack:check",
     "build:claude-plugin": "bash scripts/build-claude-plugin.sh",
     "build:claude-plugin:mcp": "esbuild src/surfaces/claude-code/mcp-server.ts --bundle --platform=node --target=node18 --format=cjs --sourcemap --outfile=src/surfaces/claude-code/plugin/dist/cli/mcp-server.js",

@@ -29,7 +29,7 @@
 - **Fix Claude Code manual-install template + CLI help** (done) — fix-claude-code-install-template-and-cli-help--2026-06-22.md — 2026-06-22 — [claude-code, surface, docs, mcp, cli]
 - **Fix pre-release dogfood findings (gitSha, CLI create activation, CLI output contract)** (done) — fix-pre-release-dogfood-findings-gitsha-cli-create-activation-cli-output-contract--2026-09-15.md — 2026-09-15 — [pre-release, dogfood, cli, bug]
 - **G2a overview.md/log.md section grammar + wiki.ts helpers** (done) — g2a-overview-log-grammar-and-helpers--2026-06-23.md — 2026-06-23 — [core, wiki, ingest, compiled-knowledge, 0.5.0, g2a]
-- **Stamp plugin + marketplace versions from package.json at build time** (active) — stamp-plugin-marketplace-versions-from-package-json-at-build-time--2026-09-16.md — 2026-09-16 — [release, build, drift, tech-debt]
+- **Stamp plugin + marketplace versions from package.json at build time** (done) — stamp-plugin-marketplace-versions-from-package-json-at-build-time--2026-09-16.md — 2026-09-16 — [release, build, drift, tech-debt]
 - **Publish harness-mdocs 0.4.1** (done) — publish-harness-mdocs-0-4-1--2026-06-20.md — 2026-06-20 — [release, npm, version-0.4.1, publishing]
 - **User and agent manuals for harness-mdocs 2.0.0** (done) — user-and-agent-manuals-for-harness-mdocs-2-0-0--2026-09-16.md — 2026-09-16 — [docs, 2.0.0, manuals]
 - **Add GitHub Actions CI** (done) — add-github-actions-ci--2026-06-19.md — 2026-06-19 — [ci, github-actions, quality, coverage, automation]
