@@ -31,7 +31,7 @@
 - **G2a overview.md/log.md section grammar + wiki.ts helpers** (done) — g2a-overview-log-grammar-and-helpers--2026-06-23.md — 2026-06-23 — [core, wiki, ingest, compiled-knowledge, 0.5.0, g2a]
 - **Stamp plugin + marketplace versions from package.json at build time** (active) — stamp-plugin-marketplace-versions-from-package-json-at-build-time--2026-09-16.md — 2026-09-16 — [release, build, drift, tech-debt]
 - **Publish harness-mdocs 0.4.1** (done) — publish-harness-mdocs-0-4-1--2026-06-20.md — 2026-06-20 — [release, npm, version-0.4.1, publishing]
-- **User and agent manuals for harness-mdocs 2.0.0** (active) — user-and-agent-manuals-for-harness-mdocs-2-0-0--2026-09-16.md — 2026-09-16 — [docs, 2.0.0, manuals]
+- **User and agent manuals for harness-mdocs 2.0.0** (done) — user-and-agent-manuals-for-harness-mdocs-2-0-0--2026-09-16.md — 2026-09-16 — [docs, 2.0.0, manuals]
 - **Add GitHub Actions CI** (done) — add-github-actions-ci--2026-06-19.md — 2026-06-19 — [ci, github-actions, quality, coverage, automation]
 - **Improve test coverage and lint cleanliness** (done) — improve-test-coverage-and-lint-cleanliness--2026-06-19.md — 2026-06-19 — [tests, coverage, lint, quality, cleanup]
 - **Package hygiene: self-referential devDependency** (done) — remove-self-referential-devdependency--2026-06-23.md — 2026-06-23 — [packaging, hygiene, dependencies, 0.4.3]

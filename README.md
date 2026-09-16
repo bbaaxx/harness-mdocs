@@ -15,6 +15,11 @@ All tool-bearing surfaces (OpenCode, Claude Code, pi) register the same canonica
 
 Every surface reports its build fingerprint (`version` + `gitSha`) — via `mdocs_status` output, the MCP handshake version, or `mdocs --version` — so you can always tell which build a session is running.
 
+## Documentation
+
+- [User Manual](docs/user-manual.md) — install, concepts, workflow, CLI, config, upgrade, troubleshooting.
+- [Agent Manual](docs/agent-manual.md) — tool surface, workflow contract, dispatch, and hygiene for AI agents in an mdocs session.
+
 ## What It Does
 
 mdocs brings durable structure to AI-assisted development:
