@@ -35205,7 +35205,7 @@ var import_fs = require("fs");
 var import_path = require("path");
 
 // src/core/build-info.ts
-var BUILD_GIT_SHA = "2df6313";
+var BUILD_GIT_SHA = "8c4dcf9";
 var BUILD_VERSION = "2.0.0";
 
 // src/core/operations.ts
