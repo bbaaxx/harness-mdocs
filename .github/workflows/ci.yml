@@ -45,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --loglevel=error
 
+      - name: Generate agent assets
+        run: npm run generate:agents
+
       - name: Run quality gates
         run: npm run quality
 
@@ -76,6 +79,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --loglevel=error
+
+      - name: Generate agent assets
+        run: npm run generate:agents
 
       - name: Run quality gates
         run: npm run quality

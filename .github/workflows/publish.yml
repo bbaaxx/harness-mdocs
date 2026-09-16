@@ -71,6 +71,9 @@ jobs:
           echo "RELEASE_TAG=${TAG_NAME}" >> "${GITHUB_ENV}"
           echo "PACKAGE_VERSION=${PACKAGE_VERSION#v}" >> "${GITHUB_ENV}"
 
+      - name: Generate agent assets
+        run: npm run generate:agents
+
       - name: Run release checks
         run: npm run release:check
 
