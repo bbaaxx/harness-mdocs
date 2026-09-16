@@ -681,7 +681,6 @@ describe('ProjectReadContext', () => {
     const target = path.join(fixture.projectRoot, 'special');
     fs.writeFileSync(target, '', 'utf8');
     const context = createProjectReadContext(fixture.projectRoot);
-    const canonicalTarget = fs.realpathSync(target);
     const originalLstat = fs.lstatSync.bind(fs);
     const lstatSpy = jest.spyOn(fs, 'lstatSync').mockImplementation(((
       value: fs.PathLike,
@@ -689,7 +688,7 @@ describe('ProjectReadContext', () => {
     ) => {
       const stats = originalLstat(value, options as never);
       if (
-        path.resolve(String(value)) === canonicalTarget &&
+        path.basename(String(value)) === 'special' &&
         typeof options === 'object' &&
         options.bigint === true
       ) {

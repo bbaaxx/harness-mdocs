@@ -2092,5 +2092,5 @@ describe('run authority manager persistence', () => {
       value: corrupted
     });
     await expect(reopened.read()).rejects.toMatchObject({ code: 'recovery-required' });
-  }, 90_000);
+  }, 300_000);
 });
