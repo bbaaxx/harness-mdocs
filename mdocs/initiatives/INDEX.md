@@ -53,7 +53,7 @@
 - **Release 0.7.1** (done) — release-0-7-1--2026-08-07.md — 2026-08-07 — [release]
 - **Release 0.8.0** (done) — release-0-8-0--2026-08-10.md — 2026-08-10 — [release, 0.8.0, npm, github-actions]
 - **Release harness-mdocs 2.0.0** (done) — release-2-0-0--2026-09-15.md — 2026-09-15 — [release, 2.0.0, major, migration, agents, run, publishing]
-- **Release harness-mdocs 2.1.0** (active) — release-harness-mdocs-2-1-0--2026-09-17.md — 2026-09-17 — [release, 2.1.0, kimi-code, packaging]
+- **Release harness-mdocs 2.1.0** (done) — release-harness-mdocs-2-1-0--2026-09-17.md — 2026-09-17 — [release, 2.1.0, kimi-code, packaging]
 - **Package hygiene: self-referential devDependency** (done) — remove-self-referential-devdependency--2026-06-23.md — 2026-06-23 — [packaging, hygiene, dependencies, 0.4.3]
 - **Stamp plugin + marketplace versions from package.json at build time** (done) — stamp-plugin-marketplace-versions-from-package-json-at-build-time--2026-09-16.md — 2026-09-16 — [release, build, drift, tech-debt]
 - **Sync GitHub Releases with npm publishing** (done) — sync-github-releases-with-npm-publishing--2026-06-21.md — 2026-06-21 — [release, github-actions, github-releases, npm, publishing]

@@ -12,6 +12,7 @@
 - [harness-mdocs 0.7.1](harness-mdocs-0-7-1.md)
 - [harness-mdocs 0.8.0](harness-mdocs-0-8-0.md)
 - [harness-mdocs 0.8.1](harness-mdocs-0-8-1.md)
+- [harness-mdocs 2.1.0](harness-mdocs-2-1-0.md)
 - [Tag-based npm publishing](tag-based-npm-publishing.md)
 - [v2.0.0 Breaking-Change & Migration Matrix (v0.8.1 → HEAD fbd5181)](v2-0-0-migration-matrix.md)
 - [Build-time version stamping (plugin.json + marketplace.json)](version-stamping.md)
