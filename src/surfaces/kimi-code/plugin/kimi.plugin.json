@@ -1,6 +1,6 @@
 {
   "name": "mdocs",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Durable initiative and wiki memory for Kimi Code — MCP tools, workflow-enforcement hooks, skills, and an orchestrator agent.",
   "license": "MIT",
   "author": {

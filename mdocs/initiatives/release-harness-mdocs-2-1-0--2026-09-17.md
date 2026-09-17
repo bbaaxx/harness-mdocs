@@ -8,7 +8,7 @@ owner: ""
 tags: ["release","2.1.0","kimi-code","packaging"]
 related_wiki: ["release/tag-based-npm-publishing","release/version-stamping","docs/surface-release-docs-checklist","reference/kimi-code-surface"]
 priority: "medium"
-next_action: "Run full quality gate on the uncommitted tree (npm run quality + pack:check)"
+next_action: "Review release:check output, then present RC evidence for approval"
 ---
 
 ## Objective
@@ -30,5 +30,6 @@ Prepare and publish harness-mdocs 2.1.0 — the first release shipping the Kimi 
 ## Progress Log
 - [2026-09-17T14:01:43.008Z] Created initiative via mdocs command
 - Context gathered from prior releases. Key findings: (1) entire kimi-code surface + version-stamping + docs work is UNCOMMITTED on main — 2.1.0 must land it first; (2) release flow per release/tag-based-npm-publishing: bump package.json, push main, Release Check, push v2.1.0 tag, approve release env, npm + GitHub Release auto; (3) version stamping (release/version-stamping) now syncs plugin.json + marketplace.json from package.json at build time — verify kimi plugin manifest is covered; (4) CI risks from 2.0.0: check:agents on fresh checkout, Linux-only path mock failures, tight timeouts — all reportedly fixed, re-verify. Plan steps 1-2 written.
+- Steps 1-6 done. Committed pending work in 3 commits (5a28eec feat kimi-code surface, 8a33348 mdocs records, 0086a00 fragment regen). v2.0.0..HEAD inventory: zero breaking changes — src/core, src/cli, api/index, existing surfaces untouched; additive only (kimi-code export, files entry, scripts). Docs audited vs surface-release-docs-checklist: README table/entry-points/tree/usage, user-manual 2.5, agent-manual, packaging-strategy all cover kimi-code; pins bumped to 2.1.0. Version bumped: package.json 2.1.0, stamped into claude plugin.json + kimi.plugin.json + marketplace.json. Added 2.0.0→2.1.0 upgrade note to user-manual. Running release:check now.
 
 ## Artifacts

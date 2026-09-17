@@ -1,6 +1,6 @@
-# Agent Manual — harness-mdocs 2.0.0
+# Agent Manual — harness-mdocs 2.1.0
 
-Operational reference for AI agents running inside an mdocs session. Covers OpenCode, Claude Code, Kimi Code, pi, and Codex-via-CLI. Everything below reflects shipped 2.0.0 source; no aspirational behavior.
+Operational reference for AI agents running inside an mdocs session. Covers OpenCode, Claude Code, Kimi Code, pi, and Codex-via-CLI. Everything below reflects shipped 2.1.0 source; no aspirational behavior.
 
 ---
 

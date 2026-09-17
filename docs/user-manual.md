@@ -1,10 +1,10 @@
-# harness-mdocs 2.0.0 — User Manual
+# harness-mdocs 2.1.0 — User Manual
 
 Surface-neutral initiative and wiki memory for AI coding harnesses.
 
-This manual covers installing and operating `harness-mdocs` 2.0.0 (the npm
+This manual covers installing and operating `harness-mdocs` 2.1.0 (the npm
 package name; the `mdocs` name refers to the memory system and CLI). Every
-behavior described here ships in 2.0.0 — nothing aspirational.
+behavior described here ships in 2.1.0 — nothing aspirational.
 
 ---
 
@@ -105,7 +105,7 @@ Load the package root from `opencode.json`:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["harness-mdocs@2.0.0"]
+  "plugin": ["harness-mdocs@2.1.0"]
 }
 ```
 
@@ -457,6 +457,14 @@ New, **opt-in** additions:
 
 **Migration guide: install 2.0.0, nothing else changes.** Existing `mdocs/`
 data, CLI commands, MCP tools, and surface integrations are untouched.
+
+### 2.0.0 → 2.1.0
+
+Also zero breaking changes — purely additive. 2.1.0 adds the **Kimi Code
+surface** (`harness-mdocs/kimi-code` export, plugin at
+`src/surfaces/kimi-code/plugin`, docs in `docs/kimi-code.md`): the canonical
+13 MCP tools, workflow-enforcement hooks, skills, and the orchestrator
+agent. Existing surfaces, tools, and `mdocs/` data formats are unchanged.
 
 Migrating from the legacy `opencode-mdocs` package instead: replace it with
 `harness-mdocs` in `opencode.json`, restart OpenCode, verify tools and
