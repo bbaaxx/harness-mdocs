@@ -5,6 +5,7 @@ import { createMdocsCore } from '../../src/core';
 import { createOpencodeTools } from '../../src/surfaces/opencode/tools';
 import { createPiTools, PI_TOOL_NAMES } from '../../src/surfaces/pi/tools';
 import { buildMcpServer } from '../../src/surfaces/claude-code/mcp-server';
+import { buildKimiMcpServer } from '../../src/surfaces/kimi-code/mcp-server';
 
 /**
  * Surface-parity contract: every tool-bearing surface must register the same
@@ -66,5 +67,11 @@ describe('surface tool parity', () => {
 
   test('claude-code MCP registers the canonical tool set', () => {
     expect(mcpToolNames().sort()).toEqual([...CANONICAL_TOOL_NAMES].sort());
+  });
+
+  test('kimi-code MCP registers the canonical tool set', () => {
+    const server: any = buildKimiMcpServer();
+    const tools = server._registeredTools ?? server.server?._registeredTools ?? {};
+    expect(Object.keys(tools).sort()).toEqual([...CANONICAL_TOOL_NAMES].sort());
   });
 });

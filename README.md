@@ -2,16 +2,17 @@
 
 Surface-neutral initiative and wiki memory for AI coding harnesses.
 
-`harness-mdocs` packages the shared mdocs core plus adapters for host tools such as OpenCode, Codex, Claude Code, and pi. The core owns durable initiative files, wiki entries, workflow state, validation, search, audit logging, and command behavior. Surfaces translate that core into the capabilities each host can actually provide.
+`harness-mdocs` packages the shared mdocs core plus adapters for host tools such as OpenCode, Codex, Claude Code, pi, and Kimi Code. The core owns durable initiative files, wiki entries, workflow state, validation, search, audit logging, and command behavior. Surfaces translate that core into the capabilities each host can actually provide.
 
 | Surface | Command access | Workflow enforcement | Audit | Subagent dispatch |
 | --- | --- | --- | --- | --- |
 | OpenCode | native custom tools | enforced (hooks) | enforced (hooks) | native |
 | Claude Code | MCP tools (+ CLI fallback) | enforced (PreToolUse hook) | enforced (PostToolUse hook) | native (`Task`) |
 | pi | extension custom tools | enforced (`tool_call` event) | enforced (`tool_result` event) | prompted |
+| Kimi Code | MCP tools (`mcp__mdocs__*`) | enforced (`PreToolUse` hook) | enforced (`PostToolUse` hook) | native (`Agent`) |
 | Codex v1 | `mdocs` CLI | advisory (instructions) | command-level | prompted |
 
-All tool-bearing surfaces (OpenCode, Claude Code, pi) register the same canonical tool set: `mdocs`, `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_ingest`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`, `mdocs_advance`, `mdocs_reset`. A contract test (`tests/surfaces/parity.test.ts`) fails CI if any surface drifts. Codex reaches the same capabilities through the `mdocs` CLI instead of native tools.
+All tool-bearing surfaces (OpenCode, Claude Code, pi, Kimi Code) register the same canonical tool set: `mdocs`, `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_ingest`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`, `mdocs_advance`, `mdocs_reset`. A contract test (`tests/surfaces/parity.test.ts`) fails CI if any surface drifts. Codex reaches the same capabilities through the `mdocs` CLI instead of native tools.
 
 Every surface reports its build fingerprint (`version` + `gitSha`) — via `mdocs_status` output, the MCP handshake version, or `mdocs --version` — so you can always tell which build a session is running.
 
@@ -26,7 +27,7 @@ mdocs brings durable structure to AI-assisted development:
 
 1. **Tracks work as initiatives** - persistent task files with objective, plan, progress, blockers, and handoff state.
 2. **Builds a project wiki** - stable knowledge that survives thread restarts and can be linked back to initiatives.
-3. **Shares one memory model across harnesses** - OpenCode, Codex, pi, and future surfaces use the same file formats and command registry.
+3. **Shares one memory model across harnesses** - OpenCode, Codex, pi, Kimi Code, and future surfaces use the same file formats and command registry.
 4. **Validates the graph** - checks initiatives, wiki entries, backlinks, completion gates, and stable learning requirements.
 5. **Assembles handoff context** - combines initiative state, related wiki, search-ranked memory, and recent audit events for subagents or new sessions.
 
@@ -49,7 +50,8 @@ npm install --save-dev harness-mdocs
 
 Node.js 18 or newer is required.
 
-For hosts that load plugins (OpenCode, Claude Code, Codex/pi package surfaces),
+For hosts that load plugins (OpenCode, Claude Code, Codex/pi, Kimi Code
+package surfaces),
 installing into a running session does not retroactively register tools, hooks,
 or the SessionStart banner. Start a fresh session after install/update; missing
 `mdocs_*` MCP tools before restart is expected.
@@ -84,15 +86,14 @@ For OpenCode, load the package root from `opencode.json`:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["harness-mdocs@0.4.0"]
+  "plugin": ["harness-mdocs@2.0.0"]
 }
 ```
 
 Pinning the exact npm version is recommended for project configs. OpenCode
 installs npm plugins into `~/.cache/opencode/packages/` at startup, and a
 previous `harness-mdocs@latest` cache can remain stale across restarts. To
-upgrade later, change the pinned version (for example, `harness-mdocs@0.5.0`)
-and restart OpenCode.
+upgrade later, change the pinned version and restart OpenCode.
 
 If migrating from an older `harness-mdocs@latest` or `opencode-mdocs` config,
 remove stale cached packages before restarting:
@@ -105,10 +106,10 @@ rm -rf ~/.cache/opencode/packages/opencode-mdocs@*
 Verify the cached plugin version after restart:
 
 ```bash
-node -p "require(process.env.HOME + '/.cache/opencode/packages/harness-mdocs@0.4.0/node_modules/harness-mdocs/package.json').version"
+node -p "require(process.env.HOME + '/.cache/opencode/packages/harness-mdocs@2.0.0/node_modules/harness-mdocs/package.json').version"
 ```
 
-The command should print `0.4.0`.
+The command should print `2.0.0`.
 
 You can also use the explicit OpenCode surface when you do not need a pinned
 npm version:
@@ -120,7 +121,7 @@ npm version:
 }
 ```
 
-For pinned installs, prefer the package root (`harness-mdocs@0.4.0`). It loads
+For pinned installs, prefer the package root (`harness-mdocs@2.0.0`). It loads
 the OpenCode surface by default.
 
 Restart OpenCode after changing plugin config. OpenCode loads plugin config at startup.
@@ -252,7 +253,7 @@ Then add the CLAUDE.md snippet (also in `assets/templates/`) and copy the three 
 
 What the Claude Code surface provides:
 
-- **MCP server** (`mdocs mcp`) exposing all mdocs commands as tools: the aggregate `mdocs` tool plus `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`, `mdocs_reset`.
+- **MCP server** (`mdocs mcp`) exposing all mdocs commands as tools: the aggregate `mdocs` tool plus `mdocs_init`, `mdocs_status`, `mdocs_validate`, `mdocs_search`, `mdocs_lookup`, `mdocs_dispatch`, `mdocs_ingest`, `mdocs_audit`, `mdocs_index_check`, `mdocs_resume`, `mdocs_advance`, `mdocs_reset`.
 - **SessionStart hook** that injects a compact mdocs orientation banner (initiative counts by status, the active initiative id/title + workflow step, wiki page count, and a pointer to `mdocs_status`) at the start of every fresh or resumed session. The hook fails open — a hook error never wedges the session. A matching **PreCompact hook** re-emits the banner so orientation survives compaction.
 - **PreToolUse hook** that blocks `Write`/`Edit` before the `PLAN` step (edits under `./mdocs/` are always allowed). `Bash` is audited but not gated by content. The hook fails open — a hook error never wedges your session.
 - **PostToolUse hook** that records audit events, serialized under a lock so Claude Code's parallel tool execution does not lose updates.
@@ -294,6 +295,29 @@ What the pi surface provides:
 - **Skills** (`mdocs-workflow`, `mdocs-initiative`, `mdocs-orchestrator`) adapted for pi and an `AGENTS.md`/`CLAUDE.md` snippet template.
 
 pi has no native subagent primitive, so `mdocs_dispatch` returns an assembled context bundle to carry forward manually (paste into a new session or another invocation). A future version may add a `/mdocs-subagent` command that automates the session handoff.
+
+## Kimi Code Usage
+
+Kimi Code is a Tier 3 surface — full host-level enforcement, on par with OpenCode and Claude Code. It integrates through a Kimi plugin (MCP server declaration, `PreToolUse`/`PostToolUse`/`SessionStart` hooks, skills, and an orchestrator agent). See [docs/kimi-code.md](docs/kimi-code.md) for the full guide.
+
+Install the package, then install the bundled plugin from the Kimi Code TUI:
+
+```bash
+npm install --save-dev harness-mdocs
+```
+
+```
+/plugins install ./node_modules/harness-mdocs/src/surfaces/kimi-code/plugin
+```
+
+Then `/reload` or start a new session. The plugin ships self-contained bundles (`esbuild`, no external requires) for the MCP server and the three hooks; hook commands run relative to the plugin root.
+
+What the Kimi Code surface provides:
+
+- **MCP tools** (`mcp__mdocs__*`): the same canonical 13-tool set, discovered via the plugin manifest's `mcpServers` declaration or a manual `.kimi-code/mcp.json`.
+- **`PreToolUse` hook** that blocks `Write`/`Edit` before the `PLAN` step via exit 2 + stderr (edits under `./mdocs/` are always allowed). `Bash` is audited but not gated by content. The hook fails open — only an explicit, successful gate denial blocks.
+- **`PostToolUse` hook** that appends audit events, and a **`SessionStart` hook** that emits a compact orientation banner into the session context.
+- **Skills** (`mdocs-workflow`, `mdocs-initiative`, `mdocs-orchestrator`) in Kimi `SKILL.md` format and a **`mdocs-orchestrator` agent** — Kimi plugins can ship agents, so subagent dispatch is native (`Agent` tool) with `mdocs_dispatch` assembling the handoff context.
 
 ## Enforcement
 
@@ -382,6 +406,7 @@ errors. Use `mdocs validate` without `--human` for machine-readable JSON.
 - `harness-mdocs/codex` - Codex v1 surface metadata and plugin packaging.
 - `harness-mdocs/claude-code` - Claude Code surface: MCP server, hooks, translation, capability declaration.
 - `harness-mdocs/pi` - pi surface: extension factory, tools, orientation, skills, capability declaration. The pi package manifest (`package.json#pi`) loads the compiled extension at `./dist/surfaces/pi/extension.js`.
+- `harness-mdocs/kimi-code` - Kimi Code surface: MCP server re-export, hook handlers/entrypoints, translation, orientation, skills, capability declaration. The Kimi plugin manifest ships at `src/surfaces/kimi-code/plugin/kimi.plugin.json` with self-contained esbuild bundles under `plugin/dist/`.
 - `mdocs` - CLI command for surfaces that do not expose native tools.
 - `mdocs mcp` - starts the Claude Code MCP server over stdio.
 - `harness-mdocs/agents` - agent contracts, capability registry, and the Run controller/trust runtime. This is a **library API** for programmatic consumers; it is intentionally not exposed as surface tools.
@@ -429,7 +454,9 @@ IDLE -> UNDERSTAND -> DISCOVER -> CONTEXT -> PLAN -> EXECUTE -> VERIFY -> REPORT
 | `REPORT` | Update progress, artifacts, and durable wiki learning. |
 | `COMPLETE` | Mark the initiative done after verification. |
 
-OpenCode can enforce parts of this workflow through hooks. Codex v1 follows it through skill instructions and CLI-backed state.
+OpenCode, Claude Code, pi, and Kimi Code can enforce parts of this workflow
+through hooks. Codex v1 follows it through skill instructions and CLI-backed
+state.
 
 ## Initiatives
 
@@ -587,10 +614,13 @@ When loaded in OpenCode, the plugin exposes custom tools backed by the same core
 - `mdocs_search` - search initiatives and wiki
 - `mdocs_lookup` - resolve an initiative by id, title, slug, or filename
 - `mdocs_dispatch` - assemble handoff context
+- `mdocs_ingest` - batch-compose wiki pages and compiled views
 - `mdocs_audit` - query audit events
 - `mdocs_resume` - resume active or named work
 - `mdocs_validate` - validate memory integrity
 - `mdocs_index_check` - check or repair generated indices
+- `mdocs_advance` - advance the workflow step
+- `mdocs_reset` - reset the workflow to IDLE
 
 ## Architecture
 
@@ -602,7 +632,9 @@ harness-mdocs/
 │   └── surfaces/
 │       ├── codex/            # Codex v1 metadata and packaging
 │       ├── claude-code/      # MCP server, hooks, translation, assets
-│       └── opencode/         # OpenCode adapter, hooks, tools
+│       ├── opencode/         # OpenCode adapter, hooks, tools
+│       ├── pi/               # pi extension, event handlers, skills
+│       └── kimi-code/        # Kimi plugin manifest, hooks, MCP server, skills
 ├── agents/                   # OpenCode agent asset
 ├── prompts/                  # prompt assets
 ├── skills/                   # bundled skills
@@ -622,6 +654,8 @@ npm test
 npm run test:codex
 npm run test:opencode
 npm run test:claude-code
+npm run test:pi
+npm run test:kimi-code
 npm run coverage
 npm run mdocs:lint
 npm run quality

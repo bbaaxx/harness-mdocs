@@ -6891,9 +6891,10 @@ var require_dist = __commonJS({
   }
 });
 
-// src/surfaces/claude-code/mcp-server.ts
+// src/surfaces/kimi-code/mcp-server.ts
 var mcp_server_exports = {};
 __export(mcp_server_exports, {
+  buildKimiMcpServer: () => buildKimiMcpServer,
   buildMcpServer: () => buildMcpServer,
   startMcpServer: () => startMcpServer
 });
@@ -35452,8 +35453,21 @@ if (require.main === module) {
     process.exit(1);
   });
 }
+
+// src/surfaces/kimi-code/mcp-server.ts
+function buildKimiMcpServer() {
+  return buildMcpServer();
+}
+if (require.main === module) {
+  startMcpServer().catch((err) => {
+    process.stderr.write(`mdocs kimi mcp failed: ${err?.message || err}
+`);
+    process.exit(1);
+  });
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  buildKimiMcpServer,
   buildMcpServer,
   startMcpServer
 });

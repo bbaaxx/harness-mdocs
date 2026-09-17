@@ -14,6 +14,7 @@
 - `harness-mdocs/codex` — Codex v1 surface metadata and packaging.
 - `harness-mdocs/claude-code` — Claude Code surface: MCP server, hooks, skills, capability declaration.
 - `harness-mdocs/pi` — pi surface: extension factory, custom tools, event handlers, orientation, skills, capability declaration. The `pi` manifest in `package.json` loads `./dist/surfaces/pi/extension.js` and `./src/surfaces/pi/assets/skills`.
+- `harness-mdocs/kimi-code` — Kimi Code surface: MCP server re-export, hook entrypoints, translation, orientation, skills, capability declaration. The Kimi plugin ships at `src/surfaces/kimi-code/plugin/` (`kimi.plugin.json` manifest + esbuild-bundled `dist/` hooks and MCP server, version-stamped from `package.json`).
 - `mdocs` — CLI command for surfaces without native tool hooks.
 
 ## CLI availability
@@ -56,7 +57,7 @@ Do not require `opencode-mdocs` beside `harness-mdocs` for new installs. If back
 
 Phase 1 validates integration and pre-publish readiness without publishing:
 
-1. Pull requests targeting `staging` run `npm run quality` on Node 18 and 20.
+1. Pull requests targeting `staging` run `npm run quality` on Node 18, 20, and 24.
 2. Pushes to `staging` run `npm run quality` in the GitHub `staging` environment.
 3. Pushes to `main` run `npm run release:check` in the GitHub `release` environment.
 4. Version tags matching `v*` also run `npm run release:check` in the `release` environment.
@@ -67,14 +68,15 @@ Phase 2 will add actual npm publishing on version tags after release checks and 
 
 Version bumps: edit `package.json` only. `scripts/stamp-versions.js` (run by
 `npm run build`, therefore also `prepack`) stamps the version into
-`src/surfaces/claude-code/plugin/.claude-plugin/plugin.json` and
+`src/surfaces/claude-code/plugin/.claude-plugin/plugin.json`,
+`src/surfaces/kimi-code/plugin/kimi.plugin.json`, and
 `.claude-plugin/marketplace.json`. `npm run check:versions` (part of
-`quality`) fails CI if either manifest drifts.
+`quality`) fails CI if any manifest drifts.
 
 Before publish:
 
 1. Run `npm run release:check` locally or confirm the GitHub `release` environment check passed.
-2. Inspect the dry-run tarball contents for `dist`, `agents`, `skills`, `prompts`, `templates`, `src/surfaces/pi`, README, and LICENSE.
+2. Inspect the dry-run tarball contents for `dist`, `agents`, `skills`, `prompts`, `docs`, `.claude-plugin`, `src/surfaces/codex/plugin`, `src/surfaces/claude-code/assets`, `src/surfaces/claude-code/plugin`, `src/surfaces/pi`, `src/surfaces/kimi-code`, README, and LICENSE.
 3. Confirm the package metadata still includes `bin.mdocs` and the `pi` manifest points at `./dist/surfaces/pi/extension.js`.
 
 After publish and replacement in a consuming folder:
@@ -92,3 +94,14 @@ After publish, install the published package and smoke-test the pi surface:
 3. Confirm the three `mdocs-*` skills appear in `/skill:` completion.
 4. Confirm `write` is blocked before `PLAN` (advance with `mdocs_advance` to `PLAN` to unblock).
 5. `pi remove npm:harness-mdocs` to uninstall.
+
+### Kimi Code dogfood
+
+After publish (or from a built checkout), smoke-test the Kimi Code surface:
+
+1. `npm install --save-dev harness-mdocs` in a scratch project (or `npm run build` in a checkout).
+2. `/plugins install ./node_modules/harness-mdocs/src/surfaces/kimi-code/plugin`, then `/reload`.
+3. Confirm the `mdocs_status` MCP tool is callable and returns orientation.
+4. Confirm the three `mdocs-*` skills appear in `/skill:` completion and `mdocs-orchestrator` appears as a delegable agent.
+5. Confirm `Write` is blocked before `PLAN` (advance with `mdocs_advance` to `PLAN` to unblock).
+6. `/plugins remove mdocs` to uninstall.

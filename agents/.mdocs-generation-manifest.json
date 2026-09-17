@@ -60,9 +60,39 @@
       "byteDigest": "sha256:703355dcc0bcb5fccef2718e135652215df5a02b99fbb6ba23fdea55835a9504"
     },
     {
+      "id": "kimi.agent.orchestrator",
+      "path": "src/generation/fragments/kimi-agent-orchestrator.md",
+      "byteDigest": "sha256:6d89c19d17c317c30c510795feeafcd62946a6ba2e90d2a0d83f5758e7ac176b"
+    },
+    {
+      "id": "kimi.skill.initiative",
+      "path": "src/generation/fragments/kimi-skill-initiative.md",
+      "byteDigest": "sha256:ea94569a7fbc2b92b263fca4c45ade8f93cc40c629f58988e6a8adf8b1d12973"
+    },
+    {
+      "id": "kimi.skill.orchestrator",
+      "path": "src/generation/fragments/kimi-skill-orchestrator.md",
+      "byteDigest": "sha256:8b84b19b4dacee4cab41a3616fc9d4902035d3468cf73c75122b382a75dd0acb"
+    },
+    {
+      "id": "kimi.skill.workflow",
+      "path": "src/generation/fragments/kimi-skill-workflow.md",
+      "byteDigest": "sha256:ad3df3c910894484a736d2649c5375f68915e26e96b153e4a58887b3febb4b08"
+    },
+    {
+      "id": "kimi.template.mcp",
+      "path": "src/generation/fragments/kimi-template-mcp.json",
+      "byteDigest": "sha256:0432a5999ec4b4f9da122f16f9baa5c3c84d9c57481d2e452b63b6529f93a0e5"
+    },
+    {
+      "id": "kimi.template.memory",
+      "path": "src/generation/fragments/kimi-template-memory.md",
+      "byteDigest": "sha256:9c67c9d45f0f0cae5013729c844df15bae6af69eb66a050498e1a05683d15448"
+    },
+    {
       "id": "opencode.agent.orchestrator",
       "path": "src/generation/fragments/opencode-agent-orchestrator.md",
-      "byteDigest": "sha256:d454f76c0edd1a15a9405fed4d057c59e1afd9eed20dda5cfa1233d773660ba0"
+      "byteDigest": "sha256:7966b7eaaf134676d81970b13ccbf353e0754a73ea655b5b3f9462a34ba6569e"
     },
     {
       "id": "opencode.prompt.initiative",
@@ -147,13 +177,57 @@
     {
       "schemaVersion": 2,
       "generatorVersion": "2.0.0",
+      "ownershipId": "asset.kimi.code.agents.mdocs.orchestrator.md",
+      "outputPath": ".kimi-code/agents/mdocs-orchestrator.md",
+      "sourceIds": [
+        "kimi.agent.orchestrator"
+      ],
+      "byteDigest": "sha256:6d89c19d17c317c30c510795feeafcd62946a6ba2e90d2a0d83f5758e7ac176b",
+      "provenanceDigest": "sha256:52b324b40c97b4845e6cfd5c39e5048b730f42f3cfb870634de8f439d0c23d4c"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.kimi.code.skills.mdocs.initiative.skill.md",
+      "outputPath": ".kimi-code/skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.initiative"
+      ],
+      "byteDigest": "sha256:ea94569a7fbc2b92b263fca4c45ade8f93cc40c629f58988e6a8adf8b1d12973",
+      "provenanceDigest": "sha256:3dd6c65177396bb46d654d0935abf38a7cfeff501a0d1c02994a79b783184c66"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.kimi.code.skills.mdocs.orchestrator.skill.md",
+      "outputPath": ".kimi-code/skills/mdocs-orchestrator/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.orchestrator"
+      ],
+      "byteDigest": "sha256:8b84b19b4dacee4cab41a3616fc9d4902035d3468cf73c75122b382a75dd0acb",
+      "provenanceDigest": "sha256:c5aebdb9cca333b8870cbf5dd384e979aef815c5cec7adb38adf33b7a9464e57"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.kimi.code.skills.mdocs.workflow.skill.md",
+      "outputPath": ".kimi-code/skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.workflow"
+      ],
+      "byteDigest": "sha256:ad3df3c910894484a736d2649c5375f68915e26e96b153e4a58887b3febb4b08",
+      "provenanceDigest": "sha256:8d1af9d8c1ed362275066a2c8706fbf767f2c6822f068569ac58e99a22452a6d"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
       "ownershipId": "asset.agents.mdocs.orchestrator.md",
       "outputPath": "agents/mdocs-orchestrator.md",
       "sourceIds": [
         "opencode.agent.orchestrator"
       ],
-      "byteDigest": "sha256:d454f76c0edd1a15a9405fed4d057c59e1afd9eed20dda5cfa1233d773660ba0",
-      "provenanceDigest": "sha256:7bee5d2282ade12cbd4d7e0fd1abde7587ff464e456c8aca9f2a3240db3f5c2c"
+      "byteDigest": "sha256:7966b7eaaf134676d81970b13ccbf353e0754a73ea655b5b3f9462a34ba6569e",
+      "provenanceDigest": "sha256:58dd0573713a8cdf3a86ecddc2f081b47ea5bc3c6cfed0c6399701b22a371ae1"
     },
     {
       "schemaVersion": 2,
@@ -367,6 +441,116 @@
     {
       "schemaVersion": 2,
       "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.assets.agents.mdocs.orchestrator.md",
+      "outputPath": "src/surfaces/kimi-code/assets/agents/mdocs-orchestrator.md",
+      "sourceIds": [
+        "kimi.agent.orchestrator"
+      ],
+      "byteDigest": "sha256:6d89c19d17c317c30c510795feeafcd62946a6ba2e90d2a0d83f5758e7ac176b",
+      "provenanceDigest": "sha256:5298992567bebf688f497d5502d977215cf5e8957abd504bc0d763c7133549b5"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.assets.skills.mdocs.initiative.skill.md",
+      "outputPath": "src/surfaces/kimi-code/assets/skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.initiative"
+      ],
+      "byteDigest": "sha256:ea94569a7fbc2b92b263fca4c45ade8f93cc40c629f58988e6a8adf8b1d12973",
+      "provenanceDigest": "sha256:04fd43d9061b47738db23bcd788ca983a8bdc4c96549fa4ee7bc2e96bc793c91"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.assets.skills.mdocs.orchestrator.skill.md",
+      "outputPath": "src/surfaces/kimi-code/assets/skills/mdocs-orchestrator/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.orchestrator"
+      ],
+      "byteDigest": "sha256:8b84b19b4dacee4cab41a3616fc9d4902035d3468cf73c75122b382a75dd0acb",
+      "provenanceDigest": "sha256:b689b6f5863f1a27e25ab39dbaa33dcae5bb9c4bedec46e802a1e49500a6fa70"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.assets.skills.mdocs.workflow.skill.md",
+      "outputPath": "src/surfaces/kimi-code/assets/skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.workflow"
+      ],
+      "byteDigest": "sha256:ad3df3c910894484a736d2649c5375f68915e26e96b153e4a58887b3febb4b08",
+      "provenanceDigest": "sha256:876c8aa78ea1794822382185d3ebd2b78c58ca6443e4e0ac40a0586ae1bd4716"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.assets.templates.kimi.agents.md.snippet.md",
+      "outputPath": "src/surfaces/kimi-code/assets/templates/kimi-agents-md-snippet.md",
+      "sourceIds": [
+        "kimi.template.memory"
+      ],
+      "byteDigest": "sha256:9c67c9d45f0f0cae5013729c844df15bae6af69eb66a050498e1a05683d15448",
+      "provenanceDigest": "sha256:bc71eb9d6fd913a0b2c255445e7a22053f06dc9d9229062810cef1653707be7e"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.assets.templates.kimi.mcp.json",
+      "outputPath": "src/surfaces/kimi-code/assets/templates/kimi-mcp.json",
+      "sourceIds": [
+        "kimi.template.mcp"
+      ],
+      "byteDigest": "sha256:0432a5999ec4b4f9da122f16f9baa5c3c84d9c57481d2e452b63b6529f93a0e5",
+      "provenanceDigest": "sha256:ebcce9e257879ab5312802a1dafffbf07a2d804225ce330e1ae5959992dbd653"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.plugin.agents.mdocs.orchestrator.md",
+      "outputPath": "src/surfaces/kimi-code/plugin/agents/mdocs-orchestrator.md",
+      "sourceIds": [
+        "kimi.agent.orchestrator"
+      ],
+      "byteDigest": "sha256:6d89c19d17c317c30c510795feeafcd62946a6ba2e90d2a0d83f5758e7ac176b",
+      "provenanceDigest": "sha256:5dabec9bf2099b06c1444ac8cfb93ae297f09dde3d4192bbd0e44bd88eda4b2d"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.plugin.skills.mdocs.initiative.skill.md",
+      "outputPath": "src/surfaces/kimi-code/plugin/skills/mdocs-initiative/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.initiative"
+      ],
+      "byteDigest": "sha256:ea94569a7fbc2b92b263fca4c45ade8f93cc40c629f58988e6a8adf8b1d12973",
+      "provenanceDigest": "sha256:2395e9bd0f129eb31cd9a2c2b2e5d70b71f63421bdc755d1a458df1468b9b59d"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.plugin.skills.mdocs.orchestrator.skill.md",
+      "outputPath": "src/surfaces/kimi-code/plugin/skills/mdocs-orchestrator/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.orchestrator"
+      ],
+      "byteDigest": "sha256:8b84b19b4dacee4cab41a3616fc9d4902035d3468cf73c75122b382a75dd0acb",
+      "provenanceDigest": "sha256:cf75b7cd7e514fcecb7338b09663800c4578d66d8cb5aecebe395c63a157731b"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
+      "ownershipId": "asset.src.surfaces.kimi.code.plugin.skills.mdocs.workflow.skill.md",
+      "outputPath": "src/surfaces/kimi-code/plugin/skills/mdocs-workflow/SKILL.md",
+      "sourceIds": [
+        "kimi.skill.workflow"
+      ],
+      "byteDigest": "sha256:ad3df3c910894484a736d2649c5375f68915e26e96b153e4a58887b3febb4b08",
+      "provenanceDigest": "sha256:0d2e5be441e08b115cefca693d880cf7c3800f52576c2383be31cba359160087"
+    },
+    {
+      "schemaVersion": 2,
+      "generatorVersion": "2.0.0",
       "ownershipId": "asset.src.surfaces.pi.assets.skills.mdocs.initiative.skill.md",
       "outputPath": "src/surfaces/pi/assets/skills/mdocs-initiative/SKILL.md",
       "sourceIds": [
@@ -409,5 +593,5 @@
       "provenanceDigest": "sha256:902649ee7c1714ca231b72af87fbcc55eead4b1790b079319bfbeaef1c71196c"
     }
   ],
-  "manifestDigest": "sha256:5863bb1d9e2568bcf088a02559848da0697a610c7d78e42b2b9b5809d04c75d0"
+  "manifestDigest": "sha256:984b5b1707f530a302dddbdaafe36615863b77f3357595e2a8b4323c1f5a93a0"
 }

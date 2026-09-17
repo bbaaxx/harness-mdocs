@@ -240,6 +240,26 @@ banner via `before_agent_start`. pi has no native subagent primitive;
 `mdocs_dispatch` returns a context bundle you carry forward manually. Full
 guide: `docs/pi-surface.md`.
 
+### 2.5 Kimi Code
+
+Kimi Code is a Tier 3 surface with full host-level enforcement, installed as
+a Kimi plugin from the manifest bundled in the package:
+
+```bash
+npm install --save-dev harness-mdocs
+```
+
+```
+/plugins install ./node_modules/harness-mdocs/src/surfaces/kimi-code/plugin
+```
+
+Then `/reload` or start a new session. The plugin registers the MCP server
+(the canonical 13 tools as `mcp__mdocs__*`), the `PreToolUse`/`PostToolUse`/
+`SessionStart` hooks, the three `mdocs-*` skills, and the
+`mdocs-orchestrator` agent. Plugin installs are currently **per-user**, not
+per-project. Manual wiring (`.kimi-code/mcp.json`, `config.toml` hooks,
+skills/agents) is documented in `docs/kimi-code.md`.
+
 ---
 
 ## 3. Core concepts: the workflow

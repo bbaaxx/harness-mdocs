@@ -1,0 +1,45 @@
+{
+  "name": "mdocs",
+  "version": "2.0.0",
+  "description": "Durable initiative and wiki memory for Kimi Code — MCP tools, workflow-enforcement hooks, skills, and an orchestrator agent.",
+  "license": "MIT",
+  "author": {
+    "name": "bbaaxx"
+  },
+  "keywords": ["kimi-code", "mdocs", "memory", "workflow", "wiki", "initiatives"],
+  "interface": {
+    "displayName": "Mdocs",
+    "shortDescription": "Initiative and wiki memory with enforced workflow gates"
+  },
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "sessionStart": {
+    "skill": "mdocs-workflow"
+  },
+  "mcpServers": {
+    "mdocs": {
+      "command": "node",
+      "args": ["./dist/mcp-server.js"]
+    }
+  },
+  "hooks": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Write|Edit|Bash",
+      "command": "node ./dist/hooks/pre-tool-use.js",
+      "timeout": 10
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Write|Edit|Bash|Agent|AgentSwarm",
+      "command": "node ./dist/hooks/post-tool-use.js",
+      "timeout": 10
+    },
+    {
+      "event": "SessionStart",
+      "matcher": "startup|resume",
+      "command": "node ./dist/hooks/session-start.js",
+      "timeout": 10
+    }
+  ]
+}

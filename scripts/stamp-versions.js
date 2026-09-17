@@ -2,6 +2,7 @@
 // Stamps the package.json version into derived manifests so package.json stays
 // the single source of truth:
 //   - src/surfaces/claude-code/plugin/.claude-plugin/plugin.json (.version)
+//   - src/surfaces/kimi-code/plugin/kimi.plugin.json (.version)
 //   - .claude-plugin/marketplace.json (.plugins[].version)
 // Idempotent: files already in sync are left untouched (git stays clean).
 // --check: report drift and exit 1 without writing (for CI / quality gate).
@@ -13,6 +14,7 @@ const checkOnly = process.argv.includes('--check');
 
 const TARGETS = [
   'src/surfaces/claude-code/plugin/.claude-plugin/plugin.json',
+  'src/surfaces/kimi-code/plugin/kimi.plugin.json',
   '.claude-plugin/marketplace.json',
 ];
 

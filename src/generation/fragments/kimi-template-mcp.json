@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mdocs": {
+      "command": "node",
+      "args": ["./node_modules/harness-mdocs/dist/cli/index.js", "mcp"]
+    }
+  }
+}

@@ -65,3 +65,7 @@ Use the `mdocs` custom tool for all initiative and wiki operations. Call format:
 - `mdocs_search` — Full-text search across initiatives and wiki
 - `mdocs_validate` — Standalone validation (same as `mdocs` validate command)
 - `mdocs_audit` — Query audit log for events
+- `mdocs_index_check` — Check (or repair) index consistency
+- `mdocs_ingest` — Batch-compose wiki pages + compiled views from caller-supplied operations
+- `mdocs_advance` — Advance the workflow to the next step
+- `mdocs_reset` — Reset workflow to IDLE and clear the active initiative

@@ -1,12 +1,12 @@
 # Agent Manual — harness-mdocs 2.0.0
 
-Operational reference for AI agents running inside an mdocs session. Covers OpenCode, Claude Code, pi, and Codex-via-CLI. Everything below reflects shipped 2.0.0 source; no aspirational behavior.
+Operational reference for AI agents running inside an mdocs session. Covers OpenCode, Claude Code, Kimi Code, pi, and Codex-via-CLI. Everything below reflects shipped 2.0.0 source; no aspirational behavior.
 
 ---
 
 ## 1. Tool Surface (Canonical 13)
 
-Every tool-bearing surface (OpenCode, Claude Code, pi) registers the same canonical tool set. `tests/surfaces/parity.test.ts` (`CANONICAL_TOOL_NAMES`) fails CI if any surface drifts. Codex is excluded by design — it is a CLI+skills surface with no tool registration; it reaches the same capabilities through the `mdocs` CLI.
+Every tool-bearing surface (OpenCode, Claude Code, Kimi Code, pi) registers the same canonical tool set. `tests/surfaces/parity.test.ts` (`CANONICAL_TOOL_NAMES`) fails CI if any surface drifts. Codex is excluded by design — it is a CLI+skills surface with no tool registration; it reaches the same capabilities through the `mdocs` CLI.
 
 | Tool | Purpose |
 | --- | --- |
@@ -119,7 +119,7 @@ Procedure:
 1. Call `mdocs_dispatch({ initiativeId })` (omit `initiativeId` to use the active initiative).
 2. It assembles the handoff context via `SubagentAssembler.assemble` (`src/core/subagent.ts`): objective, plan checklist, handoff summary, next action, blockers, progress log, artifacts, **Retrieved Memory** (search-ranked, top 5, scored, with snippets), **Related Wiki** (full content of `related_wiki` entries), **Recent Activity** (last 5 audit events for the initiative), and **Current Step**.
 3. Paste the returned `context` string into your native subagent tool prompt:
-   - OpenCode / Claude Code: native `Task` / `Agent` tool.
+   - OpenCode / Claude Code / Kimi Code: native `Task` / `Agent` tool.
    - pi / Codex: no native subagent primitive — carry the bundle forward manually (paste into a new session or invocation).
 4. In the subagent prompt, also include the current workflow step and explicit verification criteria.
 
@@ -160,11 +160,12 @@ From the README capability table:
 | OpenCode | native custom tools | enforced (hooks) | enforced (hooks) | native |
 | Claude Code | MCP tools (+ CLI fallback) | enforced (PreToolUse hook) | enforced (PostToolUse hook) | native (`Task`) |
 | pi | extension custom tools | enforced (`tool_call` event) | enforced (`tool_result` event) | prompted |
+| Kimi Code | MCP tools (`mcp__mdocs__*`) | enforced (PreToolUse hook) | enforced (PostToolUse hook) | native (`Agent`) |
 | Codex v1 | `mdocs` CLI | advisory (instructions) | command-level | prompted |
 
 Notes:
 
-- OpenCode / Claude Code / pi register the identical 13-tool canonical set (Section 1); enforcement hooks fail open — a hook error never wedges the session.
+- OpenCode / Claude Code / Kimi Code / pi register the identical 13-tool canonical set (Section 1); enforcement hooks fail open — a hook error never wedges the session.
 - Claude Code: PreToolUse blocks `Write`/`Edit` before `PLAN` (matcher `Write|Edit|Bash`); PostToolUse (matcher `Write|Edit|Bash|Task|Agent`) records audit under a lock (safe under parallel tool execution). SessionStart + PreCompact hooks emit an orientation banner.
 - pi: `tool_call` event blocks `write`/`edit` before `PLAN`; `tool_result` records audit and, in full initiative mode, appends a progress-log entry. `before_agent_start` appends the orientation banner to the system prompt.
 - Codex v1 limitations are intentional: gates are advisory instructions (not host-level), no write/destructive blocking, no automatic audit of every host tool call, CLI-only command access.
@@ -218,6 +219,7 @@ Every surface reports its build fingerprint (`version` + `gitSha`) — via `mdoc
 ## 11. Session Start & Orientation
 
 - Claude Code: SessionStart hook injects a compact orientation banner (initiative counts by status, active initiative id/title + workflow step, wiki page count, pointer to `mdocs_status`); PreCompact re-emits it so orientation survives compaction. Backed by `sessionContext` in `src/core/operations.ts`.
+- Kimi Code: SessionStart hook emits the orientation banner into the session context; the plugin manifest's `sessionStart.skill` loads the `mdocs-workflow` skill at session start.
 - pi: `before_agent_start` appends the banner to the system prompt each turn, plus a `session_start` user notification.
 - All enforcement/orientation hooks fail open — a hook error never wedges the session.
 - OpenCode initializes `./mdocs` automatically through its config hook on first run; other surfaces run `mdocs init` (tool: `mdocs_init`).
