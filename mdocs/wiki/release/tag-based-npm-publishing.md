@@ -4,7 +4,7 @@ title: "Tag-based npm publishing"
 category: "release"
 created: "2026-06-20"
 updated: "2026-06-20"
-related_initiatives: ["add-tag-based-npm-publishing","publish-harness-mdocs-0-4-1","sync-github-releases-with-npm-publishing"]
+related_initiatives: ["add-tag-based-npm-publishing","publish-harness-mdocs-0-4-1","sync-github-releases-with-npm-publishing","release-harness-mdocs-2-1-0"]
 tags: ["release","npm","publishing","github-actions","provenance"]
 lifecycle: "stable"
 ---

@@ -4,7 +4,7 @@ title: "Build-time version stamping (plugin.json + marketplace.json)"
 category: "release"
 created: "2026-09-16"
 updated: "2026-09-16"
-related_initiatives: ["stamp-plugin-marketplace-versions-from-package-json-at-build-time"]
+related_initiatives: ["stamp-plugin-marketplace-versions-from-package-json-at-build-time","release-harness-mdocs-2-1-0"]
 tags: ["release","build","drift"]
 ---
 
