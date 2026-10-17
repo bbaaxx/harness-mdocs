@@ -48,12 +48,20 @@ Use the `mdocs` custom tool for all initiative and wiki operations. Call format:
 - `initiative.delete` — `{ id }` — Permanently remove initiative and update INDEX
 - `initiative.archive` — `{ id }` — Move done initiative to archive/
 - `wiki.create` — `{ category, id, title, content?, tags? }` — Create a wiki entry
+- `wiki.update` — `{ category?, id, content?, title?, ... }` — Update supported wiki fields
+- `wiki.ingest` — `{ operations, note? }` — Apply caller-authored wiki operations
+- `wiki.stub` — `{ category, id, title?, template? }` — Create a wiki stub
 - `wiki.delete` — `{ category, id }` — Remove a wiki entry and update indices
 - `wiki.list` — `{ category? }` — List entries, optionally filtered by category
+- `wiki.link` — `{ initiativeId, wikiSlug }` — Link initiative and wiki page
+- `wiki.xref` — `{ fromSlug, toSlug }` — Add a directed wiki reference
+- `workflow.advance` — `{ step }` — Advance workflow
+- `workflow.reset` — `{}` — Reset workflow
+- `lifecycle.graduate` — `{ id, sections?, logEntry? }` — Record completed initiative learning
 - `validate` — `{}` — Validate initiative/wiki integrity and graph links
-- `index.sync` — `{}` — Force-regenerate all INDEX files
+- `index.sync` — `{ registrations? }` — Synchronize harness-owned indexes; explicit targeted registrations require compiled-view opt-in, otherwise external views are skipped
 
-**Error handling:** Invalid commands return `{ error: "Unsupported mdocs command: ...", supportedCommands: [...] }` with the full command list.
+**Error handling:** Invalid commands return `{ success: false, code: "INVALID_COMMAND", retryable: true, command, error, supportedCommands }`. Provider schemas reject unknown command names before execution.
 
 ### Other Custom Tools
 

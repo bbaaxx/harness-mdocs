@@ -53,20 +53,24 @@ After changing the config, restart OpenCode. The running process does not reload
 
 Do not require `opencode-mdocs` beside `harness-mdocs` for new installs. If backwards compatibility on npm is needed later, publish a small `opencode-mdocs` wrapper/deprecation release that depends on and re-exports `harness-mdocs/opencode`; that is a separate release decision and is not required before publishing `harness-mdocs`.
 
-## CI/CD phases
-
-Phase 1 validates integration and pre-publish readiness without publishing:
+## CI/CD
 
 1. Pull requests targeting `staging` run `npm run quality` on Node 18, 20, and 24.
 2. Pushes to `staging` run `npm run quality` in the GitHub `staging` environment.
 3. Pushes to `main` run `npm run release:check` in the GitHub `release` environment.
-4. Version tags matching `v*` also run `npm run release:check` in the `release` environment.
+4. Version tags matching `v*` trigger `publish.yml` in the `release` environment:
+   it verifies the tag matches the package version, runs `npm run release:check`,
+   publishes through npm Trusted Publishers/OIDC, and creates a GitHub Release.
+   It skips npm publishing if that version already exists, allowing safe reruns
+   to complete a missing GitHub Release. Manual dispatch takes an explicit tag.
 
-Phase 2 will add actual npm publishing on version tags after release checks and environment approval. Until then, tag workflows are pre-publish validation only.
+Tag pushes can publish the package; obtain release approval before pushing a tag.
 
 ## Publish checklist
 
-Version bumps: edit `package.json` only. `scripts/stamp-versions.js` (run by
+Version bumps: update `package.json` and the root package versions in
+`package-lock.json` together (for example, `npm version <version> --no-git-tag-version`).
+Do not hand-edit derived manifest versions. `scripts/stamp-versions.js` (run by
 `npm run build`, therefore also `prepack`) stamps the version into
 `src/surfaces/claude-code/plugin/.claude-plugin/plugin.json`,
 `src/surfaces/kimi-code/plugin/kimi.plugin.json`, and

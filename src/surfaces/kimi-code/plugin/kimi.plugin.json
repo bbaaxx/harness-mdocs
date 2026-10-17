@@ -1,6 +1,6 @@
 {
   "name": "mdocs",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Durable initiative and wiki memory for Kimi Code — MCP tools, workflow-enforcement hooks, skills, and an orchestrator agent.",
   "license": "MIT",
   "author": {
@@ -19,7 +19,10 @@
   "mcpServers": {
     "mdocs": {
       "command": "node",
-      "args": ["./dist/mcp-server.js"]
+      "args": [
+        "-e",
+        "const path = require('node:path'); const home = process.env.KIMI_CODE_HOME || path.join(require('node:os').homedir(), '.kimi-code'); require(path.join(home, 'plugins', 'managed', 'mdocs', 'dist', 'mcp-server.js')).startMcpServer().catch(error => { console.error(error); process.exit(1); });"
+      ]
     }
   },
   "hooks": [

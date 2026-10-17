@@ -1,5 +1,6 @@
 import { Type } from 'typebox';
 import { MdocsCore } from '../../core';
+import { COMMAND_DESCRIPTION, SUPPORTED_COMMANDS } from '../../core/commands/names';
 import * as ops from '../../core/operations';
 import { toPiToolResult, toPiToolError } from './result';
 import type { PiToolResult } from './result';
@@ -63,15 +64,14 @@ export function createPiTools(core: MdocsCore): PiToolDefinition[] {
     {
       name: 'mdocs',
       label: 'mdocs',
-      description:
-        'Run any mdocs core command (initiative.create, initiative.update, initiative.done, initiative.delete, initiative.archive, wiki.create, wiki.update, wiki.ingest, wiki.stub, wiki.delete, wiki.list, wiki.link, wiki.xref, workflow.advance, lifecycle.graduate, validate, index.sync).',
+      description: COMMAND_DESCRIPTION,
       promptSnippet: 'Run mdocs initiative/wiki commands via command + args',
       promptGuidelines: [
         'Use mdocs (with command + args) as the primary entry point for initiative and wiki mutations; prefer it over editing ./mdocs/ files directly.',
         'Use mdocs with command "initiative.create" to start durable tracking before substantial work, and "initiative.update" with progressNote to record progress.'
       ],
       parameters: Type.Object({
-        command: Type.String({ description: 'Command name, e.g. initiative.create, wiki.ingest, validate, index.sync' }),
+        command: Type.String({ enum: [...SUPPORTED_COMMANDS], description: 'Supported mdocs command' }),
         args: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: 'Command-specific arguments' }))
       }),
       execute: async (_id, params) =>

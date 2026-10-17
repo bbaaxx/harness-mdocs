@@ -1,10 +1,10 @@
-# harness-mdocs 2.1.0 — User Manual
+# harness-mdocs 2.2.0 — User Manual
 
 Surface-neutral initiative and wiki memory for AI coding harnesses.
 
-This manual covers installing and operating `harness-mdocs` 2.1.0 (the npm
+This manual covers installing and operating `harness-mdocs` 2.2.0 (the npm
 package name; the `mdocs` name refers to the memory system and CLI). Every
-behavior described here ships in 2.1.0 — nothing aspirational.
+behavior described here is implemented in the 2.2.0 source — nothing aspirational.
 
 ---
 
@@ -105,7 +105,7 @@ Load the package root from `opencode.json`:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["harness-mdocs@2.1.0"]
+  "plugin": ["harness-mdocs@2.2.0"]
 }
 ```
 
@@ -398,6 +398,60 @@ A `.mdocs.json` file **in the mdocs root** tunes behavior. Recognized keys:
   `audit.maxBackups` — audit log volume control. Env overrides:
   `MDOCS_AUDIT_LEVEL`, `MDOCS_AUDIT_MAX_BYTES`, `MDOCS_AUDIT_MAX_BACKUPS`.
 
+### Targeted registration in curated views
+
+Directory-v2 consumers can explicitly opt into per-row writes without handing
+over ownership of their curated files:
+
+```json
+{
+  "compatibility": {
+    "wikiIndexOwner": "external",
+    "compiledViewMutationMode": "targeted"
+  }
+}
+```
+
+Then request specific registrations (canonical refs have no `.md` suffix):
+
+```bash
+mdocs command index.sync --json '{"registrations":[{"type":"initiative","id":"example"},{"type":"wiki","ref":"initiatives/example"},{"type":"overview","initiativeId":"example"}]}'
+```
+
+- `initiative` registers the directory in `initiatives/INDEX.md`.
+- `wiki` registers an existing page in `wiki/index.md`.
+- `overview` registers an **active** initiative's existing compiled page in
+  `wiki/overview.md`.
+- All three views must already exist when requested. No whole-file generation
+  occurs. Existing curated links/code-path rows and annotations remain untouched.
+  Missing rows are appended with `mdocs:registration` comments; subsequent
+  upserts refresh only these marked rows. Preserve the comments to retain
+  package-managed row updates; remove a comment to take ownership of that row.
+- The batch validates before writing, reads back requested membership, and
+  attempts rollback on write/postcondition failure. Inspect `rolledBack` and
+  `rollbackErrors` on failure. This is not a crash-atomic multi-file transaction.
+- Default mode is `off`: registrations return `skipped: true` with
+  `reason: "external-owner"` and write nothing. Invalid config values also use
+  `off`. Plain `index.sync` never implies targeted registration, even with opt-in;
+  it reports externally owned views as skipped rather than regenerated.
+- Directory initiative creation returns `requiredFollowUps` for compiled page
+  creation and registration; external-owned wiki creation returns its catalog
+  registration follow-up. These are suggestions to execute explicitly, not
+  claims that the views were updated automatically.
+
+### Lossless updates and command validation
+
+Flat-file initiative updates keep the current filename and preserve custom
+frontmatter, unknown body sections, and multiline entries. Only changed managed
+fields/sections are rewritten; appended progress preserves existing prose.
+Completion, graduation, and wiki linking use the same preserving writer.
+
+Generic command tools publish a canonical command enum. Unknown commands are
+rejected before execution by the host schema; direct runtime callers receive
+`{ success: false, code: "INVALID_COMMAND", retryable: true, command, error,
+supportedCommands }` without mutations. Keep the exact command name and supply
+its payload separately as `args`.
+
 Defaults reproduce out-of-the-box behavior exactly; every compatibility
 behavior is opt-in and requires **no consumer data migration**.
 
@@ -466,6 +520,29 @@ surface** (`harness-mdocs/kimi-code` export, plugin at
 13 MCP tools, workflow-enforcement hooks, skills, and the orchestrator
 agent. Existing surfaces, tools, and `mdocs/` data formats are unchanged.
 
+### 2.1.0 → 2.2.0
+
+No data migration is required. This minor adds explicit opt-in targeted
+registration for directory-v2 consumers and fixes lossy updates, Kimi MCP
+startup, and permissive command schemas. See [release notes](release-2.2.0.md).
+
+- Flat initiative updates keep their existing filename. Scripts must use the
+  returned `filename`, not assume an update renames a legacy file to match its ID.
+- Custom frontmatter, body sections, multiline entries, and consumer wiki
+  appendices are preserved. The fix cannot restore content already lost by an
+  older version; use version-control history or backups for recovery.
+- Update the installed package and restart the host. For Kimi plugins, reinstall
+  from the updated package path, then `/reload`: its managed plugin copy is
+  separate from the source directory.
+- Generic command tools now accept only canonical command names. Invalid runtime
+  calls return `INVALID_COMMAND` while retaining `error` and `supportedCommands`.
+- `index.sync` reports external views as skipped, not regenerated. New
+  `registrations` require `compatibility.compiledViewMutationMode: "targeted"`;
+  default external ownership remains read-only. Creation's `requiredFollowUps`
+  describe explicit next operations and do not claim catalog writes occurred.
+- Tool names, package entrypoints, dependencies, and production Run's plan-only
+  default are unchanged. Dedicated typed command tools are not part of this release.
+
 Migrating from the legacy `opencode-mdocs` package instead: replace it with
 `harness-mdocs` in `opencode.json`, restart OpenCode, verify tools and
 existing `./mdocs` data load, and remove stale hand-rolled SessionStart /
@@ -485,3 +562,4 @@ PreCompact hooks to avoid double banners.
 | Validation failures | Broken links, missing stable learning, lifecycle violations | `mdocs validate --human` for the summary (`valid` is pass/fail; `clean=false` = warnings only); fix reported files and re-run |
 | Hook appears not to fire (Claude Code manual install) | MCP server in `.mcp.json` and hooks in `.claude/settings.json` are two separate files; or `npx` used in hook command | Verify both files; use direct `node` paths in hooks, not `npx` |
 | MCP/CLI operate on the wrong project | Root resolved from `cwd`, not the intended repo | Set `MDOCS_PROJECT_DIR` to the repo root; restart the session — root switching mid-session is unsupported |
+| Kimi MCP reports “Connection closed”, while hooks work | Older plugin manifest resolves `./dist/mcp-server.js` from project cwd | Update harness-mdocs, reinstall the Kimi plugin's managed copy, then reload. Do not change MCP cwd to plugin root: that points memory at the wrong project |

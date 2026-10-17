@@ -7,3 +7,4 @@
 - [Fresh Codex Thread Plugin Smoke Test](fresh-codex-thread-plugin-smoke-test.md)
 - [Local quality tooling](local-quality-tooling.md)
 - [Mdocs CLI Command Help](mdocs-cli-command-help.md)
+- [Release artifact dogfood and CLI contracts](release-artifact-dogfood.md)

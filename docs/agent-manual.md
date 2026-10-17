@@ -1,6 +1,6 @@
-# Agent Manual — harness-mdocs 2.1.0
+# Agent Manual — harness-mdocs 2.2.0
 
-Operational reference for AI agents running inside an mdocs session. Covers OpenCode, Claude Code, Kimi Code, pi, and Codex-via-CLI. Everything below reflects shipped 2.1.0 source; no aspirational behavior.
+Operational reference for AI agents running inside an mdocs session. Covers OpenCode, Claude Code, Kimi Code, pi, and Codex-via-CLI. Everything below reflects implemented 2.2.0 source; no aspirational behavior.
 
 ---
 
@@ -137,6 +137,8 @@ Returns `{ context, initiativeId, step, relatedWikiCount }`. Errors when no init
 - **Completion gate**: before `initiative.done`, run `mdocs_validate`; ensure a done initiative has at least one linked **stable** wiki learning when the work produced reusable knowledge (`mdocs validate` warns otherwise). For completed initiatives, `lifecycle.graduate` records learning into `wiki/overview.md` + `wiki/log.md` and stamps `graduated`.
 - Advisory lint rules (zero score impact): `long-running-active` (driven by `expected_duration`: `normal` >14d, `long` >60d, `suppress` never), `stale-complete` (completed >30d, not archived), `graduation-due` (completed >7d, not graduated).
 - **INDEX consistency**: after any direct file edits bypassing mdocs commands, run `mdocs_index_check({ mode: 'check' })`; repair with `{ mode: 'repair' }` (or `index.sync` / `mdocs index repair`) to regenerate `mdocs/initiatives/INDEX.md`, `mdocs/wiki/INDEX.md`, and per-category wiki indices. Then run `mdocs_validate`.
+- **External views**: `index.sync` reports externally owned views as skipped. For directory-v2 targeted registrations, require explicit `compatibility.compiledViewMutationMode: "targeted"` permission and pass `registrations` (`initiative` + `id`, `wiki` + canonical `ref`, or `overview` + `initiativeId`). Existing curated rows are untouched; only package-marked rows are refreshed. Creation's `requiredFollowUps` are not automatic writes. Check `verified`, `skipped`, and rollback results; never infer registration from creation success alone. See the user manual for examples and ownership limits.
+- **Command errors**: command names are enum-constrained. On `INVALID_COMMAND`, use `supportedCommands` to correct the exact name and put payload in `args`. Do not append prose/protocol fragments to `command` or count a rejected call as completed work.
 
 ---
 

@@ -44,9 +44,9 @@ Use for all initiative and wiki operations. Call format:
 { "command": "<command-name>", "args": { ... } }
 ```
 
-Commands: `initiative.create` `{ title, id?, owner?, tags?, objective?, plan? }`, `initiative.update` `{ id, updates?, progressNote? }`, `initiative.done` `{ id }`, `initiative.delete` `{ id }`, `initiative.archive` `{ id }`, `wiki.create` `{ category, id, title, content?, tags? }`, `wiki.update`, `wiki.stub`, `wiki.delete`, `wiki.list` `{ category? }`, `wiki.link`, `wiki.xref`, `validate` `{}`, `index.sync` `{}`.
+Commands: `initiative.create` `{ title, id?, owner?, tags?, objective?, plan? }`, `initiative.update` `{ id, updates?, progressNote? }`, `initiative.done` `{ id }`, `initiative.delete` `{ id }`, `initiative.archive` `{ id }`, `wiki.create` `{ category, id, title, content?, tags? }`, `wiki.update`, `wiki.ingest`, `wiki.stub`, `wiki.delete`, `wiki.list` `{ category? }`, `wiki.link`, `wiki.xref`, `workflow.advance` `{ step }`, `workflow.reset` `{}`, `lifecycle.graduate` `{ id, sections?, logEntry? }`, `validate` `{}`, `index.sync` `{ registrations? }` (targeted registrations require compiled-view opt-in).
 
-Invalid commands return `{ error, supportedCommands }` (surfaced as an MCP error result).
+Invalid commands return `{ success: false, code: "INVALID_COMMAND", retryable: true, command, error, supportedCommands }` (surfaced as an MCP error result). Provider schemas reject unknown command names before execution.
 
 ### Convenience tools
 

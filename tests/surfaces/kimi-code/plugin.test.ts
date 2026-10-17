@@ -32,11 +32,14 @@ describe('Kimi Code plugin', () => {
       expect(manifest.agents).toBe('./agents/');
     });
 
-    test('declares the mdocs MCP server on the bundled entrypoint', () => {
+    test('launches the managed bundle without changing the project cwd', () => {
       const mcp = manifest.mcpServers.mdocs;
       expect(mcp).toBeDefined();
       expect(mcp.command).toBe('node');
-      expect(mcp.args).toEqual(['./dist/mcp-server.js']);
+      expect(mcp.args[0]).toBe('-e');
+      expect(mcp.args[1]).toContain('KIMI_CODE_HOME');
+      expect(mcp.args[1]).toContain("'plugins', 'managed', 'mdocs', 'dist', 'mcp-server.js'");
+      expect(mcp.cwd).toBeUndefined();
     });
 
     test('loads the workflow skill at session start', () => {

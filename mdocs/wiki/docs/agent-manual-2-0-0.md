@@ -3,9 +3,10 @@ id: "agent-manual-2-0-0"
 title: "Agent Manual for harness-mdocs 2.0.0"
 category: "docs"
 created: "2026-09-16"
-updated: "2026-09-16"
+updated: "2026-10-17"
 related_initiatives: ["user-and-agent-manuals-for-harness-mdocs-2-0-0"]
 tags: ["docs","manual","2.0.0","agents"]
+lifecycle: "stable"
 ---
 
 # Agent Manual (docs/agent-manual.md)

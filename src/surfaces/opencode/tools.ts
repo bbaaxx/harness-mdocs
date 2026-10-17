@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MdocsCore } from '../../core';
+import { COMMAND_DESCRIPTION, SUPPORTED_COMMANDS } from '../../core/commands/names';
 import { dispatch as dispatchOperation, indexCheck as indexCheckOperation, reset as resetOperation, buildInfo } from '../../core/operations';
 
 export function createOpencodeTools(core: MdocsCore) {
@@ -7,9 +8,9 @@ export function createOpencodeTools(core: MdocsCore) {
 
   return {
     mdocs: {
-      description: 'Run mdocs initiative/wiki commands',
+      description: COMMAND_DESCRIPTION,
       args: {
-        command: z.string().describe('Command name, e.g. initiative.create, initiative.update, validate, index.sync'),
+        command: z.enum(SUPPORTED_COMMANDS).describe('Supported mdocs command'),
         args: z.record(z.string(), z.any()).optional().describe('Command-specific arguments')
       },
       execute: async (input: { command: string; args?: Record<string, any> }) => core.commands.execute(input.command, input.args || {})

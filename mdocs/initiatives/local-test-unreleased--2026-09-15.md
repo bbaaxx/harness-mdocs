@@ -3,10 +3,10 @@ id: "local-test-unreleased"
 title: "Local test of unreleased build before v2.0.0"
 status: "done"
 created: "2026-09-15"
-updated: "2026-09-15"
+updated: "2026-10-17"
 owner: ""
 tags: ["testing","release-prep"]
-related_wiki: []
+related_wiki: ["testing/release-artifact-dogfood"]
 priority: "medium"
 ---
 

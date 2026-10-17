@@ -3,9 +3,10 @@ id: "user-manual-2-0-0"
 title: "User Manual for harness-mdocs 2.0.0"
 category: "docs"
 created: "2026-09-16"
-updated: "2026-09-16"
+updated: "2026-10-17"
 related_initiatives: ["user-and-agent-manuals-for-harness-mdocs-2-0-0"]
 tags: ["docs","manual","2.0.0"]
+lifecycle: "stable"
 ---
 
 # User Manual (docs/user-manual.md)

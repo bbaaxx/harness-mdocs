@@ -3,10 +3,10 @@ id: "fix-pre-release-dogfood-findings-gitsha-cli-create-activation-cli-output-co
 title: "Fix pre-release dogfood findings (gitSha, CLI create activation, CLI output contract)"
 status: "done"
 created: "2026-09-15"
-updated: "2026-09-16"
+updated: "2026-10-17"
 owner: ""
 tags: ["pre-release","dogfood","cli","bug"]
-related_wiki: []
+related_wiki: ["testing/release-artifact-dogfood"]
 priority: "medium"
 ---
 

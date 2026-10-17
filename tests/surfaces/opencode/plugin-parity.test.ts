@@ -655,15 +655,16 @@ Existing file
 
     expect(result).toEqual({
       success: true,
-      filename: 'stable-id--2026-05-27.md',
+      filename: 'legacy-title--2026-05-27.md',
       id: 'stable-id',
       appliedFields: ['status', 'tags', 'priority', 'dueDate', 'dependsOn', 'owner', 'progressNote'],
       skippedFields: [],
       unsupportedFields: []
     });
-    expect(fs.existsSync(legacyPath)).toBe(false);
+    expect(fs.existsSync(legacyPath)).toBe(true);
+    expect(fs.existsSync(path.join(path.dirname(legacyPath), 'stable-id--2026-05-27.md'))).toBe(false);
 
-    const updated = manager.read('stable-id--2026-05-27.md');
+    const updated = manager.read('legacy-title--2026-05-27.md');
     expect(updated).toMatchObject({
       id: 'stable-id',
       status: 'paused',
@@ -1006,7 +1007,8 @@ Resume status branch.
 
     expect(result).toEqual({
       success: true,
-      regenerated: expect.arrayContaining(['initiatives/INDEX.md', 'wiki/INDEX.md', 'wiki/developer/INDEX.md'])
+      regenerated: expect.arrayContaining(['initiatives/INDEX.md', 'wiki/INDEX.md', 'wiki/developer/INDEX.md']),
+      skipped: []
     });
     expect(fs.readFileSync(path.join(testDir, 'mdocs', 'initiatives', 'INDEX.md'), 'utf8')).toContain('Sync Me');
     expect(fs.readFileSync(path.join(testDir, 'mdocs', 'wiki', 'INDEX.md'), 'utf8')).toContain('[developer](developer/INDEX.md)');

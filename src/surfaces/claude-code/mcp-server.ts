@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { createMdocsCore, MdocsCore, resolveProjectRoot } from '../../core';
 import * as ops from '../../core/operations';
 import { BUILD_VERSION } from '../../core/build-info';
+import { COMMAND_DESCRIPTION, invalidCommandResult, isMdocsCommand, SUPPORTED_COMMANDS } from '../../core/commands/names';
 import { toMcpResult, toMcpError, McpToolResult } from './result';
 
 /** Server version: baked-in build info first, package.json fallback, so bundled artifacts report the real build. */
@@ -63,12 +64,14 @@ export function buildMcpServer(): McpServer {
   // --- Aggregate: source of truth -----------------------------------------
   server.tool(
     'mdocs',
-    'Run any mdocs core command (initiative.*, wiki.*, validate, index.sync).',
+    COMMAND_DESCRIPTION,
     {
-      command: z.string().describe('Command name, e.g. initiative.create'),
+      command: z.enum(SUPPORTED_COMMANDS).describe('Supported mdocs command'),
       args: z.record(z.string(), z.any()).optional().describe('Command payload')
     },
-    async ({ command, args }) => guard(c => c.commands.execute(command, args ?? {}))
+    async ({ command, args }) => isMdocsCommand(command)
+      ? guard(c => c.commands.execute(command, args ?? {}))
+      : toMcpResult(invalidCommandResult(command))
   );
 
   // --- Convenience tools ----------------------------------------------------

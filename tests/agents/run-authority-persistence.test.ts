@@ -169,6 +169,7 @@ describe('protected run authority repository', () => {
 });
 
 describe('run authority manager persistence', () => {
+  afterEach(() => jest.useRealTimers());
   test('validates approval internally and commits ticket plus reservation in one aggregate generation', async () => {
     const now = new Date('2026-09-12T00:00:00.000Z');
     const planInput = {
@@ -1993,6 +1994,12 @@ describe('run authority manager persistence', () => {
       { reservationId: hungReservation.reservationId, reason: 'provider-finalize-pending' }
     ]);
     expect(sameWriterRetry.generation).toBe(cancelled.generation);
+    // The intentionally hung attempts above exercise real timeout behavior.
+    // Freeze only the replacement's deadline while inspecting its fenced
+    // claim and releasing its provider barrier. Slow CI must not turn this
+    // successful settlement into another timeout. Identity clocks, microtasks
+    // and the explicit setImmediate barriers remain real.
+    jest.useFakeTimers({ doNotFake: ['Date', 'nextTick', 'setImmediate', 'performance', 'hrtime'] });
     const replacementSettlement = manager.cancel();
     await replacementFinalizeStarted;
     releaseFirstHungFinalize();
@@ -2020,6 +2027,7 @@ describe('run authority manager persistence', () => {
     expect(settled.unsettledUsage).toEqual([]);
     expect(sharedSettled.unsettledUsage).toEqual([]);
     expect(sharedSettled.generation).toBe(settled.generation);
+    jest.useRealTimers();
     usageFinalize.mockImplementation(defaultFinalize);
     const recoveryWriter = await store.openWriter();
     const recoveryManager = createRunAuthorityManagerForTest({

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createMdocsCore } from '../core';
+import { SUPPORTED_COMMANDS } from '../core/commands/names';
 import { status, lookup, resume, dispatch, indexCheck, reset, buildInfo } from '../core/operations';
 import { STEPS } from '../core/workflow/engine';
 
@@ -81,6 +82,14 @@ function commandHelp(commandName?: string): string {
       '  Example:',
       '    mdocs command wiki.update --json \'{"category":"testing","id":"cli-help","content":"Updated learning.","lifecycle":"stable","sourceInitiatives":["add-auth"]}\''
     ],
+    'index.sync': [
+      'index.sync',
+      '  Payload: { registrations?: ({ type: "initiative", id } | { type: "wiki", ref } | { type: "overview", initiativeId })[] }',
+      '  Without registrations, regenerate harness-owned indexes and report external views as skipped.',
+      '  Registrations require directory-v2, external canonical-lowercase ownership, and compiledViewMutationMode: "targeted".',
+      '  Example:',
+      '    mdocs command index.sync --json \'{"registrations":[{"type":"initiative","id":"example"},{"type":"wiki","ref":"initiatives/example"},{"type":"overview","initiativeId":"example"}]}\''
+    ],
     'wiki.ingest': [
       'wiki.ingest',
       '  Payload: { operations: WikiIngestOp[], note?: string }',
@@ -114,7 +123,7 @@ function commandHelp(commandName?: string): string {
     '',
     ...examples['wiki.update'],
     '',
-    'Other commands: initiative.done, initiative.delete, initiative.archive, wiki.ingest, wiki.stub, wiki.delete, wiki.list, wiki.link, wiki.xref, lifecycle.graduate, validate, index.sync'
+    `Supported commands: ${SUPPORTED_COMMANDS.join(', ')}`
   ].join('\n');
 }
 

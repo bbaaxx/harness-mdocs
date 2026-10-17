@@ -115,6 +115,7 @@ Kimi Code has native subagents. Call `mcp__mdocs__mdocs_dispatch` to assemble th
 ## Limitations (v1)
 
 - Plugins install per-user, not per-project; the plugin route shares one install across projects.
+- The MCP launcher resolves the installed bundle at `$KIMI_CODE_HOME/plugins/managed/mdocs/dist/mcp-server.js` (default home: `~/.kimi-code`). Kimi copies local installs there. It keeps the session's project cwd; unlike hooks, MCP `args` paths are not relative to the plugin. The inline Node launcher works without executable-script/shebang support. Reinstall the plugin and reload after updating; editing the original source does not update the managed copy.
 - Plugin hook commands run with cwd = plugin root, so the manifest references `./dist/...` paths; the bundled scripts are self-contained (esbuild, no external requires).
 - Mid-session plugin or MCP changes require `/reload` or a new session.
 - `deferred: true` MCP tool loading (experimental) is not declared by the plugin; all 13 tools are exposed inline.

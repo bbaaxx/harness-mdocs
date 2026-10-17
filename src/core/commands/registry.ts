@@ -11,6 +11,8 @@ import { WorkflowEngine, STEPS } from '../workflow/engine';
 import { isCompleted, StepName } from '../types';
 import { withLock } from '../lock';
 import { findInitiativeFilename, normalizeCommandKeys, slugify, today } from './utils';
+import { invalidCommandResult, isMdocsCommand, SUPPORTED_COMMANDS } from './names';
+import { CompiledViewRegistrar } from '../compiled-views';
 
 export interface MdocsCommandContext {
   mdocsRoot: string;
@@ -49,30 +51,14 @@ function countIssues(errors: string[], warnings: string[], infos: string[] = [])
 }
 
 export class MdocsCommandRegistry {
-  readonly supportedCommands = [
-    'initiative.create',
-    'initiative.update',
-    'initiative.done',
-    'initiative.delete',
-    'initiative.archive',
-    'wiki.create',
-    'wiki.update',
-    'wiki.ingest',
-    'wiki.stub',
-    'wiki.delete',
-    'wiki.list',
-    'wiki.link',
-    'wiki.xref',
-    'workflow.advance',
-    'workflow.reset',
-    'lifecycle.graduate',
-    'validate',
-    'index.sync'
-  ];
+  readonly supportedCommands = SUPPORTED_COMMANDS;
 
   constructor(private readonly context: MdocsCommandContext) {}
 
   async execute(command: string, args: Record<string, any> = {}): Promise<any> {
+    if (!isMdocsCommand(command)) {
+      return invalidCommandResult(command);
+    }
     try {
       switch (command) {
         case 'initiative.create':
@@ -110,9 +96,7 @@ export class MdocsCommandRegistry {
         case 'validate':
           return this.validationResult();
         case 'index.sync':
-          return this.syncIndex();
-        default:
-          return { error: `Unsupported mdocs command: ${command}`, supportedCommands: this.supportedCommands };
+          return this.syncIndex(args);
       }
     } catch (err: any) {
       return { error: err.message || String(err) };
@@ -310,6 +294,10 @@ export class MdocsCommandRegistry {
       success: true,
       filename: path.basename(filePath),
       id,
+      ...(this.context.contract.initiativeMode === 'directory' ? { requiredFollowUps: [
+        { command: 'wiki.create', args: { category: 'initiatives', id, title: args.title, status: 'active', sourceInitiatives: [id], content: '' } },
+        { command: 'index.sync', args: { registrations: [{ type: 'initiative', id }, { type: 'wiki', ref: `initiatives/${id}` }, { type: 'overview', initiativeId: id }] } }
+      ] } : {}),
       hint: 'Initiative created but not active. Run mdocs_resume (or CLI: mdocs resume <id>) to activate it.'
     };
   }
@@ -384,7 +372,7 @@ export class MdocsCommandRegistry {
     const filePath = this.context.initiatives.update(fileName, initiative);
 
     // Postcondition: every field reported as applied must read back from disk.
-    // Re-read via the returned path: flat-mode updates may rename the file.
+    // Re-read via the returned path (updates preserve the existing filename).
     const after = this.context.initiatives.read(path.basename(filePath));
     const failedFields = appliedFields
       .filter(field => field !== 'progressNote')
@@ -479,7 +467,10 @@ export class MdocsCommandRegistry {
       supersedes: Array.isArray(args.supersedes) ? args.supersedes : undefined,
       relatedWiki: Array.isArray(args.relatedWiki) ? args.relatedWiki : undefined
     });
-    return { success: true, filename: category ? path.join(path.basename(path.dirname(filePath)), path.basename(filePath)) : path.basename(filePath), id: args.id };
+    return {
+      success: true, filename: category ? path.join(path.basename(path.dirname(filePath)), path.basename(filePath)) : path.basename(filePath), id: args.id,
+      ...(this.context.contract.wikiIndexOwner === 'external' ? { requiredFollowUps: [{ command: 'index.sync', args: { registrations: [{ type: 'wiki', ref: `${category ? category + '/' : ''}${args.id}` }] } }] } : {})
+    };
   }
 
   /**
@@ -877,11 +868,16 @@ export class MdocsCommandRegistry {
     };
   }
 
-  private syncIndex() {
-    const regenerated = [
-      path.relative(this.context.mdocsRoot, this.context.initiatives.syncIndex()),
-      ...this.context.wiki.syncIndices().map(filePath => path.relative(this.context.mdocsRoot, filePath))
-    ];
-    return { success: true, regenerated };
+  private syncIndex(args: Record<string, any>) {
+    if (args.registrations !== undefined) {
+      return new CompiledViewRegistrar(this.context.mdocsRoot, this.context.contract, this.context.initiatives, this.context.wiki).register(args.registrations);
+    }
+    const regenerated: string[] = [];
+    const skipped: Array<{ file: string; skipped: true; reason: string }> = [];
+    if (this.context.contract.initiativeMode === 'directory') skipped.push({ file: 'initiatives/INDEX.md', skipped: true, reason: 'external-owner' });
+    else regenerated.push(path.relative(this.context.mdocsRoot, this.context.initiatives.syncIndex()));
+    regenerated.push(...this.context.wiki.syncIndices().map(filePath => path.relative(this.context.mdocsRoot, filePath)));
+    if (this.context.contract.wikiIndexOwner === 'external') skipped.push({ file: 'wiki/index.md', skipped: true, reason: 'external-owner' });
+    return { success: true, regenerated, skipped };
   }
 }

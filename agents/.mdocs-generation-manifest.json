@@ -7,7 +7,7 @@
     {
       "id": "claude.agent.orchestrator",
       "path": "src/generation/fragments/claude-agent-orchestrator.md",
-      "byteDigest": "sha256:84decec81b5c854806e3e624d794010c08c781ce0490d1abc34c80268d0336be"
+      "byteDigest": "sha256:f2aa0c46fa8b6fc4cbf194e8edfb727a0f868c8d6afe90bc052964eef6eb0ad2"
     },
     {
       "id": "claude.skill.initiative",
@@ -92,7 +92,7 @@
     {
       "id": "opencode.agent.orchestrator",
       "path": "src/generation/fragments/opencode-agent-orchestrator.md",
-      "byteDigest": "sha256:7966b7eaaf134676d81970b13ccbf353e0754a73ea655b5b3f9462a34ba6569e"
+      "byteDigest": "sha256:bd71e2c07af54181c6a089d7436461c2cc1120b85a913b9f6fbfb652db87c56d"
     },
     {
       "id": "opencode.prompt.initiative",
@@ -226,8 +226,8 @@
       "sourceIds": [
         "opencode.agent.orchestrator"
       ],
-      "byteDigest": "sha256:7966b7eaaf134676d81970b13ccbf353e0754a73ea655b5b3f9462a34ba6569e",
-      "provenanceDigest": "sha256:58dd0573713a8cdf3a86ecddc2f081b47ea5bc3c6cfed0c6399701b22a371ae1"
+      "byteDigest": "sha256:bd71e2c07af54181c6a089d7436461c2cc1120b85a913b9f6fbfb652db87c56d",
+      "provenanceDigest": "sha256:9e9da903690b507fc48f84199d39884b654dd7048db9077ebfd6c3b5b7c51705"
     },
     {
       "schemaVersion": 2,
@@ -292,8 +292,8 @@
       "sourceIds": [
         "claude.agent.orchestrator"
       ],
-      "byteDigest": "sha256:84decec81b5c854806e3e624d794010c08c781ce0490d1abc34c80268d0336be",
-      "provenanceDigest": "sha256:778c9c35ef90811d3dc469e76eda61fc4f76cd6f4affb0d53f2b5a5d3dcb38d7"
+      "byteDigest": "sha256:f2aa0c46fa8b6fc4cbf194e8edfb727a0f868c8d6afe90bc052964eef6eb0ad2",
+      "provenanceDigest": "sha256:983b13061033390a28dae409fd874c893d6298a611ea1b8f7b28235cc6712929"
     },
     {
       "schemaVersion": 2,
@@ -369,8 +369,8 @@
       "sourceIds": [
         "claude.agent.orchestrator"
       ],
-      "byteDigest": "sha256:84decec81b5c854806e3e624d794010c08c781ce0490d1abc34c80268d0336be",
-      "provenanceDigest": "sha256:bc49de694b9a1fadb5e9a5490305d08f31d2601116443063cedd0b8ae327096f"
+      "byteDigest": "sha256:f2aa0c46fa8b6fc4cbf194e8edfb727a0f868c8d6afe90bc052964eef6eb0ad2",
+      "provenanceDigest": "sha256:bba7e703076c9c09f31a4960796fef3db5445526accbee3f4d0d7c34350a35e5"
     },
     {
       "schemaVersion": 2,
@@ -593,5 +593,5 @@
       "provenanceDigest": "sha256:902649ee7c1714ca231b72af87fbcc55eead4b1790b079319bfbeaef1c71196c"
     }
   ],
-  "manifestDigest": "sha256:984b5b1707f530a302dddbdaafe36615863b77f3357595e2a8b4323c1f5a93a0"
+  "manifestDigest": "sha256:7fa3d425ae81180630944f422db2a3dcb4083d3985f9ab8723d3005f4ddbbcf7"
 }

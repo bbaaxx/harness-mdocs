@@ -8,6 +8,7 @@
 - [Deterministic agent asset generator foundation](generator-foundation.md)
 - [Hierarchical Run orchestration — specification 2](hierarchical-run-orchestration-spec-2.md)
 - [Lossless metadata-only mutation design](lossless-metadata-only-mutations.md)
+- [Lossless mutations and surface boundary hardening](mutation-and-surface-boundary-hardening.md)
 - [Plan-gated autonomous Run behavior — specification 1](plan-gated-autonomous-run-spec-1.md)
 - [Project-root resolution](project-root-resolution.md)
 - [Protected controller storage](protected-controller-storage.md)

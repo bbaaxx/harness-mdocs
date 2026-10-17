@@ -42,6 +42,9 @@ export interface MdocsCompatibilityConfig {
    * files. Opt-in via `.mdocs.json`; defaults to current (`full`) behavior.
    */
   initiativeRecordMode?: 'full' | 'metadata-only';
+  /** Explicit permission for targeted registration in curated indexes/overview.
+   * External ownership alone never grants write permission. */
+  compiledViewMutationMode?: 'off' | 'targeted';
 }
 
 export interface MdocsContract {
@@ -56,6 +59,7 @@ export interface MdocsContract {
   enforcementMode: EnforcementMode;
   idle: IdleStrictness;
   initiativeRecordMode: 'full' | 'metadata-only';
+  compiledViewMutationMode: 'off' | 'targeted';
 }
 
 function safeExists(filePath: string): boolean {
@@ -182,7 +186,8 @@ export function detectMdocsContract(mdocsRoot: string, config: MdocsCompatibilit
     obsidianRefreshCommand: config.obsidianRefreshCommand ?? null,
     enforcementMode: resolveEnforcementMode(config.enforcementMode),
     idle: resolveIdleStrictness(config.idle),
-    initiativeRecordMode: config.initiativeRecordMode ?? 'full'
+    initiativeRecordMode: config.initiativeRecordMode ?? 'full',
+    compiledViewMutationMode: config.compiledViewMutationMode === 'targeted' ? 'targeted' : 'off'
   };
 }
 

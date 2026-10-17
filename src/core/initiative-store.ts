@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MdocsContract } from './contract';
 import { Initiative, isCompleted, parseFrontmatter, parseYamlValue, PlanItemStatus, readExpectedDurationRaw, Status } from './types';
+import { readMarkdownList, readMarkdownSection } from './markdown';
 
 // Lifecycle keys honored under metadata-only mode. Core bookkeeping keys
 // (status/updated/completed/graduated) are added-or-updated so lifecycle
@@ -20,29 +21,25 @@ const METADATA_ONLY_OPTIONAL_LIFECYCLE_KEYS = new Set([
 ]);
 
 function parseSection(content: string, sectionName: string): string {
-  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = content.match(new RegExp(`## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$)`));
-  return match ? match[1].trim() : '';
+  return readMarkdownSection(content, sectionName);
 }
 
 function parseListSection(content: string, sectionName: string): string[] {
-  const section = parseSection(content, sectionName);
-  return section.split('\n').filter(line => line.trim().startsWith('- ')).map(line => line.replace(/^- /, '').trim());
+  return readMarkdownList(content, sectionName);
 }
 
 function parsePlanItem(line: string): { description: string; status: PlanItemStatus } {
-  const checkableMatch = line.match(/^- \[([ x/])\]\s*(.+)$/);
+  const checkableMatch = line.match(/^- \[([ x/])\][ \t]*([\s\S]+)$/);
   if (checkableMatch) {
     const mark = checkableMatch[1];
     return { description: checkableMatch[2].trim(), status: mark === 'x' ? 'done' : mark === '/' ? 'in-progress' : 'pending' };
   }
-  const plainMatch = line.match(/^- \s*(.+)$/);
+  const plainMatch = line.match(/^- [ \t]*([\s\S]+)$/);
   return { description: (plainMatch?.[1] || line).trim(), status: 'pending' };
 }
 
 function parsePlanSection(content: string): { description: string; status: PlanItemStatus }[] {
-  const section = parseSection(content, 'Plan');
-  return section.split('\n').filter(line => line.trim().startsWith('- ')).map(line => parsePlanItem(line));
+  return parseListSection(content, 'Plan').map(item => parsePlanItem(`- ${item}`));
 }
 
 function titleize(slug: string): string {
