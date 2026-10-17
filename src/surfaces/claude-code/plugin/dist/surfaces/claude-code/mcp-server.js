@@ -53,6 +53,7 @@ const zod_1 = require("zod");
 const core_1 = require("../../core");
 const ops = __importStar(require("../../core/operations"));
 const build_info_1 = require("../../core/build-info");
+const names_1 = require("../../core/commands/names");
 const result_1 = require("./result");
 /** Server version: baked-in build info first, package.json fallback, so bundled artifacts report the real build. */
 function packageVersion() {
@@ -95,10 +96,12 @@ async function guard(fn) {
 function buildMcpServer() {
     const server = new mcp_js_1.McpServer({ name: 'mdocs', version: packageVersion() });
     // --- Aggregate: source of truth -----------------------------------------
-    server.tool('mdocs', 'Run any mdocs core command (initiative.*, wiki.*, validate, index.sync).', {
-        command: zod_1.z.string().describe('Command name, e.g. initiative.create'),
+    server.tool('mdocs', names_1.COMMAND_DESCRIPTION, {
+        command: zod_1.z.enum(names_1.SUPPORTED_COMMANDS).describe('Supported mdocs command'),
         args: zod_1.z.record(zod_1.z.string(), zod_1.z.any()).optional().describe('Command payload')
-    }, async ({ command, args }) => guard(c => c.commands.execute(command, args ?? {})));
+    }, async ({ command, args }) => (0, names_1.isMdocsCommand)(command)
+        ? guard(c => c.commands.execute(command, args ?? {}))
+        : (0, result_1.toMcpResult)((0, names_1.invalidCommandResult)(command)));
     // --- Convenience tools ----------------------------------------------------
     server.tool('mdocs_init', 'Initialize the ./mdocs structure.', async () => guard(c => { c.managers.mdocs.init(); return { success: true }; }));
     server.tool('mdocs_status', 'Current workflow state and active initiative.', async () => guard(c => ops.status(c)));

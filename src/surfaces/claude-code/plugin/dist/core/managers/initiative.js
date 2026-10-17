@@ -39,14 +39,12 @@ const path = __importStar(require("path"));
 const contract_1 = require("../contract");
 const initiative_store_1 = require("../initiative-store");
 const types_1 = require("../types");
+const markdown_1 = require("../markdown");
 function parseSection(content, sectionName) {
-    const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = content.match(new RegExp(`## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$)`));
-    return match ? match[1].trim() : '';
+    return (0, markdown_1.readMarkdownSection)(content, sectionName);
 }
 function parseListSection(content, sectionName) {
-    const section = parseSection(content, sectionName);
-    return section.split('\n').filter(line => line.trim().startsWith('- ')).map(line => line.replace(/^- /, '').trim());
+    return (0, markdown_1.readMarkdownList)(content, sectionName);
 }
 function formatPlanItem(item) {
     const statusMap = {
@@ -59,7 +57,7 @@ function formatPlanItem(item) {
 }
 function parsePlanItem(line) {
     // Match checkable items: - [ ] desc, - [/] desc, - [x] desc
-    const checkableMatch = line.match(/^- \[([ x/])\]\s*(.+)$/);
+    const checkableMatch = line.match(/^- \[([ x/])\][ \t]*([\s\S]+)$/);
     if (checkableMatch) {
         const mark = checkableMatch[1];
         const description = checkableMatch[2].trim();
@@ -67,17 +65,14 @@ function parsePlanItem(line) {
         return { description, status };
     }
     // Backward compatibility: plain list item - Description
-    const plainMatch = line.match(/^- \s*(.+)$/);
+    const plainMatch = line.match(/^- [ \t]*([\s\S]+)$/);
     if (plainMatch) {
         return { description: plainMatch[1].trim(), status: 'pending' };
     }
     return { description: line.trim(), status: 'pending' };
 }
 function parsePlanSection(content) {
-    const section = parseSection(content, 'Plan');
-    return section.split('\n')
-        .filter(line => line.trim().startsWith('- '))
-        .map(line => parsePlanItem(line));
+    return parseListSection(content, 'Plan').map(item => parsePlanItem(`- ${item}`));
 }
 const ALLOWED_EXPECTED_DURATIONS = new Set(['normal', 'long', 'suppress']);
 function coerceExpectedDuration(raw) {
@@ -248,7 +243,7 @@ class InitiativeManager {
         if (!Object.keys(front).length)
             throw new Error(`Invalid initiative format: ${fileName}`);
         // Extract markdown body after frontmatter
-        const body = content.replace(/---\n[\s\S]*?\n---/, '').trim();
+        const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---/, '').trim();
         return {
             id: front.id || '',
             title: front.title || '',
@@ -285,27 +280,58 @@ class InitiativeManager {
         }
         const sanitized = this.sanitizeFileName(fileName);
         this.assertUniqueId(initiative.id, sanitized);
-        const oldPath = path.join(this.dir, sanitized);
-        const newFileName = this.formatFileName(initiative);
-        const newPath = path.join(this.dir, newFileName);
-        // If the filename is changing, delete old first only if new doesn't exist
-        if (oldPath !== newPath) {
-            if (fs.existsSync(newPath)) {
-                throw new Error(`Cannot update: target file already exists: ${newFileName}`);
-            }
-            if (fs.existsSync(oldPath)) {
-                fs.unlinkSync(oldPath);
-            }
+        const filePath = path.join(this.dir, sanitized);
+        const original = fs.readFileSync(filePath, 'utf8');
+        const previous = this.parseInitiative(original, sanitized);
+        const front = original.match(/^(---\r?\n)([\s\S]*?)(\r?\n---)([\s\S]*)$/);
+        if (!front)
+            throw new Error(`Invalid initiative format: ${sanitized}`);
+        const newline = original.includes('\r\n') ? '\r\n' : '\n';
+        const lines = front[2].split(/\r?\n/);
+        const keys = {
+            id: 'id', title: 'title', status: 'status', created: 'created', updated: 'updated', owner: 'owner',
+            tags: 'tags', aliases: 'aliases', relatedWiki: 'related_wiki', priority: 'priority', dueDate: 'due_date',
+            dependsOn: 'depends_on', phase: 'phase', handoffSummary: 'handoff_summary', openQuestions: 'open_questions',
+            blockers: 'blockers', nextAction: 'next_action', expectedDuration: 'expected_duration', graduated: 'graduated'
+        };
+        for (const field of Object.keys(keys)) {
+            if (JSON.stringify(previous[field]) === JSON.stringify(initiative[field]))
+                continue;
+            const key = keys[field];
+            const index = lines.findIndex(line => line.startsWith(`${key}:`));
+            let end = index + 1;
+            // Remove an old block value as a unit, not just its first line.
+            if (index >= 0)
+                while (end < lines.length && /^(?:\s+|$)/.test(lines[end]))
+                    end++;
+            while (end > index + 1 && lines[end - 1].trim() === '')
+                end--;
+            const replacement = initiative[field] === undefined ? [] : [`${key}: ${JSON.stringify(initiative[field])}`];
+            if (index >= 0)
+                lines.splice(index, end - index, ...replacement);
+            else
+                lines.push(...replacement);
         }
-        // Write the file (will overwrite if same name, which is expected for updates)
-        const content = this.toFrontmatter(initiative) +
-            `## Objective\n${initiative.objective}\n\n` +
-            `## Plan\n${initiative.plan.map(p => formatPlanItem(p)).join('\n')}\n\n` +
-            `## Progress Log\n${initiative.progressLog.map(l => `- ${l}`).join('\n')}\n\n` +
-            `## Artifacts\n${initiative.artifacts.map(a => `- ${a}`).join('\n')}`;
-        fs.writeFileSync(newPath, content, 'utf8');
+        let body = front[4];
+        const sections = [
+            ['objective', 'Objective', () => initiative.objective],
+            ['plan', 'Plan', () => initiative.plan.map(formatPlanItem).join('\n')],
+            ['artifacts', 'Artifacts', () => initiative.artifacts.map(item => `- ${item}`).join('\n')]
+        ];
+        for (const [field, name, render] of sections) {
+            if (JSON.stringify(previous[field]) !== JSON.stringify(initiative[field]))
+                body = (0, markdown_1.writeMarkdownSection)(body, name, render());
+        }
+        if (JSON.stringify(previous.progressLog) !== JSON.stringify(initiative.progressLog)) {
+            const appendOnly = previous.progressLog.every((item, index) => initiative.progressLog[index] === item);
+            const notes = appendOnly ? initiative.progressLog.slice(previous.progressLog.length) : initiative.progressLog;
+            body = (0, markdown_1.writeMarkdownSection)(body, 'Progress Log', notes.map(item => `- ${item}`).join('\n'), appendOnly);
+        }
+        const content = front[1] + lines.join(newline) + front[3] + body;
+        if (content !== original)
+            (0, markdown_1.atomicWrite)(filePath, content);
         this.updateIndex();
-        return newPath;
+        return filePath;
     }
     markDone(fileName) {
         if (this.contract.initiativeMode === 'directory') {

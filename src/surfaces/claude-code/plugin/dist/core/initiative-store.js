@@ -38,6 +38,7 @@ exports.normalizeInitiativeStatus = normalizeInitiativeStatus;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const types_1 = require("./types");
+const markdown_1 = require("./markdown");
 // Lifecycle keys honored under metadata-only mode. Core bookkeeping keys
 // (status/updated/completed/graduated) are added-or-updated so lifecycle
 // events (markDone, graduate) still record their metadata on a thin consumer
@@ -54,26 +55,22 @@ const METADATA_ONLY_OPTIONAL_LIFECYCLE_KEYS = new Set([
     'next_action'
 ]);
 function parseSection(content, sectionName) {
-    const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = content.match(new RegExp(`## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$)`));
-    return match ? match[1].trim() : '';
+    return (0, markdown_1.readMarkdownSection)(content, sectionName);
 }
 function parseListSection(content, sectionName) {
-    const section = parseSection(content, sectionName);
-    return section.split('\n').filter(line => line.trim().startsWith('- ')).map(line => line.replace(/^- /, '').trim());
+    return (0, markdown_1.readMarkdownList)(content, sectionName);
 }
 function parsePlanItem(line) {
-    const checkableMatch = line.match(/^- \[([ x/])\]\s*(.+)$/);
+    const checkableMatch = line.match(/^- \[([ x/])\][ \t]*([\s\S]+)$/);
     if (checkableMatch) {
         const mark = checkableMatch[1];
         return { description: checkableMatch[2].trim(), status: mark === 'x' ? 'done' : mark === '/' ? 'in-progress' : 'pending' };
     }
-    const plainMatch = line.match(/^- \s*(.+)$/);
+    const plainMatch = line.match(/^- [ \t]*([\s\S]+)$/);
     return { description: (plainMatch?.[1] || line).trim(), status: 'pending' };
 }
 function parsePlanSection(content) {
-    const section = parseSection(content, 'Plan');
-    return section.split('\n').filter(line => line.trim().startsWith('- ')).map(line => parsePlanItem(line));
+    return parseListSection(content, 'Plan').map(item => parsePlanItem(`- ${item}`));
 }
 function titleize(slug) {
     return slug.split(/[-_]+/).filter(Boolean).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');

@@ -211,7 +211,7 @@ function withLock(baseDir, name, fn, opts = {}) {
 }
 
 // src/core/factory.ts
-var path13 = __toESM(require("path"));
+var path15 = __toESM(require("path"));
 
 // src/core/audit.ts
 var fs4 = __toESM(require("fs"));
@@ -307,7 +307,7 @@ function envAuditLevel() {
 }
 
 // src/core/commands/registry.ts
-var path6 = __toESM(require("path"));
+var path8 = __toESM(require("path"));
 
 // src/core/workflow/engine.ts
 var fs5 = __toESM(require("fs"));
@@ -483,6 +483,257 @@ function normalizeCommandKeys(args) {
   return out;
 }
 
+// src/core/commands/names.ts
+var SUPPORTED_COMMANDS = Object.freeze([
+  "initiative.create",
+  "initiative.update",
+  "initiative.done",
+  "initiative.delete",
+  "initiative.archive",
+  "wiki.create",
+  "wiki.update",
+  "wiki.ingest",
+  "wiki.stub",
+  "wiki.delete",
+  "wiki.list",
+  "wiki.link",
+  "wiki.xref",
+  "workflow.advance",
+  "workflow.reset",
+  "lifecycle.graduate",
+  "validate",
+  "index.sync"
+]);
+var COMMAND_DESCRIPTION = `Run any mdocs core command (${SUPPORTED_COMMANDS.join(", ")}).`;
+function isMdocsCommand(command) {
+  return typeof command === "string" && SUPPORTED_COMMANDS.includes(command);
+}
+function invalidCommandResult(command) {
+  return {
+    success: false,
+    code: "INVALID_COMMAND",
+    retryable: true,
+    command,
+    error: `Unsupported mdocs command: ${String(command)}`,
+    supportedCommands: SUPPORTED_COMMANDS
+  };
+}
+
+// src/core/compiled-views.ts
+var fs7 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
+
+// src/core/markdown.ts
+var fs6 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
+var import_crypto = require("crypto");
+function atomicWrite(filePath, content) {
+  const temporary = path6.join(path6.dirname(filePath), `.${path6.basename(filePath)}.${(0, import_crypto.randomUUID)()}.tmp`);
+  try {
+    fs6.writeFileSync(temporary, content, { encoding: "utf8", flag: "wx", mode: fs6.statSync(filePath).mode });
+    fs6.renameSync(temporary, filePath);
+  } finally {
+    if (fs6.existsSync(temporary)) fs6.unlinkSync(temporary);
+  }
+}
+function markdownSections(content) {
+  const sections = [];
+  let fence;
+  for (const match of content.matchAll(/[^\n]*(?:\n|$)/g)) {
+    if (!match[0]) continue;
+    const line = match[0].replace(/\r?\n$/, "");
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && /^ {0,3}(`+|~+)\s*$/.test(line)) fence = void 0;
+      continue;
+    }
+    if (fence) continue;
+    const heading = line.match(/^## (.+?)\s*$/);
+    if (heading) {
+      if (sections.length) sections[sections.length - 1].end = match.index;
+      sections.push({ name: heading[1], start: match.index, body: match.index + match[0].length, end: content.length });
+    }
+  }
+  return sections;
+}
+function readMarkdownSection(content, name) {
+  const section = markdownSections(content).find((item) => item.name === name);
+  return section ? content.slice(section.body, section.end).trim() : "";
+}
+function readMarkdownList(content, name) {
+  const entries = [];
+  let fence;
+  for (const line of readMarkdownSection(content, name).split(/\r?\n/)) {
+    const marker = line.match(/^\s*(`{3,}|~{3,})/);
+    if (!fence && line.startsWith("- ")) entries.push(line.slice(2));
+    else if (entries.length) entries[entries.length - 1] += `
+${line}`;
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && /^\s*(`+|~+)\s*$/.test(line)) fence = void 0;
+    }
+  }
+  return entries.map((entry) => entry.trimEnd());
+}
+function writeMarkdownSection(content, name, value, append = false) {
+  const newline = content.includes("\r\n") ? "\r\n" : "\n";
+  value = value.replace(/\r?\n/g, newline);
+  const section = markdownSections(content).find((item) => item.name === name);
+  if (!section) return `${content}${content.endsWith(newline) ? newline : newline + newline}## ${name}${newline}${value}${newline}`;
+  const oldBody = content.slice(section.body, section.end);
+  const trailing = oldBody.match(/(?:\r?\n[ \t]*)*$/)[0];
+  const prefix = append ? oldBody.slice(0, oldBody.length - trailing.length) : "";
+  const body = `${prefix}${prefix ? newline : ""}${value}${trailing || newline}`;
+  const heading = content.slice(0, section.body);
+  return heading + (heading.endsWith("\n") ? "" : newline) + body + content.slice(section.end);
+}
+
+// src/core/compiled-views.ts
+function visibleMarkdown(content) {
+  let fence;
+  return content.replace(/<!--[\s\S]*?(?:-->|$)/g, (comment) => comment.replace(/[^\r\n]/g, "")).split(/\r?\n/).map((line) => {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && /^ {0,3}(`+|~+)\s*$/.test(line)) fence = void 0;
+      return "";
+    }
+    return fence ? "" : line;
+  }).join("\n");
+}
+function containsTarget(content, file, target) {
+  content = visibleMarkdown(content);
+  const refs = [
+    ...Array.from(content.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g), (match) => match[1]),
+    ...Array.from(content.matchAll(/`((?:\.\/)?[A-Za-z0-9][A-Za-z0-9._/-]*(?:\/|\.md))`/g), (match) => match[1])
+  ];
+  return refs.some((ref) => {
+    if (/^[a-z]+:/i.test(ref)) return false;
+    const destination = ref.split(/[?#]/)[0];
+    return path7.resolve(path7.dirname(file), destination) === path7.resolve(target);
+  });
+}
+function label(title) {
+  return title.replace(/[\r\n]+/g, " ").replace(/([\\[\]<>])/g, "\\$1");
+}
+var CompiledViewRegistrar = class {
+  constructor(root, contract, initiatives, wiki) {
+    this.root = root;
+    this.contract = contract;
+    this.initiatives = initiatives;
+    this.wiki = wiki;
+  }
+  root;
+  contract;
+  initiatives;
+  wiki;
+  register(input) {
+    if (!Array.isArray(input) || input.length === 0) return { success: false, error: "index.sync registrations must be a non-empty array" };
+    if (this.contract.initiativeMode !== "directory") return { success: false, error: "Targeted registrations require directory-v2 initiatives" };
+    if (this.contract.compiledViewMutationMode !== "targeted") {
+      return { success: true, regenerated: [], skipped: true, reason: "external-owner", registrations: input.map((registration) => ({ registration, skipped: true, reason: "external-owner" })) };
+    }
+    if (this.contract.wikiIndexOwner !== "external" || this.contract.wikiIndexMode !== "canonical-lowercase") {
+      return { success: false, error: "Targeted registrations require an externally owned canonical-lowercase wiki index" };
+    }
+    const result = withLock(this.root, "compiled-views", () => this.apply(input));
+    return result.ran ? result.value : { success: false, error: "compiled-view registration lock timeout" };
+  }
+  row(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid compiled-view registration");
+    const allowed = input.type === "wiki" ? ["type", "ref"] : input.type === "initiative" ? ["type", "id"] : ["type", "initiativeId"];
+    if (Object.keys(input).some((key2) => !allowed.includes(key2))) throw new Error("Unsupported compiled-view registration fields");
+    if (input.type === "wiki") {
+      if (typeof input.ref !== "string" || !/^[\w-]+(?:\/[\w-]+)?$/.test(input.ref)) throw new Error("Wiki registration requires a canonical ref");
+      const entry = this.wiki.readByRef(input.ref);
+      if (!entry) throw new Error(`Wiki entry not found: ${input.ref}`);
+      const target = path7.join(this.root, "wiki", entry.category, `${entry.id}.md`);
+      if (!entry.category && ["index", "overview", "log", "glossary"].includes(entry.id)) throw new Error("Cannot register a compiled root view");
+      return { file: path7.join(this.root, "wiki", "index.md"), target, key: `wiki:${input.ref}`, text: `[${label(entry.title)}](${input.ref}.md)${entry.status ? ` \u2014 status: ${label(entry.status)}` : ""}` };
+    }
+    if (input.type !== "initiative" && input.type !== "overview") throw new Error(`Unsupported registration type: ${input.type}`);
+    const id = input.type === "initiative" ? input.id : input.initiativeId;
+    if (typeof id !== "string") throw new Error("Initiative registration requires id");
+    const key = this.initiatives.findKeyById(id);
+    const initiative = key ? this.initiatives.read(key) : null;
+    if (!key || !initiative || !/^[\w-]+$/.test(key) || !fs7.existsSync(path7.join(this.root, "initiatives", key, "_status.md"))) throw new Error(`Directory initiative not found: ${id}`);
+    if (input.type === "initiative") {
+      return { file: path7.join(this.root, "initiatives", "INDEX.md"), target: path7.join(this.root, "initiatives", key), key: `initiative:${key}`, text: `[${label(initiative.title)}](${key}/) \u2014 status: ${initiative.status}` };
+    }
+    if (initiative.status !== "active") throw new Error(`Overview registration requires an active initiative: ${id}`);
+    const compiled = this.wiki.list().find((entry) => ["initiatives", "initiative"].includes(entry.category) && entry.id === initiative.id);
+    if (!compiled) throw new Error(`Compiled initiative wiki page not found: ${id}`);
+    const ref = `${compiled.category}/${compiled.id}.md`;
+    return { file: path7.join(this.root, "wiki", "overview.md"), target: path7.join(this.root, "wiki", ref), key: `overview:${key}`, text: `[${label(initiative.title)}](${ref}) \u2014 status: ${initiative.status}` };
+  }
+  apply(input) {
+    const before = /* @__PURE__ */ new Map();
+    const after = /* @__PURE__ */ new Map();
+    const rows = [];
+    try {
+      for (const registration of input) {
+        const row = this.row(registration);
+        rows.push(row);
+        if (!before.has(row.file)) {
+          if (!fs7.existsSync(row.file) || !fs7.lstatSync(row.file).isFile()) throw new Error(`Compiled view must be an existing regular file: ${path7.relative(this.root, row.file)}`);
+          const realRelative = path7.relative(fs7.realpathSync(this.root), fs7.realpathSync(row.file));
+          if (realRelative === ".." || realRelative.startsWith(`..${path7.sep}`) || path7.isAbsolute(realRelative)) throw new Error("Compiled view resolves outside mdocs root");
+          before.set(row.file, fs7.readFileSync(row.file, "utf8"));
+          after.set(row.file, before.get(row.file));
+        }
+        let content = after.get(row.file);
+        const originalContent = content;
+        const newline = content.includes("\r\n") ? "\r\n" : "\n";
+        const marker = `<!-- mdocs:registration ${row.key} -->`;
+        const lines = Array.from(content.matchAll(/[^\n]*(?:\n|$)/g)).filter((match) => match[0]);
+        const visible = visibleMarkdown(content).split("\n");
+        const managedRows = lines.filter((match, index) => match[0].replace(/\r?\n$/, "").endsWith(marker) && visible[index].startsWith("- "));
+        if (managedRows.length > 1) throw new Error(`Duplicate registration markers: ${row.key}`);
+        const managed = managedRows[0];
+        const nextLine = `- ${row.text} ${marker}`;
+        if (managed) {
+          const ending = managed[0].match(/\r?\n$/)?.[0] || "";
+          content = content.slice(0, managed.index) + nextLine + ending + content.slice(managed.index + managed[0].length);
+        } else if (!containsTarget(content, row.file, row.target)) {
+          content += `${content.endsWith(newline) ? "" : newline}${nextLine}${newline}`;
+        }
+        row.changed = content !== originalContent;
+        after.set(row.file, content);
+      }
+      const written = [];
+      try {
+        for (const [file, content] of after) {
+          if (content === before.get(file)) continue;
+          if (fs7.readFileSync(file, "utf8") !== before.get(file)) throw new Error(`Compiled view changed during registration: ${file}`);
+          atomicWrite(file, content);
+          written.push(file);
+        }
+        for (const row of rows) {
+          if (!containsTarget(fs7.readFileSync(row.file, "utf8"), row.file, row.target)) throw new Error(`Registration postcondition failed: ${row.key}`);
+        }
+      } catch (error) {
+        const rollbackErrors = [];
+        for (const file of written.reverse()) {
+          try {
+            atomicWrite(file, before.get(file));
+          } catch (rollback) {
+            rollbackErrors.push(rollback.message);
+          }
+        }
+        return { success: false, error: error.message, rolledBack: rollbackErrors.length === 0, rollbackErrors, regenerated: [] };
+      }
+      return {
+        success: true,
+        regenerated: written.map((file) => path7.relative(this.root, file)),
+        registrations: rows.map((row) => ({ key: row.key, file: path7.relative(this.root, row.file), verified: true, changed: row.changed }))
+      };
+    } catch (error) {
+      return { success: false, error: error.message, regenerated: [] };
+    }
+  }
+};
+
 // src/core/commands/registry.ts
 function unique(values) {
   return Array.from(new Set(values));
@@ -504,27 +755,11 @@ var MdocsCommandRegistry = class {
     this.context = context;
   }
   context;
-  supportedCommands = [
-    "initiative.create",
-    "initiative.update",
-    "initiative.done",
-    "initiative.delete",
-    "initiative.archive",
-    "wiki.create",
-    "wiki.update",
-    "wiki.ingest",
-    "wiki.stub",
-    "wiki.delete",
-    "wiki.list",
-    "wiki.link",
-    "wiki.xref",
-    "workflow.advance",
-    "workflow.reset",
-    "lifecycle.graduate",
-    "validate",
-    "index.sync"
-  ];
+  supportedCommands = SUPPORTED_COMMANDS;
   async execute(command, args = {}) {
+    if (!isMdocsCommand(command)) {
+      return invalidCommandResult(command);
+    }
     try {
       switch (command) {
         case "initiative.create":
@@ -562,9 +797,7 @@ var MdocsCommandRegistry = class {
         case "validate":
           return this.validationResult();
         case "index.sync":
-          return this.syncIndex();
-        default:
-          return { error: `Unsupported mdocs command: ${command}`, supportedCommands: this.supportedCommands };
+          return this.syncIndex(args);
       }
     } catch (err) {
       return { error: err.message || String(err) };
@@ -634,7 +867,7 @@ var MdocsCommandRegistry = class {
             section: s.section,
             ok: true,
             skipped: p === null ? "non-directory-v2" : void 0,
-            filePath: p ? path6.relative(this.context.mdocsRoot, p) : void 0
+            filePath: p ? path8.relative(this.context.mdocsRoot, p) : void 0
           });
         } catch (err) {
           sectionResults2.push({ section: s.section, ok: false, error: err.message || String(err) });
@@ -646,7 +879,7 @@ var MdocsCommandRegistry = class {
           logResult2 = {
             ok: true,
             skipped: p === null ? "non-directory-v2" : void 0,
-            filePath: p ? path6.relative(this.context.mdocsRoot, p) : void 0
+            filePath: p ? path8.relative(this.context.mdocsRoot, p) : void 0
           };
         } catch (err) {
           logResult2 = { ok: false, error: err.message || String(err) };
@@ -743,8 +976,12 @@ var MdocsCommandRegistry = class {
     });
     return {
       success: true,
-      filename: path6.basename(filePath),
+      filename: path8.basename(filePath),
       id,
+      ...this.context.contract.initiativeMode === "directory" ? { requiredFollowUps: [
+        { command: "wiki.create", args: { category: "initiatives", id, title: args.title, status: "active", sourceInitiatives: [id], content: "" } },
+        { command: "index.sync", args: { registrations: [{ type: "initiative", id }, { type: "wiki", ref: `initiatives/${id}` }, { type: "overview", initiativeId: id }] } }
+      ] } : {},
       hint: "Initiative created but not active. Run mdocs_resume (or CLI: mdocs resume <id>) to activate it."
     };
   }
@@ -808,7 +1045,7 @@ var MdocsCommandRegistry = class {
     }
     initiative.updated = today();
     const filePath = this.context.initiatives.update(fileName, initiative);
-    const after = this.context.initiatives.read(path6.basename(filePath));
+    const after = this.context.initiatives.read(path8.basename(filePath));
     const failedFields = appliedFields.filter((field) => field !== "progressNote").filter((field) => {
       const actual = after?.[field];
       const expected = appliedValues[field];
@@ -826,7 +1063,7 @@ var MdocsCommandRegistry = class {
         id: initiative.id
       };
     }
-    return { success: true, filename: path6.basename(filePath), id: initiative.id, appliedFields, skippedFields, unsupportedFields };
+    return { success: true, filename: path8.basename(filePath), id: initiative.id, appliedFields, skippedFields, unsupportedFields };
   }
   /**
    * Whether initiative.update can persist `field` under metadata-only mode.
@@ -892,7 +1129,12 @@ var MdocsCommandRegistry = class {
       supersedes: Array.isArray(args.supersedes) ? args.supersedes : void 0,
       relatedWiki: Array.isArray(args.relatedWiki) ? args.relatedWiki : void 0
     });
-    return { success: true, filename: category ? path6.join(path6.basename(path6.dirname(filePath)), path6.basename(filePath)) : path6.basename(filePath), id: args.id };
+    return {
+      success: true,
+      filename: category ? path8.join(path8.basename(path8.dirname(filePath)), path8.basename(filePath)) : path8.basename(filePath),
+      id: args.id,
+      ...this.context.contract.wikiIndexOwner === "external" ? { requiredFollowUps: [{ command: "index.sync", args: { registrations: [{ type: "wiki", ref: `${category ? category + "/" : ""}${args.id}` }] } }] } : {}
+    };
   }
   /**
    * wiki.update — lossless, explicit mutation result. snake_case inputs are
@@ -959,13 +1201,13 @@ var MdocsCommandRegistry = class {
         id: args.id
       };
     }
-    return { success: true, filename: category ? path6.join(path6.basename(path6.dirname(filePath)), path6.basename(filePath)) : path6.basename(filePath), id: args.id, appliedFields, unsupportedFields: [] };
+    return { success: true, filename: category ? path8.join(path8.basename(path8.dirname(filePath)), path8.basename(filePath)) : path8.basename(filePath), id: args.id, appliedFields, unsupportedFields: [] };
   }
   stubWiki(args) {
     if (!args.id) return { error: "wiki.stub requires id" };
     const result = this.context.wiki.stub(args.category || "", args.id, args.title, args.template);
-    if (result.existing) return { success: false, existing: true, filePath: path6.relative(this.context.mdocsRoot, result.filePath) };
-    return { success: true, category: args.category, id: args.id, filePath: path6.relative(this.context.mdocsRoot, result.filePath) };
+    if (result.existing) return { success: false, existing: true, filePath: path8.relative(this.context.mdocsRoot, result.filePath) };
+    return { success: true, category: args.category, id: args.id, filePath: path8.relative(this.context.mdocsRoot, result.filePath) };
   }
   deleteWiki(args) {
     if (!args.id) return { error: "wiki.delete requires id" };
@@ -1138,7 +1380,7 @@ var MdocsCommandRegistry = class {
               confidence: op.confidence
             });
             appliedOps2.push({ type: op.type, ref, ok: true });
-            changedFiles2.push(path6.relative(this.context.mdocsRoot, filePath));
+            changedFiles2.push(path8.relative(this.context.mdocsRoot, filePath));
           } else if (op.type === "updatePage") {
             const category = op.category || "";
             const ref = category ? `${category}/${op.id}` : op.id;
@@ -1197,7 +1439,7 @@ var MdocsCommandRegistry = class {
                 });
               } else {
                 appliedOps2.push({ type: op.type, ref, ok: true, appliedFields });
-                changedFiles2.push(path6.relative(this.context.mdocsRoot, filePath));
+                changedFiles2.push(path8.relative(this.context.mdocsRoot, filePath));
               }
             }
           } else if (op.type === "updateOverviewSection") {
@@ -1206,7 +1448,7 @@ var MdocsCommandRegistry = class {
               appliedOps2.push({ type: op.type, ref: `overview#${op.section}`, ok: true, skipped: "non-directory-v2" });
             } else {
               appliedOps2.push({ type: op.type, ref: `overview#${op.section}`, ok: true });
-              changedFiles2.push(path6.relative(this.context.mdocsRoot, filePath));
+              changedFiles2.push(path8.relative(this.context.mdocsRoot, filePath));
             }
           } else if (op.type === "appendLog") {
             const filePath = this.context.wiki.appendLog(op.entry);
@@ -1214,7 +1456,7 @@ var MdocsCommandRegistry = class {
               appliedOps2.push({ type: op.type, ref: "log", ok: true, skipped: "non-directory-v2" });
             } else {
               appliedOps2.push({ type: op.type, ref: "log", ok: true });
-              changedFiles2.push(path6.relative(this.context.mdocsRoot, filePath));
+              changedFiles2.push(path8.relative(this.context.mdocsRoot, filePath));
             }
           } else if (op.type === "link") {
             try {
@@ -1250,21 +1492,26 @@ var MdocsCommandRegistry = class {
       note: args.note ?? null
     };
   }
-  syncIndex() {
-    const regenerated = [
-      path6.relative(this.context.mdocsRoot, this.context.initiatives.syncIndex()),
-      ...this.context.wiki.syncIndices().map((filePath) => path6.relative(this.context.mdocsRoot, filePath))
-    ];
-    return { success: true, regenerated };
+  syncIndex(args) {
+    if (args.registrations !== void 0) {
+      return new CompiledViewRegistrar(this.context.mdocsRoot, this.context.contract, this.context.initiatives, this.context.wiki).register(args.registrations);
+    }
+    const regenerated = [];
+    const skipped = [];
+    if (this.context.contract.initiativeMode === "directory") skipped.push({ file: "initiatives/INDEX.md", skipped: true, reason: "external-owner" });
+    else regenerated.push(path8.relative(this.context.mdocsRoot, this.context.initiatives.syncIndex()));
+    regenerated.push(...this.context.wiki.syncIndices().map((filePath) => path8.relative(this.context.mdocsRoot, filePath)));
+    if (this.context.contract.wikiIndexOwner === "external") skipped.push({ file: "wiki/index.md", skipped: true, reason: "external-owner" });
+    return { success: true, regenerated, skipped };
   }
 };
 
 // src/core/contract.ts
-var fs6 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var fs8 = __toESM(require("fs"));
+var path9 = __toESM(require("path"));
 function safeExists(filePath) {
   try {
-    return fs6.existsSync(filePath);
+    return fs8.existsSync(filePath);
   } catch {
     return false;
   }
@@ -1278,7 +1525,7 @@ function isValidOwnerForMode(owner, mode) {
 function hasExactChild(parentDir, childName) {
   if (!safeExists(parentDir)) return false;
   try {
-    return fs6.readdirSync(parentDir).includes(childName);
+    return fs8.readdirSync(parentDir).includes(childName);
   } catch {
     return false;
   }
@@ -1286,9 +1533,9 @@ function hasExactChild(parentDir, childName) {
 function hasDirectoryInitiatives(initiativesDir) {
   if (!safeExists(initiativesDir)) return false;
   try {
-    return fs6.readdirSync(initiativesDir, { withFileTypes: true }).some((entry) => {
+    return fs8.readdirSync(initiativesDir, { withFileTypes: true }).some((entry) => {
       if (!entry.isDirectory() || entry.name === "archive" || entry.name === "_archive") return false;
-      return safeExists(path7.join(initiativesDir, entry.name, "_status.md"));
+      return safeExists(path9.join(initiativesDir, entry.name, "_status.md"));
     });
   } catch {
     return false;
@@ -1297,29 +1544,29 @@ function hasDirectoryInitiatives(initiativesDir) {
 function hasFlatInitiatives(initiativesDir) {
   if (!safeExists(initiativesDir)) return false;
   try {
-    return fs6.readdirSync(initiativesDir).some((file) => file.endsWith(".md") && file !== "INDEX.md");
+    return fs8.readdirSync(initiativesDir).some((file) => file.endsWith(".md") && file !== "INDEX.md");
   } catch {
     return false;
   }
 }
 function schemaMentionsDirectoryStatus(mdocsRoot) {
-  const schemaPath = path7.join(mdocsRoot, "SCHEMA.md");
+  const schemaPath = path9.join(mdocsRoot, "SCHEMA.md");
   if (!safeExists(schemaPath)) return false;
   try {
-    return fs6.readFileSync(schemaPath, "utf8").includes("_status.md");
+    return fs8.readFileSync(schemaPath, "utf8").includes("_status.md");
   } catch {
     return false;
   }
 }
 function detectMdocsContract(mdocsRoot, config = {}) {
-  const initiativesDir = path7.join(mdocsRoot, "initiatives");
-  const wikiDir = path7.join(mdocsRoot, "wiki");
+  const initiativesDir = path9.join(mdocsRoot, "initiatives");
+  const wikiDir = path9.join(mdocsRoot, "wiki");
   const directorySignals = hasDirectoryInitiatives(initiativesDir) || schemaMentionsDirectoryStatus(mdocsRoot);
   const lowercaseWikiIndex = hasExactChild(wikiDir, "index.md");
   const uppercaseWikiIndex = hasExactChild(wikiDir, "INDEX.md");
-  const underscoreArchive = safeExists(path7.join(initiativesDir, "_archive"));
+  const underscoreArchive = safeExists(path9.join(initiativesDir, "_archive"));
   const flatInitiatives = hasFlatInitiatives(initiativesDir);
-  const obsidianDir = path7.join(mdocsRoot, "_obsidian");
+  const obsidianDir = path9.join(mdocsRoot, "_obsidian");
   const obsidianVisibilityLayer = safeExists(obsidianDir) && isDirectory(obsidianDir);
   const initiativeMode = config.initiativeMode && config.initiativeMode !== "auto" ? config.initiativeMode : directorySignals ? "directory" : "flat";
   const wikiIndexMode = config.wikiIndexMode && config.wikiIndexMode !== "auto" ? config.wikiIndexMode : directorySignals ? lowercaseWikiIndex ? "canonical-lowercase" : "none" : lowercaseWikiIndex && !uppercaseWikiIndex ? "canonical-lowercase" : "generated-uppercase";
@@ -1339,7 +1586,8 @@ function detectMdocsContract(mdocsRoot, config = {}) {
     obsidianRefreshCommand: config.obsidianRefreshCommand ?? null,
     enforcementMode: resolveEnforcementMode(config.enforcementMode),
     idle: resolveIdleStrictness(config.idle),
-    initiativeRecordMode: config.initiativeRecordMode ?? "full"
+    initiativeRecordMode: config.initiativeRecordMode ?? "full",
+    compiledViewMutationMode: config.compiledViewMutationMode === "targeted" ? "targeted" : "off"
   };
 }
 function resolveEnforcementMode(configValue) {
@@ -1354,7 +1602,7 @@ function resolveIdleStrictness(configValue) {
 }
 function isDirectory(filePath) {
   try {
-    return fs6.statSync(filePath).isDirectory();
+    return fs8.statSync(filePath).isDirectory();
   } catch {
     return false;
   }
@@ -1402,12 +1650,12 @@ var MdocsLifecycleService = class {
 };
 
 // src/core/managers/initiative.ts
-var fs8 = __toESM(require("fs"));
-var path9 = __toESM(require("path"));
+var fs10 = __toESM(require("fs"));
+var path11 = __toESM(require("path"));
 
 // src/core/initiative-store.ts
-var fs7 = __toESM(require("fs"));
-var path8 = __toESM(require("path"));
+var fs9 = __toESM(require("fs"));
+var path10 = __toESM(require("path"));
 var METADATA_ONLY_CORE_LIFECYCLE_KEYS = /* @__PURE__ */ new Set([
   "status",
   "updated",
@@ -1418,26 +1666,22 @@ var METADATA_ONLY_OPTIONAL_LIFECYCLE_KEYS = /* @__PURE__ */ new Set([
   "next_action"
 ]);
 function parseSection(content, sectionName) {
-  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = content.match(new RegExp(`## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$)`));
-  return match ? match[1].trim() : "";
+  return readMarkdownSection(content, sectionName);
 }
 function parseListSection(content, sectionName) {
-  const section = parseSection(content, sectionName);
-  return section.split("\n").filter((line) => line.trim().startsWith("- ")).map((line) => line.replace(/^- /, "").trim());
+  return readMarkdownList(content, sectionName);
 }
 function parsePlanItem(line) {
-  const checkableMatch = line.match(/^- \[([ x/])\]\s*(.+)$/);
+  const checkableMatch = line.match(/^- \[([ x/])\][ \t]*([\s\S]+)$/);
   if (checkableMatch) {
     const mark = checkableMatch[1];
     return { description: checkableMatch[2].trim(), status: mark === "x" ? "done" : mark === "/" ? "in-progress" : "pending" };
   }
-  const plainMatch = line.match(/^- \s*(.+)$/);
+  const plainMatch = line.match(/^- [ \t]*([\s\S]+)$/);
   return { description: (plainMatch?.[1] || line).trim(), status: "pending" };
 }
 function parsePlanSection(content) {
-  const section = parseSection(content, "Plan");
-  return section.split("\n").filter((line) => line.trim().startsWith("- ")).map((line) => parsePlanItem(line));
+  return parseListSection(content, "Plan").map((item) => parsePlanItem(`- ${item}`));
 }
 function titleize(slug) {
   return slug.split(/[-_]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
@@ -1460,14 +1704,14 @@ var InitiativeStore = class {
   constructor(baseDir, contract) {
     this.baseDir = baseDir;
     this.contract = contract;
-    this.initiativesDir = path8.join(baseDir, "initiatives");
+    this.initiativesDir = path10.join(baseDir, "initiatives");
   }
   baseDir;
   contract;
   initiativesDir;
   list(options = {}) {
     const records = [];
-    if (!fs7.existsSync(this.initiativesDir)) return records;
+    if (!fs9.existsSync(this.initiativesDir)) return records;
     if (this.contract.initiativeMode === "directory") {
       records.push(...this.listDirectoryRecords(false));
       if (options.includeArchived) records.push(...this.listDirectoryRecords(true));
@@ -1484,11 +1728,11 @@ var InitiativeStore = class {
     if (this.findById(initiative.id, { includeArchived: true }) || this.read(key)) {
       throw new Error(`Initiative already exists: ${initiative.id || key}`);
     }
-    const dirPath = path8.join(this.initiativesDir, key);
-    const filePath = path8.join(dirPath, "_status.md");
-    if (fs7.existsSync(dirPath)) throw new Error(`Initiative directory already exists: ${key}`);
-    fs7.mkdirSync(dirPath, { recursive: true });
-    fs7.writeFileSync(filePath, this.formatStatusFile(initiative), "utf8");
+    const dirPath = path10.join(this.initiativesDir, key);
+    const filePath = path10.join(dirPath, "_status.md");
+    if (fs9.existsSync(dirPath)) throw new Error(`Initiative directory already exists: ${key}`);
+    fs9.mkdirSync(dirPath, { recursive: true });
+    fs9.writeFileSync(filePath, this.formatStatusFile(initiative), "utf8");
     const record = this.read(key);
     if (!record) throw new Error(`Directory initiative not found after create: ${key}`);
     return { key, dirPath, filePath, initiative: record.initiative };
@@ -1503,7 +1747,7 @@ var InitiativeStore = class {
     this.updateStatusFile(record.filePath, this.frontmatterUpdates(initiative), progressNote);
     const updated = this.read(record.key);
     if (!updated) throw new Error(`Directory initiative not found after update: ${key}`);
-    return { key: record.key, dirPath: path8.dirname(record.filePath), filePath: record.filePath, initiative: updated.initiative };
+    return { key: record.key, dirPath: path10.dirname(record.filePath), filePath: record.filePath, initiative: updated.initiative };
   }
   delete(key) {
     const record = this.read(key);
@@ -1511,9 +1755,9 @@ var InitiativeStore = class {
       throw new Error(`Directory initiative not found: ${key}`);
     }
     const slug = this.safeDirectoryKey(record.key);
-    const dirPath = path8.join(this.initiativesDir, slug);
-    if (!fs7.existsSync(dirPath)) throw new Error(`Directory initiative not found: ${key}`);
-    fs7.rmSync(dirPath, { recursive: true, force: false });
+    const dirPath = path10.join(this.initiativesDir, slug);
+    if (!fs9.existsSync(dirPath)) throw new Error(`Directory initiative not found: ${key}`);
+    fs9.rmSync(dirPath, { recursive: true, force: false });
   }
   markDone(key, timestamp = /* @__PURE__ */ new Date()) {
     const record = this.read(key);
@@ -1537,17 +1781,17 @@ var InitiativeStore = class {
     }
     if (!isCompleted(record.initiative.status)) throw new Error(`Only completed initiatives can be archived: ${record.initiative.id}`);
     const slug = this.safeDirectoryKey(record.key);
-    const sourcePath = path8.join(this.initiativesDir, slug);
-    const archiveDir = path8.join(this.initiativesDir, "_archive");
-    const targetPath = path8.join(archiveDir, slug);
-    if (!fs7.existsSync(sourcePath)) throw new Error(`Directory initiative not found: ${key}`);
-    if (fs7.existsSync(targetPath)) throw new Error(`Archived initiative already exists: ${slug}`);
-    fs7.mkdirSync(archiveDir, { recursive: true });
+    const sourcePath = path10.join(this.initiativesDir, slug);
+    const archiveDir = path10.join(this.initiativesDir, "_archive");
+    const targetPath = path10.join(archiveDir, slug);
+    if (!fs9.existsSync(sourcePath)) throw new Error(`Directory initiative not found: ${key}`);
+    if (fs9.existsSync(targetPath)) throw new Error(`Archived initiative already exists: ${slug}`);
+    fs9.mkdirSync(archiveDir, { recursive: true });
     this.updateStatusFile(record.filePath, {
       status: "archived",
       updated: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
     });
-    fs7.renameSync(sourcePath, targetPath);
+    fs9.renameSync(sourcePath, targetPath);
     return { archivedFilename: slug, sourcePath, targetPath };
   }
   findById(id, options = {}) {
@@ -1582,9 +1826,9 @@ var InitiativeStore = class {
     }) || null;
   }
   listFlatRecords() {
-    if (!fs7.existsSync(this.initiativesDir)) return [];
-    return fs7.readdirSync(this.initiativesDir).filter((file) => file.endsWith(".md") && file !== "INDEX.md").flatMap((file) => {
-      const filePath = path8.join(this.initiativesDir, file);
+    if (!fs9.existsSync(this.initiativesDir)) return [];
+    return fs9.readdirSync(this.initiativesDir).filter((file) => file.endsWith(".md") && file !== "INDEX.md").flatMap((file) => {
+      const filePath = path10.join(this.initiativesDir, file);
       try {
         return [this.parseRecord(file, filePath, "flat-file", false, file.replace(/\.md$/, ""))];
       } catch {
@@ -1593,11 +1837,11 @@ var InitiativeStore = class {
     });
   }
   listDirectoryRecords(archived) {
-    const parent = archived ? path8.join(this.initiativesDir, "_archive") : this.initiativesDir;
-    if (!fs7.existsSync(parent)) return [];
-    return fs7.readdirSync(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "archive" && entry.name !== "_archive").flatMap((entry) => {
-      const statusPath = path8.join(parent, entry.name, "_status.md");
-      if (!fs7.existsSync(statusPath)) return [];
+    const parent = archived ? path10.join(this.initiativesDir, "_archive") : this.initiativesDir;
+    if (!fs9.existsSync(parent)) return [];
+    return fs9.readdirSync(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "archive" && entry.name !== "_archive").flatMap((entry) => {
+      const statusPath = path10.join(parent, entry.name, "_status.md");
+      if (!fs9.existsSync(statusPath)) return [];
       try {
         const key = archived ? `_archive/${entry.name}` : entry.name;
         return [this.parseRecord(key, statusPath, "directory-status", archived, entry.name)];
@@ -1607,7 +1851,7 @@ var InitiativeStore = class {
     });
   }
   parseRecord(key, filePath, sourceKind, archived, slug) {
-    const content = fs7.readFileSync(filePath, "utf8");
+    const content = fs9.readFileSync(filePath, "utf8");
     const front = parseFrontmatter(content);
     if (!Object.keys(front).length) throw new Error(`Invalid initiative format: ${key}`);
     const body = content.replace(/---\r?\n[\s\S]*?\r?\n---/, "").trim();
@@ -1686,14 +1930,14 @@ ${sections}
     return front;
   }
   safeDirectoryKey(key) {
-    const base = path8.basename(key);
+    const base = path10.basename(key);
     if (!base || base === "." || base === ".." || base !== key || key.includes("/") || key.includes("\\")) {
       throw new Error(`Invalid directory initiative key: ${key}`);
     }
     return base;
   }
   updateStatusFile(filePath, updates, progressNote) {
-    const content = fs7.readFileSync(filePath, "utf8");
+    const content = fs9.readFileSync(filePath, "utf8");
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n?)([\s\S]*)$/);
     if (!match) throw new Error(`Invalid initiative status format: ${filePath}`);
     const newline = content.includes("\r\n") ? "\r\n" : "\n";
@@ -1710,7 +1954,7 @@ ${sections}
         }
       }
       const body2 = match[3] || "";
-      fs7.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${match[2]}${body2}`, "utf8");
+      fs9.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${match[2]}${body2}`, "utf8");
       return;
     }
     for (const [key, value] of Object.entries(updates)) {
@@ -1721,7 +1965,7 @@ ${sections}
     }
     let body = match[3] || "";
     if (progressNote) body = this.appendProgressNote(body, progressNote, newline);
-    fs7.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${newline}${body.replace(/^\r?\n/, "")}`, "utf8");
+    fs9.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${newline}${body.replace(/^\r?\n/, "")}`, "utf8");
   }
   /**
    * Surgical frontmatter-array mutation for explicit link operations. Adds or
@@ -1749,7 +1993,7 @@ ${sections}
     return this.mutateFrontmatterArray(record.filePath, arrayKey, value, op);
   }
   mutateFrontmatterArray(filePath, arrayKey, value, op) {
-    const content = fs7.readFileSync(filePath, "utf8");
+    const content = fs9.readFileSync(filePath, "utf8");
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n?)([\s\S]*)$/);
     if (!match) throw new Error(`Invalid initiative status format: ${filePath}`);
     const newline = content.includes("\r\n") ? "\r\n" : "\n";
@@ -1774,7 +2018,7 @@ ${sections}
       else lines.push(nextLine);
     }
     const body = match[3] || "";
-    fs7.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${match[2]}${body}`, "utf8");
+    fs9.writeFileSync(filePath, `---${newline}${lines.join(newline)}${newline}---${match[2]}${body}`, "utf8");
     return true;
   }
   appendProgressNote(body, progressNote, newline) {
@@ -1792,13 +2036,10 @@ function slugify2(value) {
 
 // src/core/managers/initiative.ts
 function parseSection2(content, sectionName) {
-  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = content.match(new RegExp(`## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$)`));
-  return match ? match[1].trim() : "";
+  return readMarkdownSection(content, sectionName);
 }
 function parseListSection2(content, sectionName) {
-  const section = parseSection2(content, sectionName);
-  return section.split("\n").filter((line) => line.trim().startsWith("- ")).map((line) => line.replace(/^- /, "").trim());
+  return readMarkdownList(content, sectionName);
 }
 function formatPlanItem(item) {
   const statusMap = {
@@ -1810,22 +2051,21 @@ function formatPlanItem(item) {
   return `${prefix} ${item.description}`;
 }
 function parsePlanItem2(line) {
-  const checkableMatch = line.match(/^- \[([ x/])\]\s*(.+)$/);
+  const checkableMatch = line.match(/^- \[([ x/])\][ \t]*([\s\S]+)$/);
   if (checkableMatch) {
     const mark = checkableMatch[1];
     const description = checkableMatch[2].trim();
     const status = mark === "x" ? "done" : mark === "/" ? "in-progress" : "pending";
     return { description, status };
   }
-  const plainMatch = line.match(/^- \s*(.+)$/);
+  const plainMatch = line.match(/^- [ \t]*([\s\S]+)$/);
   if (plainMatch) {
     return { description: plainMatch[1].trim(), status: "pending" };
   }
   return { description: line.trim(), status: "pending" };
 }
 function parsePlanSection2(content) {
-  const section = parseSection2(content, "Plan");
-  return section.split("\n").filter((line) => line.trim().startsWith("- ")).map((line) => parsePlanItem2(line));
+  return parseListSection2(content, "Plan").map((item) => parsePlanItem2(`- ${item}`));
 }
 var ALLOWED_EXPECTED_DURATIONS2 = /* @__PURE__ */ new Set(["normal", "long", "suppress"]);
 function coerceExpectedDuration2(raw) {
@@ -1834,17 +2074,17 @@ function coerceExpectedDuration2(raw) {
   return ALLOWED_EXPECTED_DURATIONS2.has(value) ? value : void 0;
 }
 function isSafePathSegment(segment) {
-  return !!segment && segment !== "." && segment !== ".." && path9.basename(segment) === segment;
+  return !!segment && segment !== "." && segment !== ".." && path11.basename(segment) === segment;
 }
 var InitiativeManager = class {
   dir;
   contract;
   store;
   constructor(baseDir, options = {}) {
-    this.dir = path9.join(baseDir, "initiatives");
+    this.dir = path11.join(baseDir, "initiatives");
     this.contract = detectMdocsContract(baseDir, options.compatibility);
     this.store = new InitiativeStore(baseDir, this.contract);
-    fs8.mkdirSync(this.dir, { recursive: true });
+    fs10.mkdirSync(this.dir, { recursive: true });
   }
   slugify(title) {
     return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -1855,7 +2095,7 @@ var InitiativeManager = class {
     return `${slug}--${initiative.created}.md`;
   }
   sanitizeFileName(fileName) {
-    const base = path9.basename(fileName);
+    const base = path11.basename(fileName);
     if (!base || base === "." || base === "..") {
       return "invalid.md";
     }
@@ -1896,11 +2136,11 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
 `;
   }
   initiativeFiles() {
-    return fs8.readdirSync(this.dir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+    return fs10.readdirSync(this.dir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
   }
   validationFiles() {
     if (this.contract.initiativeMode !== "directory") return this.initiativeFiles();
-    return fs8.readdirSync(this.dir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "archive" && entry.name !== "_archive").map((entry) => path9.join(entry.name, "_status.md")).filter((fileName) => fs8.existsSync(path9.join(this.dir, fileName)));
+    return fs10.readdirSync(this.dir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "archive" && entry.name !== "_archive").map((entry) => path11.join(entry.name, "_status.md")).filter((fileName) => fs10.existsSync(path11.join(this.dir, fileName)));
   }
   markdownDestinations(content) {
     const refs = /* @__PURE__ */ new Set();
@@ -1923,9 +2163,9 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
   }
   assertUniqueId(id, ignoreFileName) {
     if (!id) return;
-    const ignored = ignoreFileName ? path9.resolve(this.dir, this.sanitizeFileName(ignoreFileName)) : "";
+    const ignored = ignoreFileName ? path11.resolve(this.dir, this.sanitizeFileName(ignoreFileName)) : "";
     for (const fileName of this.initiativeFiles()) {
-      if (ignored && path9.resolve(this.dir, fileName) === ignored) continue;
+      if (ignored && path11.resolve(this.dir, fileName) === ignored) continue;
       try {
         const existing = this.read(fileName);
         if (existing?.id === id) {
@@ -1948,8 +2188,8 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
       return this.store.create(initiative).dirPath;
     }
     const fileName = this.formatFileName(initiative);
-    const filePath = path9.join(this.dir, fileName);
-    if (fs8.existsSync(filePath)) {
+    const filePath = path11.join(this.dir, fileName);
+    if (fs10.existsSync(filePath)) {
       throw new Error(`Initiative file already exists: ${fileName}`);
     }
     this.assertUniqueId(initiative.id);
@@ -1964,23 +2204,23 @@ ${initiative.progressLog.map((l) => `- ${l}`).join("\n")}
 
 ## Artifacts
 ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
-    fs8.writeFileSync(filePath, content, "utf8");
+    fs10.writeFileSync(filePath, content, "utf8");
     this.updateIndex();
     return filePath;
   }
   read(fileName) {
     const sanitized = this.sanitizeFileName(fileName);
-    const filePath = path9.join(this.dir, sanitized);
-    if (!fs8.existsSync(filePath) || fs8.statSync(filePath).isDirectory()) {
+    const filePath = path11.join(this.dir, sanitized);
+    if (!fs10.existsSync(filePath) || fs10.statSync(filePath).isDirectory()) {
       return this.contract.initiativeMode === "directory" ? this.store.read(fileName)?.initiative || null : null;
     }
-    const content = fs8.readFileSync(filePath, "utf8");
+    const content = fs10.readFileSync(filePath, "utf8");
     return this.parseInitiative(content, fileName);
   }
   parseInitiative(content, fileName) {
     const front = parseFrontmatter(content);
     if (!Object.keys(front).length) throw new Error(`Invalid initiative format: ${fileName}`);
-    const body = content.replace(/---\n[\s\S]*?\n---/, "").trim();
+    const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---/, "").trim();
     return {
       id: front.id || "",
       title: front.title || "",
@@ -2011,37 +2251,69 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
   update(fileName, initiative) {
     this.assertWriteSupported("initiative.update");
     if (this.contract.initiativeMode === "directory") {
-      const previous = this.store.read(fileName)?.initiative.progressLog || [];
-      const newProgress = initiative.progressLog.slice(previous.length).join("\n- ");
+      const previous2 = this.store.read(fileName)?.initiative.progressLog || [];
+      const newProgress = initiative.progressLog.slice(previous2.length).join("\n- ");
       return this.store.update(fileName, initiative, newProgress || void 0).dirPath;
     }
     const sanitized = this.sanitizeFileName(fileName);
     this.assertUniqueId(initiative.id, sanitized);
-    const oldPath = path9.join(this.dir, sanitized);
-    const newFileName = this.formatFileName(initiative);
-    const newPath = path9.join(this.dir, newFileName);
-    if (oldPath !== newPath) {
-      if (fs8.existsSync(newPath)) {
-        throw new Error(`Cannot update: target file already exists: ${newFileName}`);
-      }
-      if (fs8.existsSync(oldPath)) {
-        fs8.unlinkSync(oldPath);
-      }
+    const filePath = path11.join(this.dir, sanitized);
+    const original = fs10.readFileSync(filePath, "utf8");
+    const previous = this.parseInitiative(original, sanitized);
+    const front = original.match(/^(---\r?\n)([\s\S]*?)(\r?\n---)([\s\S]*)$/);
+    if (!front) throw new Error(`Invalid initiative format: ${sanitized}`);
+    const newline = original.includes("\r\n") ? "\r\n" : "\n";
+    const lines = front[2].split(/\r?\n/);
+    const keys = {
+      id: "id",
+      title: "title",
+      status: "status",
+      created: "created",
+      updated: "updated",
+      owner: "owner",
+      tags: "tags",
+      aliases: "aliases",
+      relatedWiki: "related_wiki",
+      priority: "priority",
+      dueDate: "due_date",
+      dependsOn: "depends_on",
+      phase: "phase",
+      handoffSummary: "handoff_summary",
+      openQuestions: "open_questions",
+      blockers: "blockers",
+      nextAction: "next_action",
+      expectedDuration: "expected_duration",
+      graduated: "graduated"
+    };
+    for (const field of Object.keys(keys)) {
+      if (JSON.stringify(previous[field]) === JSON.stringify(initiative[field])) continue;
+      const key = keys[field];
+      const index = lines.findIndex((line) => line.startsWith(`${key}:`));
+      let end = index + 1;
+      if (index >= 0) while (end < lines.length && /^(?:\s+|$)/.test(lines[end])) end++;
+      while (end > index + 1 && lines[end - 1].trim() === "") end--;
+      const replacement = initiative[field] === void 0 ? [] : [`${key}: ${JSON.stringify(initiative[field])}`];
+      if (index >= 0) lines.splice(index, end - index, ...replacement);
+      else lines.push(...replacement);
     }
-    const content = this.toFrontmatter(initiative) + `## Objective
-${initiative.objective}
-
-## Plan
-${initiative.plan.map((p) => formatPlanItem(p)).join("\n")}
-
-## Progress Log
-${initiative.progressLog.map((l) => `- ${l}`).join("\n")}
-
-## Artifacts
-${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
-    fs8.writeFileSync(newPath, content, "utf8");
+    let body = front[4];
+    const sections = [
+      ["objective", "Objective", () => initiative.objective],
+      ["plan", "Plan", () => initiative.plan.map(formatPlanItem).join("\n")],
+      ["artifacts", "Artifacts", () => initiative.artifacts.map((item) => `- ${item}`).join("\n")]
+    ];
+    for (const [field, name, render] of sections) {
+      if (JSON.stringify(previous[field]) !== JSON.stringify(initiative[field])) body = writeMarkdownSection(body, name, render());
+    }
+    if (JSON.stringify(previous.progressLog) !== JSON.stringify(initiative.progressLog)) {
+      const appendOnly = previous.progressLog.every((item, index) => initiative.progressLog[index] === item);
+      const notes = appendOnly ? initiative.progressLog.slice(previous.progressLog.length) : initiative.progressLog;
+      body = writeMarkdownSection(body, "Progress Log", notes.map((item) => `- ${item}`).join("\n"), appendOnly);
+    }
+    const content = front[1] + lines.join(newline) + front[3] + body;
+    if (content !== original) atomicWrite(filePath, content);
     this.updateIndex();
-    return newPath;
+    return filePath;
   }
   markDone(fileName) {
     if (this.contract.initiativeMode === "directory") {
@@ -2055,7 +2327,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     initiative.updated = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     initiative.progressLog.push(`[${(/* @__PURE__ */ new Date()).toISOString()}] Marked done via mdocs command`);
     const filePath = this.update(sanitized, initiative);
-    return { filePath, filename: path9.basename(filePath), initiative };
+    return { filePath, filename: path11.basename(filePath), initiative };
   }
   delete(fileName) {
     this.assertWriteSupported("initiative.delete");
@@ -2064,39 +2336,39 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
       return;
     }
     const sanitized = this.sanitizeFileName(fileName);
-    const filePath = path9.join(this.dir, sanitized);
-    if (fs8.existsSync(filePath)) {
-      fs8.unlinkSync(filePath);
+    const filePath = path11.join(this.dir, sanitized);
+    if (fs10.existsSync(filePath)) {
+      fs10.unlinkSync(filePath);
       this.updateIndex();
     }
   }
   syncIndex() {
     if (this.contract.initiativeMode === "directory") {
-      return path9.join(this.dir, "INDEX.md");
+      return path11.join(this.dir, "INDEX.md");
     }
     this.updateIndex();
-    return path9.join(this.dir, "INDEX.md");
+    return path11.join(this.dir, "INDEX.md");
   }
   archive(fileName) {
     this.assertWriteSupported("initiative.archive");
     if (this.contract.initiativeMode === "directory") {
       const result = this.store.archive(fileName);
-      return { archivedFilename: result.archivedFilename, archiveIndex: path9.join(this.dir, "_archive") };
+      return { archivedFilename: result.archivedFilename, archiveIndex: path11.join(this.dir, "_archive") };
     }
     const sanitized = this.sanitizeFileName(fileName);
-    const sourcePath = path9.join(this.dir, sanitized);
-    if (!fs8.existsSync(sourcePath)) throw new Error(`Initiative file not found: ${sanitized}`);
+    const sourcePath = path11.join(this.dir, sanitized);
+    if (!fs10.existsSync(sourcePath)) throw new Error(`Initiative file not found: ${sanitized}`);
     const initiative = this.read(sanitized);
     if (!initiative) throw new Error(`Initiative file not found: ${sanitized}`);
     if (!isCompleted(initiative.status)) throw new Error(`Only completed initiatives can be archived: ${initiative.id}`);
-    const archiveDir = path9.join(this.dir, "archive");
-    fs8.mkdirSync(archiveDir, { recursive: true });
-    const targetPath = path9.join(archiveDir, sanitized);
-    if (fs8.existsSync(targetPath)) throw new Error(`Archived initiative already exists: ${sanitized}`);
-    fs8.renameSync(sourcePath, targetPath);
+    const archiveDir = path11.join(this.dir, "archive");
+    fs10.mkdirSync(archiveDir, { recursive: true });
+    const targetPath = path11.join(archiveDir, sanitized);
+    if (fs10.existsSync(targetPath)) throw new Error(`Archived initiative already exists: ${sanitized}`);
+    fs10.renameSync(sourcePath, targetPath);
     this.updateIndex();
     this.updateArchiveIndex();
-    return { archivedFilename: sanitized, archiveIndex: path9.join(archiveDir, "INDEX.md") };
+    return { archivedFilename: sanitized, archiveIndex: path11.join(archiveDir, "INDEX.md") };
   }
   /**
    * Add one wiki ref to the initiative's related_wiki. Under directory
@@ -2148,7 +2420,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     return this.store.list({ includeArchived }).map((record) => record.initiative);
   }
   findRelated(queryTags) {
-    const files = fs8.readdirSync(this.dir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+    const files = fs10.readdirSync(this.dir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
     const initiatives = [];
     for (const f of files) {
       try {
@@ -2198,13 +2470,13 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     const warnings = [];
     const ids = /* @__PURE__ */ new Map();
     const files = this.validationFiles();
-    const wikiRoot = path9.join(path9.dirname(this.dir), "wiki");
+    const wikiRoot = path11.join(path11.dirname(this.dir), "wiki");
     const metadataOnly = this.contract.initiativeMode === "directory" && this.contract.initiativeRecordMode === "metadata-only";
     for (const fileName of files) {
       let initiative;
       let front = {};
       try {
-        const content = fs8.readFileSync(path9.join(this.dir, fileName), "utf8");
+        const content = fs10.readFileSync(path11.join(this.dir, fileName), "utf8");
         const match = content.match(/---\n([\s\S]*?)\n---/);
         if (match) {
           for (const line of match[1].split("\n")) {
@@ -2219,7 +2491,7 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
             }
           }
         }
-        const parsed = this.read(fileName.endsWith("_status.md") ? fileName.split(path9.sep)[0] : fileName);
+        const parsed = this.read(fileName.endsWith("_status.md") ? fileName.split(path11.sep)[0] : fileName);
         if (!parsed) continue;
         initiative = parsed;
       } catch (err) {
@@ -2247,32 +2519,32 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
         if (parts.length === 1) {
           const [id2] = parts;
           if (!isSafePathSegment(id2)) warnings.push(`${fileName} has unsafe wiki reference: ${ref}`);
-          else if (!fs8.existsSync(path9.join(wikiRoot, `${id2}.md`))) warnings.push(`${fileName} references missing wiki entry: ${ref}`);
+          else if (!fs10.existsSync(path11.join(wikiRoot, `${id2}.md`))) warnings.push(`${fileName} references missing wiki entry: ${ref}`);
           continue;
         }
         const [category, id, ...rest] = parts;
         if (!isSafePathSegment(category) || !isSafePathSegment(id) || rest.length > 0) {
           warnings.push(`${fileName} has unsafe wiki reference: ${ref}`);
-        } else if (!fs8.existsSync(path9.join(wikiRoot, category, `${id}.md`))) {
+        } else if (!fs10.existsSync(path11.join(wikiRoot, category, `${id}.md`))) {
           warnings.push(`${fileName} references missing wiki entry: ${ref}`);
         }
       }
     }
-    const indexPath = path9.join(this.dir, "INDEX.md");
+    const indexPath = path11.join(this.dir, "INDEX.md");
     if (this.contract.initiativeMode === "directory" && this.contract.wikiIndexOwner === "external") {
-      if (!fs8.existsSync(indexPath)) {
+      if (!fs10.existsSync(indexPath)) {
         errors.push("initiatives/INDEX.md missing external compiled index");
       } else {
-        const listed = this.markdownDestinations(fs8.readFileSync(indexPath, "utf8"));
+        const listed = this.markdownDestinations(fs10.readFileSync(indexPath, "utf8"));
         for (const fileName of files) {
-          const id = fileName.split(path9.sep)[0];
+          const id = fileName.split(path11.sep)[0];
           if (!listed.has(id) && !listed.has(`${id}/_status`)) {
             errors.push(`initiatives/INDEX.md missing link to directory initiative: ${id}`);
           }
         }
       }
-    } else if (fs8.existsSync(indexPath)) {
-      const indexContent = fs8.readFileSync(indexPath, "utf8");
+    } else if (fs10.existsSync(indexPath)) {
+      const indexContent = fs10.readFileSync(indexPath, "utf8");
       const listed = this.listedIndexFiles(indexContent);
       const actual = new Set(files);
       for (const listedFile of listed) {
@@ -2283,30 +2555,30 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
       }
     }
     if (this.contract.initiativeMode === "directory") {
-      const overviewPath = path9.join(wikiRoot, "overview.md");
-      const overviewRefs = fs8.existsSync(overviewPath) ? this.markdownDestinations(fs8.readFileSync(overviewPath, "utf8")) : null;
+      const overviewPath = path11.join(wikiRoot, "overview.md");
+      const overviewRefs = fs10.existsSync(overviewPath) ? this.markdownDestinations(fs10.readFileSync(overviewPath, "utf8")) : null;
       for (const fileName of files) {
-        const source = this.read(fileName.split(path9.sep)[0]);
+        const source = this.read(fileName.split(path11.sep)[0]);
         if (!source || source.status !== "active") continue;
         const id = source.id;
-        const plural = path9.join(wikiRoot, "initiatives", `${id}.md`);
-        const singular = path9.join(wikiRoot, "initiative", `${id}.md`);
-        const compiledPath = fs8.existsSync(plural) ? plural : fs8.existsSync(singular) ? singular : null;
+        const plural = path11.join(wikiRoot, "initiatives", `${id}.md`);
+        const singular = path11.join(wikiRoot, "initiative", `${id}.md`);
+        const compiledPath = fs10.existsSync(plural) ? plural : fs10.existsSync(singular) ? singular : null;
         if (!compiledPath) {
           errors.push(`${fileName} active initiative missing compiled wiki page: wiki/initiatives/${id}.md`);
           continue;
         }
-        const compiledFront = parseFrontmatter(fs8.readFileSync(compiledPath, "utf8"));
+        const compiledFront = parseFrontmatter(fs10.readFileSync(compiledPath, "utf8"));
         if (compiledFront.status === void 0 || compiledFront.status === "") {
-          errors.push(`${path9.relative(path9.dirname(this.dir), compiledPath)} missing status`);
+          errors.push(`${path11.relative(path11.dirname(this.dir), compiledPath)} missing status`);
         } else if (!this.statusesEquivalent(source.status, String(compiledFront.status))) {
-          errors.push(`${path9.relative(path9.dirname(this.dir), compiledPath)} status ${compiledFront.status} does not match source status ${source.status}`);
+          errors.push(`${path11.relative(path11.dirname(this.dir), compiledPath)} status ${compiledFront.status} does not match source status ${source.status}`);
         }
         if (this.contract.wikiIndexOwner === "external") {
           if (!overviewRefs) {
             errors.push("wiki/overview.md missing external compiled overview");
           } else {
-            const category = path9.basename(path9.dirname(compiledPath));
+            const category = path11.basename(path11.dirname(compiledPath));
             const categoryAlias = category.endsWith("s") ? category.slice(0, -1) : `${category}s`;
             if (!overviewRefs.has(`${category}/${id}`) && !overviewRefs.has(`${categoryAlias}/${id}`)) {
               errors.push(`wiki/overview.md missing link to active initiative: ${id}`);
@@ -2327,11 +2599,11 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     if (this.contract.initiativeMode === "directory") {
       return { consistent: true, missing, orphans, stale };
     }
-    const indexPath = path9.join(this.dir, "INDEX.md");
-    if (!fs8.existsSync(indexPath)) {
+    const indexPath = path11.join(this.dir, "INDEX.md");
+    if (!fs10.existsSync(indexPath)) {
       return { consistent: false, missing: ["INDEX.md missing"], orphans: [], stale: true };
     }
-    const indexContent = fs8.readFileSync(indexPath, "utf8");
+    const indexContent = fs10.readFileSync(indexPath, "utf8");
     const listed = this.listedIndexFiles(indexContent);
     const actualFiles = this.initiativeFiles();
     const actual = new Set(actualFiles);
@@ -2345,10 +2617,10 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
         orphans.push(actualFile);
       }
     }
-    const indexMtime = fs8.statSync(indexPath).mtimeMs;
+    const indexMtime = fs10.statSync(indexPath).mtimeMs;
     for (const fileName of actualFiles) {
-      const filePath = path9.join(this.dir, fileName);
-      const fileMtime = fs8.statSync(filePath).mtimeMs;
+      const filePath = path11.join(this.dir, fileName);
+      const fileMtime = fs10.statSync(filePath).mtimeMs;
       if (fileMtime > indexMtime) {
         stale = true;
         break;
@@ -2365,27 +2637,27 @@ ${initiative.artifacts.map((a) => `- ${a}`).join("\n")}`;
     return this.list();
   }
   updateArchiveIndex() {
-    const archiveDir = path9.join(this.dir, "archive");
-    fs8.mkdirSync(archiveDir, { recursive: true });
-    const files = fs8.readdirSync(archiveDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+    const archiveDir = path11.join(this.dir, "archive");
+    fs10.mkdirSync(archiveDir, { recursive: true });
+    const files = fs10.readdirSync(archiveDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
     const entries = [];
     for (const f of files) {
       try {
-        const content = fs8.readFileSync(path9.join(archiveDir, f), "utf8");
+        const content = fs10.readFileSync(path11.join(archiveDir, f), "utf8");
         const init = this.parseInitiative(content, f);
         entries.push({ initiative: init, fileName: f });
       } catch {
       }
     }
     const lines = entries.map(({ initiative: i, fileName }) => `- **${i.title}** (${i.status}) \u2014 ${fileName} \u2014 ${i.created} \u2014 [${i.tags.join(", ")}]`);
-    fs8.writeFileSync(path9.join(archiveDir, "INDEX.md"), `# Archived Initiatives
+    fs10.writeFileSync(path11.join(archiveDir, "INDEX.md"), `# Archived Initiatives
 
 ${lines.join("\n") || "No archived initiatives yet."}`, "utf8");
   }
   writeIndexMeta() {
-    const metaPath = path9.join(path9.dirname(this.dir), ".index-meta.json");
+    const metaPath = path11.join(path11.dirname(this.dir), ".index-meta.json");
     const meta = { lastSync: (/* @__PURE__ */ new Date()).toISOString() };
-    fs8.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf8");
+    fs10.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf8");
   }
   updateIndex() {
     if (this.contract.initiativeMode === "directory") {
@@ -2404,14 +2676,14 @@ ${lines.join("\n") || "No archived initiatives yet."}`, "utf8");
     const index = `# Initiatives
 
 ${lines.join("\n") || "No initiatives yet."}`;
-    fs8.writeFileSync(path9.join(this.dir, "INDEX.md"), index, "utf8");
+    fs10.writeFileSync(path11.join(this.dir, "INDEX.md"), index, "utf8");
     this.writeIndexMeta();
   }
 };
 
 // src/core/managers/mdocs.ts
-var fs9 = __toESM(require("fs"));
-var path10 = __toESM(require("path"));
+var fs11 = __toESM(require("fs"));
+var path12 = __toESM(require("path"));
 var MdocsManager = class {
   baseDir;
   contract;
@@ -2419,56 +2691,56 @@ var MdocsManager = class {
     if (!baseDir || typeof baseDir !== "string") {
       throw new Error("baseDir must be a non-empty string");
     }
-    this.baseDir = path10.resolve(baseDir);
+    this.baseDir = path12.resolve(baseDir);
     this.contract = detectMdocsContract(this.baseDir, compatibility);
   }
   init() {
-    const initiativesDir = path10.join(this.baseDir, "initiatives");
-    const wikiDir = path10.join(this.baseDir, "wiki");
-    fs9.mkdirSync(initiativesDir, { recursive: true });
-    fs9.mkdirSync(wikiDir, { recursive: true });
-    this.writeIndex(path10.join(initiativesDir, "INDEX.md"), "# Initiatives\n\nNo initiatives yet.");
+    const initiativesDir = path12.join(this.baseDir, "initiatives");
+    const wikiDir = path12.join(this.baseDir, "wiki");
+    fs11.mkdirSync(initiativesDir, { recursive: true });
+    fs11.mkdirSync(wikiDir, { recursive: true });
+    this.writeIndex(path12.join(initiativesDir, "INDEX.md"), "# Initiatives\n\nNo initiatives yet.");
     if (this.contract.wikiIndexMode === "generated-uppercase") {
-      this.writeIndex(path10.join(wikiDir, "INDEX.md"), "# Wiki\n\nNo entries yet.");
+      this.writeIndex(path12.join(wikiDir, "INDEX.md"), "# Wiki\n\nNo entries yet.");
     } else if (this.contract.wikiIndexMode === "canonical-lowercase") {
-      this.writeIndex(path10.join(wikiDir, "index.md"), "# Wiki\n\nNo entries yet.");
+      this.writeIndex(path12.join(wikiDir, "index.md"), "# Wiki\n\nNo entries yet.");
     }
   }
   writeIndex(filePath, content) {
-    if (!fs9.existsSync(filePath)) {
-      fs9.writeFileSync(filePath, content, "utf8");
+    if (!fs11.existsSync(filePath)) {
+      fs11.writeFileSync(filePath, content, "utf8");
     }
   }
   exists() {
-    const initiativesPath = path10.join(this.baseDir, "initiatives");
-    const wikiPath = path10.join(this.baseDir, "wiki");
-    const initiativesIndex = path10.join(initiativesPath, "INDEX.md");
-    const wikiIndex = this.contract.wikiIndexMode === "canonical-lowercase" ? path10.join(wikiPath, "index.md") : path10.join(wikiPath, "INDEX.md");
+    const initiativesPath = path12.join(this.baseDir, "initiatives");
+    const wikiPath = path12.join(this.baseDir, "wiki");
+    const initiativesIndex = path12.join(initiativesPath, "INDEX.md");
+    const wikiIndex = this.contract.wikiIndexMode === "canonical-lowercase" ? path12.join(wikiPath, "index.md") : path12.join(wikiPath, "INDEX.md");
     const hasDirectoryInitiative = this.hasDirectoryInitiative(initiativesPath);
-    return fs9.existsSync(initiativesPath) && fs9.existsSync(wikiPath) && fs9.statSync(initiativesPath).isDirectory() && fs9.statSync(wikiPath).isDirectory() && (fs9.existsSync(initiativesIndex) || this.contract.initiativeMode === "directory" || hasDirectoryInitiative) && (this.contract.wikiIndexMode === "none" || fs9.existsSync(wikiIndex));
+    return fs11.existsSync(initiativesPath) && fs11.existsSync(wikiPath) && fs11.statSync(initiativesPath).isDirectory() && fs11.statSync(wikiPath).isDirectory() && (fs11.existsSync(initiativesIndex) || this.contract.initiativeMode === "directory" || hasDirectoryInitiative) && (this.contract.wikiIndexMode === "none" || fs11.existsSync(wikiIndex));
   }
   hasDirectoryInitiative(initiativesPath) {
-    if (!fs9.existsSync(initiativesPath) || !fs9.statSync(initiativesPath).isDirectory()) return false;
-    return fs9.readdirSync(initiativesPath, { withFileTypes: true }).some((entry) => {
+    if (!fs11.existsSync(initiativesPath) || !fs11.statSync(initiativesPath).isDirectory()) return false;
+    return fs11.readdirSync(initiativesPath, { withFileTypes: true }).some((entry) => {
       if (!entry.isDirectory() || entry.name === "archive" || entry.name === "_archive") return false;
-      return fs9.existsSync(path10.join(initiativesPath, entry.name, "_status.md"));
+      return fs11.existsSync(path12.join(initiativesPath, entry.name, "_status.md"));
     });
   }
   getMetaPath() {
-    return path10.join(this.baseDir, ".index-meta.json");
+    return path12.join(this.baseDir, ".index-meta.json");
   }
   writeIndexMeta() {
     const metaPath = this.getMetaPath();
     const meta = { lastSync: (/* @__PURE__ */ new Date()).toISOString() };
-    fs9.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf8");
+    fs11.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf8");
   }
   readIndexMeta() {
     const metaPath = this.getMetaPath();
-    if (!fs9.existsSync(metaPath)) {
+    if (!fs11.existsSync(metaPath)) {
       return { lastSync: null };
     }
     try {
-      const content = fs9.readFileSync(metaPath, "utf8");
+      const content = fs11.readFileSync(metaPath, "utf8");
       const meta = JSON.parse(content);
       return { lastSync: meta.lastSync || null };
     } catch {
@@ -2478,8 +2750,8 @@ var MdocsManager = class {
 };
 
 // src/core/managers/wiki.ts
-var fs10 = __toESM(require("fs"));
-var path11 = __toESM(require("path"));
+var fs12 = __toESM(require("fs"));
+var path13 = __toESM(require("path"));
 var REMOVE_KEY = /* @__PURE__ */ Symbol("remove-frontmatter-key");
 var RAW_KEY_ALIASES = {
   sources: "source_initiatives"
@@ -2494,10 +2766,10 @@ var WikiManager = class {
   standaloneCategories;
   contract;
   constructor(baseDir, options = {}) {
-    this.dir = path11.join(baseDir, "wiki");
+    this.dir = path13.join(baseDir, "wiki");
     this.standaloneCategories = new Set((options.standaloneCategories || []).map((category) => this.sanitizeName(category)));
     this.contract = detectMdocsContract(baseDir, options.compatibility);
-    fs10.mkdirSync(this.dir, { recursive: true });
+    fs12.mkdirSync(this.dir, { recursive: true });
   }
   toFrontmatter(entry) {
     const front = {
@@ -2592,7 +2864,7 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
     return managed;
   }
   sanitizeName(name) {
-    const base = path11.basename(name);
+    const base = path13.basename(name);
     if (!base || base === "." || base === "..") {
       throw new Error(`Invalid name: ${name}`);
     }
@@ -2622,10 +2894,11 @@ ${lines.join("\n")}
 `;
   }
   stripReferencedBySection(content) {
-    const marker = "\n\n## Referenced By\n";
-    const idx = content.indexOf(marker);
-    if (idx !== -1) {
-      return content.slice(0, idx);
+    const section = markdownSections(content).find((item) => item.name === "Referenced By" && content.slice(item.body, item.end).includes("*Auto-generated by mdocs*"));
+    if (section) {
+      let prefix = content.slice(0, section.start);
+      if (section.end === content.length) prefix = prefix.replace(/(?:\r?\n){2}$/, "");
+      return prefix + content.slice(section.end);
     }
     return content;
   }
@@ -2634,28 +2907,28 @@ ${lines.join("\n")}
     const id = this.sanitizeName(entry.id);
     if (this.isRootCategory(entry.category)) {
       this.assertRootWritable(id);
-      const filePath2 = path11.join(this.dir, `${id}.md`);
+      const filePath2 = path13.join(this.dir, `${id}.md`);
       const content2 = this.serializeFrontmatter({ ...entry, category: "" }) + entry.content + this.generateReferencedBySection(entry.relatedInitiatives);
-      fs10.writeFileSync(filePath2, content2, "utf8");
+      fs12.writeFileSync(filePath2, content2, "utf8");
       this.updateIndices();
       return filePath2;
     }
     const category = this.sanitizeName(entry.category);
-    const categoryDir = path11.join(this.dir, category);
-    fs10.mkdirSync(categoryDir, { recursive: true });
-    const filePath = path11.join(categoryDir, `${id}.md`);
+    const categoryDir = path13.join(this.dir, category);
+    fs12.mkdirSync(categoryDir, { recursive: true });
+    const filePath = path13.join(categoryDir, `${id}.md`);
     const referencedBy = this.generateReferencedBySection(entry.relatedInitiatives);
     const content = this.serializeFrontmatter(entry) + entry.content + referencedBy;
-    fs10.writeFileSync(filePath, content, "utf8");
+    fs12.writeFileSync(filePath, content, "utf8");
     this.updateIndices();
     return filePath;
   }
   read(category, id) {
     const cat = this.sanitizeName(category);
     const entryId = this.sanitizeName(id);
-    const filePath = path11.join(this.dir, cat, `${entryId}.md`);
-    if (!fs10.existsSync(filePath)) return null;
-    const content = fs10.readFileSync(filePath, "utf8");
+    const filePath = path13.join(this.dir, cat, `${entryId}.md`);
+    if (!fs12.existsSync(filePath)) return null;
+    const content = fs12.readFileSync(filePath, "utf8");
     return this.parseWikiEntry(content, { id: entryId, category: cat });
   }
   readByRef(ref) {
@@ -2666,15 +2939,15 @@ ${lines.join("\n")}
     return null;
   }
   refFor(entry) {
-    const stem = entry.id ? path11.basename(entry.id) : entry.id;
-    if (stem && fs10.existsSync(path11.join(this.dir, `${stem}.md`))) return stem;
+    const stem = entry.id ? path13.basename(entry.id) : entry.id;
+    if (stem && fs12.existsSync(path13.join(this.dir, `${stem}.md`))) return stem;
     return entry.category ? `${entry.category}/${stem}` : stem;
   }
   readRoot(id) {
     const entryId = this.sanitizeName(id.replace(/\.md$/, ""));
-    const filePath = path11.join(this.dir, `${entryId}.md`);
-    if (!fs10.existsSync(filePath)) return null;
-    const content = fs10.readFileSync(filePath, "utf8");
+    const filePath = path13.join(this.dir, `${entryId}.md`);
+    if (!fs12.existsSync(filePath)) return null;
+    const content = fs12.readFileSync(filePath, "utf8");
     return this.parseWikiEntry(content, { id: entryId, category: "" }, this.allowsSemanticRootCategory() && ["overview", "index", "log", "glossary"].includes(entryId));
   }
   parseWikiEntry(content, defaults = {}, physicalCategory = false) {
@@ -2687,12 +2960,12 @@ ${lines.join("\n")}
       newline: rawMatch[1] === "\r\n" ? "\r\n" : "\n",
       values: front
     } : void 0;
-    let body = hasFrontmatter ? content.replace(/---\n[\s\S]*?\n---/, "").trim() : content.trim();
+    let body = hasFrontmatter ? content.replace(/^---\r?\n[\s\S]*?\r?\n---/, "").trim() : content.trim();
     body = this.stripReferencedBySection(body);
     const firstHeading = body.match(/^#\s+(.+)$/m)?.[1]?.trim();
     const fallbackTitle = firstHeading || (defaults.id ? defaults.id.replace(/[-_]+/g, " ") : "");
     const rawFrontId = typeof front.id === "string" ? front.id : "";
-    const frontIdStem = rawFrontId ? path11.basename(rawFrontId) : "";
+    const frontIdStem = rawFrontId ? path13.basename(rawFrontId) : "";
     const canonicalId = defaults.id || frontIdStem || rawFrontId || "";
     const canonicalCategory = physicalCategory && defaults.category !== void 0 ? defaults.category : defaults.category || (typeof front.category === "string" ? front.category : "") || "";
     return {
@@ -2734,7 +3007,7 @@ ${lines.join("\n")}
     const refs = /* @__PURE__ */ new Set();
     for (const filePath of this.listInitiativeFiles()) {
       try {
-        const content = fs10.readFileSync(filePath, "utf8");
+        const content = fs12.readFileSync(filePath, "utf8");
         for (const ref of this.parseRelatedWiki(content)) refs.add(ref);
       } catch {
       }
@@ -2745,27 +3018,39 @@ ${lines.join("\n")}
     const entryId = this.sanitizeName(id);
     if (this.isRootCategory(category)) {
       this.assertRootWritable(entryId);
-      const filePath2 = path11.join(this.dir, `${entryId}.md`);
-      if (!fs10.existsSync(filePath2)) throw new Error(`Wiki entry not found: ${entryId}`);
+      const filePath2 = path13.join(this.dir, `${entryId}.md`);
+      if (!fs12.existsSync(filePath2)) throw new Error(`Wiki entry not found: ${entryId}`);
       entry.updated = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-      const cleanContent2 = this.stripReferencedBySection(entry.content);
-      const referencedBy2 = this.generateReferencedBySection(entry.relatedInitiatives);
-      fs10.writeFileSync(filePath2, this.serializeFrontmatter({ ...entry, category: "" }) + cleanContent2 + referencedBy2, "utf8");
+      this.writeUpdatedEntry(filePath2, { ...entry, category: "" });
       this.updateIndices();
       return filePath2;
     }
     const cat = this.sanitizeName(category);
-    const filePath = path11.join(this.dir, cat, `${entryId}.md`);
-    if (!fs10.existsSync(filePath)) {
+    const filePath = path13.join(this.dir, cat, `${entryId}.md`);
+    if (!fs12.existsSync(filePath)) {
       throw new Error(`Wiki entry not found: ${cat}/${entryId}`);
     }
     entry.updated = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-    const cleanContent = this.stripReferencedBySection(entry.content);
-    const referencedBy = this.generateReferencedBySection(entry.relatedInitiatives);
-    const content = this.serializeFrontmatter(entry) + cleanContent + referencedBy;
-    fs10.writeFileSync(filePath, content, "utf8");
+    this.writeUpdatedEntry(filePath, entry);
     this.updateIndices();
     return filePath;
+  }
+  writeUpdatedEntry(filePath, entry) {
+    const original = fs12.readFileSync(filePath, "utf8");
+    const previous = this.parseWikiEntry(original, { id: entry.id, category: entry.category });
+    const front = original.match(/^---\r?\n[\s\S]*?\r?\n---/);
+    const newline = entry.rawFrontmatter?.newline || "\n";
+    let body;
+    if (front && entry.content === previous.content) {
+      body = original.slice(front[0].length);
+      if (JSON.stringify(entry.relatedInitiatives) !== JSON.stringify(previous.relatedInitiatives)) {
+        body = this.stripReferencedBySection(body) + this.generateReferencedBySection(entry.relatedInitiatives).replace(/\n/g, newline);
+      }
+    } else {
+      body = newline + newline + (this.stripReferencedBySection(entry.content) + this.generateReferencedBySection(entry.relatedInitiatives)).replace(/\r?\n/g, newline);
+    }
+    const header = this.serializeFrontmatter(entry).replace(/(?:\r?\n){2}$/, "");
+    atomicWrite(filePath, header + body);
   }
   addRelatedInitiative(category, id, initiativeId) {
     const entry = this.read(category, id);
@@ -2830,7 +3115,7 @@ ${lines.join("\n")}
     const initiativeIds = [];
     for (const filePath of this.listInitiativeFiles()) {
       try {
-        const content = fs10.readFileSync(filePath, "utf8");
+        const content = fs12.readFileSync(filePath, "utf8");
         const refs = this.parseRelatedWiki(content);
         if (refs.some((ref) => accepted.has(ref))) {
           const front = parseFrontmatter(content);
@@ -2880,17 +3165,17 @@ ${lines.join("\n")}
     const entryId = this.sanitizeName(id);
     if (this.isRootCategory(category)) {
       this.assertRootWritable(entryId);
-      const filePath2 = path11.join(this.dir, `${entryId}.md`);
-      if (fs10.existsSync(filePath2)) {
-        fs10.unlinkSync(filePath2);
+      const filePath2 = path13.join(this.dir, `${entryId}.md`);
+      if (fs12.existsSync(filePath2)) {
+        fs12.unlinkSync(filePath2);
         this.updateIndices();
       }
       return;
     }
     const cat = this.sanitizeName(category);
-    const filePath = path11.join(this.dir, cat, `${entryId}.md`);
-    if (fs10.existsSync(filePath)) {
-      fs10.unlinkSync(filePath);
+    const filePath = path13.join(this.dir, cat, `${entryId}.md`);
+    if (fs12.existsSync(filePath)) {
+      fs12.unlinkSync(filePath);
       this.updateIndices();
     }
   }
@@ -2901,16 +3186,16 @@ ${lines.join("\n")}
     if (!category) {
       for (const filePath of this.rootWikiFiles()) {
         try {
-          const entry = this.readRoot(path11.basename(filePath, ".md"));
+          const entry = this.readRoot(path13.basename(filePath, ".md"));
           if (entry) entries.push(entry);
         } catch {
         }
       }
     }
     for (const cat of categories) {
-      const catDir = path11.join(this.dir, cat);
-      if (!fs10.existsSync(catDir)) continue;
-      const files = fs10.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+      const catDir = path13.join(this.dir, cat);
+      if (!fs12.existsSync(catDir)) continue;
+      const files = fs12.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
       for (const fileName of files) {
         try {
           const entry = this.read(cat, fileName.replace(/\.md$/, ""));
@@ -2927,13 +3212,13 @@ ${lines.join("\n")}
     }
     if (this.contract.wikiIndexMode === "canonical-lowercase") {
       this.writeLowercaseCanonicalIndex();
-      return [path11.join(this.dir, "index.md")];
+      return [path13.join(this.dir, "index.md")];
     }
     this.updateIndices();
-    const paths = [path11.join(this.dir, "INDEX.md")];
+    const paths = [path13.join(this.dir, "INDEX.md")];
     const categories = this.categoryDirs();
     for (const category of categories) {
-      paths.push(path11.join(this.dir, category, "INDEX.md"));
+      paths.push(path13.join(this.dir, category, "INDEX.md"));
     }
     return paths;
   }
@@ -2944,25 +3229,25 @@ ${lines.join("\n")}
     const entryId = this.sanitizeName(id);
     if (this.isRootCategory(category)) {
       this.assertRootWritable(entryId);
-      const filePath2 = path11.join(this.dir, `${entryId}.md`);
-      if (fs10.existsSync(filePath2)) return { success: false, existing: true, filePath: filePath2 };
+      const filePath2 = path13.join(this.dir, `${entryId}.md`);
+      if (fs12.existsSync(filePath2)) return { success: false, existing: true, filePath: filePath2 };
       const date2 = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
       const stubContent2 = template || this.entityOrGenericStubTemplate(title || entryId, "", entryId, date2);
-      fs10.writeFileSync(filePath2, stubContent2, "utf8");
+      fs12.writeFileSync(filePath2, stubContent2, "utf8");
       this.updateIndices();
       return { success: true, filePath: filePath2 };
     }
     const cat = this.sanitizeName(category);
-    const categoryDir = path11.join(this.dir, cat);
-    fs10.mkdirSync(categoryDir, { recursive: true });
-    const filePath = path11.join(categoryDir, `${entryId}.md`);
-    if (fs10.existsSync(filePath)) {
+    const categoryDir = path13.join(this.dir, cat);
+    fs12.mkdirSync(categoryDir, { recursive: true });
+    const filePath = path13.join(categoryDir, `${entryId}.md`);
+    if (fs12.existsSync(filePath)) {
       return { success: false, existing: true, filePath };
     }
     const date = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const stubTitle = title || entryId;
     const stubContent = template || this.entityOrGenericStubTemplate(stubTitle, cat, entryId, date);
-    fs10.writeFileSync(filePath, stubContent, "utf8");
+    fs12.writeFileSync(filePath, stubContent, "utf8");
     this.updateIndices();
     return { success: true, filePath };
   }
@@ -3060,14 +3345,14 @@ tags: []
     const warnings = [];
     const referencedWiki = this.referencedWikiRefs();
     const categories = this.categoryDirs();
-    const initiativesDir = path11.join(path11.dirname(this.dir), "initiatives");
-    if (fs10.existsSync(initiativesDir)) {
+    const initiativesDir = path13.join(path13.dirname(this.dir), "initiatives");
+    if (fs12.existsSync(initiativesDir)) {
       for (const filePath of this.listInitiativeFiles()) {
         try {
-          const content = fs10.readFileSync(filePath, "utf8");
+          const content = fs12.readFileSync(filePath, "utf8");
           for (const ref of this.parseRelatedWiki(content)) {
             if (!this.readByRef(ref)) {
-              errors.push(`Initiative ${path11.relative(initiativesDir, filePath)} references missing wiki entry: ${ref}`);
+              errors.push(`Initiative ${path13.relative(initiativesDir, filePath)} references missing wiki entry: ${ref}`);
             }
           }
         } catch {
@@ -3075,12 +3360,12 @@ tags: []
       }
     }
     for (const category of categories) {
-      const catDir = path11.join(this.dir, category);
-      const files = fs10.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+      const catDir = path13.join(this.dir, category);
+      const files = fs12.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
       for (const fileName of files) {
         const relativeName = `${category}/${fileName}`;
         try {
-          const entry = this.parseWikiEntry(fs10.readFileSync(path11.join(catDir, fileName), "utf8"));
+          const entry = this.parseWikiEntry(fs12.readFileSync(path13.join(catDir, fileName), "utf8"));
           if (!entry.id) errors.push(`${relativeName} missing id`);
           if (!entry.title) errors.push(`${relativeName} missing title`);
           if (!entry.category) errors.push(`${relativeName} missing category`);
@@ -3105,14 +3390,14 @@ tags: []
       }
     }
     for (const filePath of this.rootWikiFiles()) {
-      const relativeName = path11.basename(filePath);
+      const relativeName = path13.basename(filePath);
       try {
-        const entry = this.readRoot(path11.basename(filePath, ".md"));
+        const entry = this.readRoot(path13.basename(filePath, ".md"));
         if (!entry) continue;
         if (!entry.id) errors.push(`${relativeName} missing id`);
         if (!entry.title) errors.push(`${relativeName} missing title`);
         const raw = entry.rawFrontmatter?.values || {};
-        const stem = path11.basename(filePath, ".md");
+        const stem = path13.basename(filePath, ".md");
         if (typeof raw.id === "string" && raw.id !== stem) errors.push(`${relativeName} raw id ${raw.id} does not match file identity ${stem}`);
         const compatibleSemanticCategory = this.allowsSemanticRootCategory() && ["overview", "index", "log", "glossary"].includes(stem) && raw.category === stem;
         if (typeof raw.category === "string" && raw.category !== "" && !compatibleSemanticCategory) {
@@ -3123,11 +3408,11 @@ tags: []
       }
     }
     if (this.contract.initiativeMode === "directory" && this.contract.wikiIndexOwner === "external") {
-      const indexPath = path11.join(this.dir, "index.md");
-      if (!fs10.existsSync(indexPath)) {
+      const indexPath = path13.join(this.dir, "index.md");
+      if (!fs12.existsSync(indexPath)) {
         errors.push("wiki/index.md missing external compiled index");
       } else {
-        const refs = this.markdownDestinations(fs10.readFileSync(indexPath, "utf8"));
+        const refs = this.markdownDestinations(fs12.readFileSync(indexPath, "utf8"));
         for (const entry of this.list()) {
           if (entry.id === "index" && entry.category === "") continue;
           const ref = entry.category ? `${entry.category}/${entry.id}` : entry.id;
@@ -3154,22 +3439,22 @@ tags: []
     return refs;
   }
   rootWikiFiles() {
-    if (!fs10.existsSync(this.dir)) return [];
-    return fs10.readdirSync(this.dir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md").map((entry) => path11.join(this.dir, entry.name));
+    if (!fs12.existsSync(this.dir)) return [];
+    return fs12.readdirSync(this.dir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md").map((entry) => path13.join(this.dir, entry.name));
   }
   categoryDirs() {
-    if (!fs10.existsSync(this.dir)) return [];
-    return fs10.readdirSync(this.dir).filter((f) => f !== "_obsidian" && fs10.statSync(path11.join(this.dir, f)).isDirectory());
+    if (!fs12.existsSync(this.dir)) return [];
+    return fs12.readdirSync(this.dir).filter((f) => f !== "_obsidian" && fs12.statSync(path13.join(this.dir, f)).isDirectory());
   }
   listInitiativeFiles() {
-    const initiativesDir = path11.join(path11.dirname(this.dir), "initiatives");
-    if (!fs10.existsSync(initiativesDir)) return [];
+    const initiativesDir = path13.join(path13.dirname(this.dir), "initiatives");
+    if (!fs12.existsSync(initiativesDir)) return [];
     const files = [];
-    for (const entry of fs10.readdirSync(initiativesDir, { withFileTypes: true })) {
-      if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md") files.push(path11.join(initiativesDir, entry.name));
+    for (const entry of fs12.readdirSync(initiativesDir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md") files.push(path13.join(initiativesDir, entry.name));
       if (entry.isDirectory() && entry.name !== "archive" && entry.name !== "_archive") {
-        const statusPath = path11.join(initiativesDir, entry.name, "_status.md");
-        if (fs10.existsSync(statusPath)) files.push(statusPath);
+        const statusPath = path13.join(initiativesDir, entry.name, "_status.md");
+        if (fs12.existsSync(statusPath)) files.push(statusPath);
       }
     }
     return files;
@@ -3179,7 +3464,7 @@ tags: []
     const orphans = [];
     let stale = false;
     if (this.contract.wikiIndexOwner !== "harness") {
-      if (this.contract.wikiIndexMode === "canonical-lowercase" && !fs10.existsSync(path11.join(this.dir, "index.md"))) {
+      if (this.contract.wikiIndexMode === "canonical-lowercase" && !fs12.existsSync(path13.join(this.dir, "index.md"))) {
         missing.push("wiki/index.md");
       }
       return {
@@ -3190,12 +3475,12 @@ tags: []
       };
     }
     const categories = this.categoryDirs();
-    const rootIndexPath = path11.join(this.dir, "INDEX.md");
-    if (!fs10.existsSync(rootIndexPath)) {
+    const rootIndexPath = path13.join(this.dir, "INDEX.md");
+    if (!fs12.existsSync(rootIndexPath)) {
       missing.push("wiki/INDEX.md");
     } else {
-      const rootIndexMtime = fs10.statSync(rootIndexPath).mtimeMs;
-      const rootContent = fs10.readFileSync(rootIndexPath, "utf8");
+      const rootIndexMtime = fs12.statSync(rootIndexPath).mtimeMs;
+      const rootContent = fs12.readFileSync(rootIndexPath, "utf8");
       const listedCategories = new Set(Array.from(rootContent.matchAll(/\[([^\]]+)\]\([^)]*INDEX\.md\)/g)).map((m) => m[1]));
       for (const category of categories) {
         if (!listedCategories.has(category)) {
@@ -3204,15 +3489,15 @@ tags: []
       }
     }
     for (const category of categories) {
-      const catDir = path11.join(this.dir, category);
-      const catIndexPath = path11.join(catDir, "INDEX.md");
-      const catFiles = fs10.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
-      if (!fs10.existsSync(catIndexPath)) {
+      const catDir = path13.join(this.dir, category);
+      const catIndexPath = path13.join(catDir, "INDEX.md");
+      const catFiles = fs12.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+      if (!fs12.existsSync(catIndexPath)) {
         missing.push(`wiki/${category}/INDEX.md`);
         continue;
       }
-      const catIndexMtime = fs10.statSync(catIndexPath).mtimeMs;
-      const catContent = fs10.readFileSync(catIndexPath, "utf8");
+      const catIndexMtime = fs12.statSync(catIndexPath).mtimeMs;
+      const catContent = fs12.readFileSync(catIndexPath, "utf8");
       const knownIds = /* @__PURE__ */ new Set();
       for (const m of catContent.matchAll(/^- (.+)$/gm)) {
         const line = m[1].trim();
@@ -3225,11 +3510,11 @@ tags: []
       }
       const fileAliases = /* @__PURE__ */ new Map();
       for (const fileName of catFiles) {
-        const filePath = path11.join(catDir, fileName);
+        const filePath = path13.join(catDir, fileName);
         const filenameId = fileName.replace(".md", "");
         const aliases = /* @__PURE__ */ new Set([filenameId.toLowerCase()]);
         try {
-          const content = fs10.readFileSync(filePath, "utf8");
+          const content = fs12.readFileSync(filePath, "utf8");
           const fmMatch = content.match(/---\n([\s\S]*?)\n---/);
           if (fmMatch) {
             const idMatch = fmMatch[1].match(/^id:\s*"?([^"\n]+)"?/m);
@@ -3256,8 +3541,8 @@ tags: []
         }
       }
       for (const fileName of catFiles) {
-        const filePath = path11.join(catDir, fileName);
-        const fileMtime = fs10.statSync(filePath).mtimeMs;
+        const filePath = path13.join(catDir, fileName);
+        const fileMtime = fs12.statSync(filePath).mtimeMs;
         if (fileMtime > catIndexMtime) {
           stale = true;
         }
@@ -3271,9 +3556,9 @@ tags: []
     };
   }
   writeIndexMeta() {
-    const metaPath = path11.join(path11.dirname(this.dir), ".index-meta.json");
+    const metaPath = path13.join(path13.dirname(this.dir), ".index-meta.json");
     const meta = { lastSync: (/* @__PURE__ */ new Date()).toISOString() };
-    fs10.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf8");
+    fs12.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf8");
   }
   updateIndices() {
     if (this.contract.wikiIndexOwner !== "harness") {
@@ -3285,10 +3570,10 @@ tags: []
     }
     const categories = this.categoryDirs();
     for (const category of categories) {
-      const catDir = path11.join(this.dir, category);
-      const files = fs10.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+      const catDir = path13.join(this.dir, category);
+      const files = fs12.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
       const lines = files.map((f) => {
-        const content = fs10.readFileSync(path11.join(catDir, f), "utf8");
+        const content = fs12.readFileSync(path13.join(catDir, f), "utf8");
         const frontmatterMatch = content.match(/---\n([\s\S]*?)\n---/);
         let title = null;
         let id = null;
@@ -3305,7 +3590,7 @@ tags: []
       const index = `# ${category}
 
 ${lines.join("\n") || "No entries yet."}`;
-      fs10.writeFileSync(path11.join(catDir, "INDEX.md"), index, "utf8");
+      fs12.writeFileSync(path13.join(catDir, "INDEX.md"), index, "utf8");
     }
     const catLines = categories.map((c) => `- [${c}](${c}/INDEX.md)`);
     const rootIndex = `# Wiki
@@ -3313,7 +3598,7 @@ ${lines.join("\n") || "No entries yet."}`;
 ## Categories
 
 ${catLines.join("\n")}`;
-    fs10.writeFileSync(path11.join(this.dir, "INDEX.md"), rootIndex, "utf8");
+    fs12.writeFileSync(path13.join(this.dir, "INDEX.md"), rootIndex, "utf8");
     this.writeIndexMeta();
   }
   /**
@@ -3326,7 +3611,7 @@ ${catLines.join("\n")}`;
   generateLowercaseCanonicalIndex() {
     const entries = [];
     for (const filePath of this.rootWikiFiles()) {
-      const fileName = path11.basename(filePath);
+      const fileName = path13.basename(filePath);
       if (fileName === "index.md" || fileName === "INDEX.md") continue;
       const id = fileName.replace(/\.md$/, "");
       let title = id;
@@ -3338,8 +3623,8 @@ ${catLines.join("\n")}`;
       entries.push({ title, relPath: fileName });
     }
     for (const category of this.categoryDirs()) {
-      const catDir = path11.join(this.dir, category);
-      const files = fs10.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md" && f !== "index.md");
+      const catDir = path13.join(this.dir, category);
+      const files = fs12.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md" && f !== "index.md");
       for (const fileName of files) {
         const id = fileName.replace(/\.md$/, "");
         let title = id;
@@ -3362,7 +3647,7 @@ ${lines.join("\n") || "No entries yet."}
   }
   writeLowercaseCanonicalIndex() {
     const content = this.generateLowercaseCanonicalIndex();
-    fs10.writeFileSync(path11.join(this.dir, "index.md"), content, "utf8");
+    fs12.writeFileSync(path13.join(this.dir, "index.md"), content, "utf8");
     this.writeIndexMeta();
   }
   /**
@@ -3397,10 +3682,10 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
    */
   updateOverviewSection(section, body) {
     if (this.contract.wikiIndexMode !== "canonical-lowercase") return null;
-    const filePath = path11.join(this.dir, "overview.md");
+    const filePath = path13.join(this.dir, "overview.md");
     const today2 = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const trimmedBody = body.trim();
-    if (!fs10.existsSync(filePath)) {
+    if (!fs12.existsSync(filePath)) {
       const frontmatter = this.serializeCompiledViewFrontmatter("overview", "Overview", today2);
       const content = `${frontmatter}# Overview
 
@@ -3408,11 +3693,11 @@ ${Object.entries(front).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")
 
 ${trimmedBody}
 `;
-      fs10.writeFileSync(filePath, content, "utf8");
+      fs12.writeFileSync(filePath, content, "utf8");
       this.updateIndices();
       return filePath;
     }
-    const raw = fs10.readFileSync(filePath, "utf8");
+    const raw = fs12.readFileSync(filePath, "utf8");
     const frontmatterMatch = raw.match(/---\n[\s\S]*?\n---/);
     const frontmatterBlock = frontmatterMatch ? frontmatterMatch[0] : "";
     let bodyText = frontmatterMatch ? raw.slice(frontmatterMatch[0].length) : raw;
@@ -3459,7 +3744,7 @@ ${s.body}`).join("\n\n");
     } else {
       newFrontmatter = this.serializeCompiledViewFrontmatter("overview", "Overview", today2).replace(/\n\n$/, "");
     }
-    fs10.writeFileSync(filePath, `${newFrontmatter}
+    fs12.writeFileSync(filePath, `${newFrontmatter}
 
 ${assembledBody}`, "utf8");
     this.updateIndices();
@@ -3481,7 +3766,7 @@ ${assembledBody}`, "utf8");
    */
   appendLog(entry) {
     if (this.contract.wikiIndexMode !== "canonical-lowercase") return null;
-    const filePath = path11.join(this.dir, "log.md");
+    const filePath = path13.join(this.dir, "log.md");
     const today2 = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const isObj = typeof entry !== "string";
     const content = typeof entry === "string" ? entry : entry.content;
@@ -3492,7 +3777,7 @@ ${assembledBody}`, "utf8");
     const dateOrTimestamp = isObj && entry.date || today2;
     const timestamp = isObj && entry.timestamp || (/* @__PURE__ */ new Date()).toISOString();
     const heading = useConsumerHeading ? `[${dateOrTimestamp}] ${operation} | ${subject}` : timestamp;
-    if (!fs10.existsSync(filePath)) {
+    if (!fs12.existsSync(filePath)) {
       const frontmatter = this.serializeCompiledViewFrontmatter("log", "Log", today2);
       const fileContent = `${frontmatter}# Log
 
@@ -3500,11 +3785,11 @@ ${assembledBody}`, "utf8");
 
 ${trimmedContent}
 `;
-      fs10.writeFileSync(filePath, fileContent, "utf8");
+      fs12.writeFileSync(filePath, fileContent, "utf8");
       this.updateIndices();
       return filePath;
     }
-    const raw = fs10.readFileSync(filePath, "utf8");
+    const raw = fs12.readFileSync(filePath, "utf8");
     const frontmatterMatch = raw.match(/---\n[\s\S]*?\n---/);
     const frontmatterBlock = frontmatterMatch ? frontmatterMatch[0] : "";
     let bodyText = frontmatterMatch ? raw.slice(frontmatterMatch[0].length) : raw;
@@ -3520,7 +3805,7 @@ ${trimmedContent}
 
 ${trimmedContent}
 `;
-    fs10.writeFileSync(filePath, `${newFrontmatter}
+    fs12.writeFileSync(filePath, `${newFrontmatter}
 
 ${bodyText}${appendedBlock}`, "utf8");
     this.updateIndices();
@@ -3529,8 +3814,8 @@ ${bodyText}${appendedBlock}`, "utf8");
 };
 
 // src/core/validation/linter.ts
-var fs11 = __toESM(require("fs"));
-var path12 = __toESM(require("path"));
+var fs13 = __toESM(require("fs"));
+var path14 = __toESM(require("path"));
 function categoryMatchesDir2(category, dir) {
   if (category === dir) return true;
   const catS = category.endsWith("s") ? category.slice(0, -1) : category;
@@ -3564,8 +3849,8 @@ var MdocsLinter = class {
     this.initiativeRecordMode = options.initiativeRecordMode ?? "full";
   }
   lintFile(filePath) {
-    const content = fs11.readFileSync(filePath, "utf8");
-    const relativePath = path12.relative(this.baseDir, filePath);
+    const content = fs13.readFileSync(filePath, "utf8");
+    const relativePath = path14.relative(this.baseDir, filePath);
     if (filePath.includes("/initiatives/") || filePath.includes("\\initiatives\\")) {
       return this.lintInitiative(content, relativePath);
     }
@@ -3582,24 +3867,24 @@ var MdocsLinter = class {
   }
   lintAll() {
     const results = [];
-    const wikiDir = path12.join(this.baseDir, "wiki");
+    const wikiDir = path14.join(this.baseDir, "wiki");
     for (const filePath of this.listInitiativeFiles()) {
       results.push(this.lintFile(filePath));
     }
-    if (fs11.existsSync(wikiDir)) {
+    if (fs13.existsSync(wikiDir)) {
       for (const filePath of this.rootWikiFiles()) {
         results.push(this.lintFile(filePath));
       }
-      const categories = fs11.readdirSync(wikiDir).filter((f) => {
+      const categories = fs13.readdirSync(wikiDir).filter((f) => {
         if (f === "_obsidian") return false;
-        const stat = fs11.statSync(path12.join(wikiDir, f));
+        const stat = fs13.statSync(path14.join(wikiDir, f));
         return stat.isDirectory();
       });
       for (const category of categories) {
-        const catDir = path12.join(wikiDir, category);
-        const files = fs11.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+        const catDir = path14.join(wikiDir, category);
+        const files = fs13.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
         for (const f of files) {
-          results.push(this.lintFile(path12.join(catDir, f)));
+          results.push(this.lintFile(path14.join(catDir, f)));
         }
       }
     }
@@ -3608,15 +3893,15 @@ var MdocsLinter = class {
   }
   lintGraph() {
     const issues = [];
-    const initiativesDir = path12.join(this.baseDir, "initiatives");
-    const wikiDir = path12.join(this.baseDir, "wiki");
+    const initiativesDir = path14.join(this.baseDir, "initiatives");
+    const wikiDir = path14.join(this.baseDir, "wiki");
     const initiativeData = [];
     for (const filePath of this.listInitiativeFiles()) {
       try {
-        const content = fs11.readFileSync(filePath, "utf8");
+        const content = fs13.readFileSync(filePath, "utf8");
         const front = parseFrontmatter(content);
-        const relativePath = path12.relative(initiativesDir, filePath);
-        const slug = relativePath.endsWith("_status.md") ? relativePath.split(path12.sep)[0] : path12.basename(relativePath, ".md").replace(/--\d{4}-\d{2}-\d{2}$/, "");
+        const relativePath = path14.relative(initiativesDir, filePath);
+        const slug = relativePath.endsWith("_status.md") ? relativePath.split(path14.sep)[0] : path14.basename(relativePath, ".md").replace(/--\d{4}-\d{2}-\d{2}$/, "");
         initiativeData.push({
           id: front.id || slug,
           slug,
@@ -3629,12 +3914,12 @@ var MdocsLinter = class {
       }
     }
     const wikiData = [];
-    if (fs11.existsSync(wikiDir)) {
+    if (fs13.existsSync(wikiDir)) {
       for (const filePath of this.rootWikiFiles()) {
         try {
-          const content = fs11.readFileSync(filePath, "utf8");
+          const content = fs13.readFileSync(filePath, "utf8");
           const front = parseFrontmatter(content);
-          const stem = path12.basename(filePath, ".md");
+          const stem = path14.basename(filePath, ".md");
           wikiData.push({
             id: stem,
             category: "",
@@ -3642,18 +3927,18 @@ var MdocsLinter = class {
             sourceInitiatives: Array.isArray(front.source_initiatives) ? front.source_initiatives : Array.isArray(front.sources) ? front.sources : [],
             relatedWiki: Array.isArray(front.related_wiki) ? front.related_wiki : [],
             lifecycle: front.lifecycle,
-            filePath: path12.basename(filePath)
+            filePath: path14.basename(filePath)
           });
         } catch {
         }
       }
-      const categories = fs11.readdirSync(wikiDir).filter((f) => f !== "_obsidian" && fs11.statSync(path12.join(wikiDir, f)).isDirectory());
+      const categories = fs13.readdirSync(wikiDir).filter((f) => f !== "_obsidian" && fs13.statSync(path14.join(wikiDir, f)).isDirectory());
       for (const category of categories) {
-        const catDir = path12.join(wikiDir, category);
-        const files = fs11.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
+        const catDir = path14.join(wikiDir, category);
+        const files = fs13.readdirSync(catDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md");
         for (const f of files) {
           try {
-            const content = fs11.readFileSync(path12.join(catDir, f), "utf8");
+            const content = fs13.readFileSync(path14.join(catDir, f), "utf8");
             const front = parseFrontmatter(content);
             const id = f.replace(/\.md$/, "");
             wikiData.push({
@@ -3780,16 +4065,16 @@ var MdocsLinter = class {
     }];
   }
   listInitiativeFiles() {
-    const initiativesDir = path12.join(this.baseDir, "initiatives");
-    if (!fs11.existsSync(initiativesDir)) return [];
+    const initiativesDir = path14.join(this.baseDir, "initiatives");
+    if (!fs13.existsSync(initiativesDir)) return [];
     const files = [];
-    for (const entry of fs11.readdirSync(initiativesDir, { withFileTypes: true })) {
+    for (const entry of fs13.readdirSync(initiativesDir, { withFileTypes: true })) {
       if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md") {
-        files.push(path12.join(initiativesDir, entry.name));
+        files.push(path14.join(initiativesDir, entry.name));
       }
       if (entry.isDirectory() && entry.name !== "archive" && entry.name !== "_archive") {
-        const statusPath = path12.join(initiativesDir, entry.name, "_status.md");
-        if (fs11.existsSync(statusPath)) files.push(statusPath);
+        const statusPath = path14.join(initiativesDir, entry.name, "_status.md");
+        if (fs13.existsSync(statusPath)) files.push(statusPath);
       }
     }
     return files;
@@ -3806,9 +4091,9 @@ var MdocsLinter = class {
     return best && best.distance <= Math.max(3, Math.floor(normalized.length / 3)) ? best.choice : null;
   }
   rootWikiFiles() {
-    const wikiDir = path12.join(this.baseDir, "wiki");
-    if (!fs11.existsSync(wikiDir)) return [];
-    return fs11.readdirSync(wikiDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md").map((entry) => path12.join(wikiDir, entry.name));
+    const wikiDir = path14.join(this.baseDir, "wiki");
+    if (!fs13.existsSync(wikiDir)) return [];
+    return fs13.readdirSync(wikiDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md").map((entry) => path14.join(wikiDir, entry.name));
   }
   lintInitiative(content, filePath) {
     const issues = [];
@@ -3816,7 +4101,7 @@ var MdocsLinter = class {
     const metadataOnly = this.initiativeRecordMode === "metadata-only";
     const frontmatterMatch = content.match(/---\n([\s\S]*?)\n---/);
     if (!frontmatterMatch) {
-      if (path12.dirname(filePath).split(path12.sep).pop() === "wiki") {
+      if (path14.dirname(filePath).split(path14.sep).pop() === "wiki") {
         return { file: filePath, type: "wiki", score: 5, issues: [], passed: true };
       }
       issues.push({ severity: "error", message: "Missing YAML frontmatter" });
@@ -3922,7 +4207,7 @@ var MdocsLinter = class {
     const issues = [];
     let score = 5;
     const frontmatterMatch = content.match(/---\n([\s\S]*?)\n---/);
-    const isRootWiki = path12.dirname(filePath).split(path12.sep).pop() === "wiki";
+    const isRootWiki = path14.dirname(filePath).split(path14.sep).pop() === "wiki";
     if (!frontmatterMatch) {
       if (isRootWiki) {
         return { file: filePath, type: "wiki", score: 5, issues, passed: true };
@@ -3957,7 +4242,7 @@ var MdocsLinter = class {
     const categoryMatch = frontmatter.match(/category:\s*"?([^"\n]+)"?/);
     if (categoryMatch) {
       const category = categoryMatch[1].trim();
-      const expectedDir = path12.dirname(filePath).split(path12.sep).pop();
+      const expectedDir = path14.dirname(filePath).split(path14.sep).pop();
       if (!isRootWiki && expectedDir !== void 0 && !categoryMatchesDir2(category, expectedDir)) {
         issues.push({ severity: "warning", message: `Category "${category}" does not match directory "${expectedDir}"` });
         score -= 0.5;
@@ -4212,10 +4497,10 @@ var SubagentAssembler = class {
 
 // src/core/factory.ts
 function createMdocsCore(projectDir, options = {}) {
-  const preliminaryRoot = path13.join(projectDir, options.mdocsDirName || "mdocs");
+  const preliminaryRoot = path15.join(projectDir, options.mdocsDirName || "mdocs");
   const fileConfig = loadProjectConfig(preliminaryRoot);
   const merged = mergeOptions(fileConfig, options);
-  const mdocsRoot = path13.join(projectDir, merged.mdocsDirName || "mdocs");
+  const mdocsRoot = path15.join(projectDir, merged.mdocsDirName || "mdocs");
   const compatibility = { ...merged.wiki?.compatibility || {}, ...merged.compatibility || {} };
   const contract = detectMdocsContract(mdocsRoot, compatibility);
   const mdocs = new MdocsManager(mdocsRoot, compatibility);
@@ -4337,14 +4622,14 @@ function formatOrientationBanner(ctx) {
 
 // src/surfaces/kimi-code/cli/session-start.ts
 function readStdin() {
-  return new Promise((resolve4) => {
+  return new Promise((resolve5) => {
     let data = "";
     process.stdin.setEncoding("utf8");
     process.stdin.on("data", (chunk) => {
       data += chunk;
     });
-    process.stdin.on("end", () => resolve4(data));
-    process.stdin.on("error", () => resolve4(data));
+    process.stdin.on("end", () => resolve5(data));
+    process.stdin.on("error", () => resolve5(data));
   });
 }
 async function runSessionStart() {

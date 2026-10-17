@@ -36,6 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runMdocsCli = runMdocsCli;
 const core_1 = require("../core");
+const names_1 = require("../core/commands/names");
 const operations_1 = require("../core/operations");
 const engine_1 = require("../core/workflow/engine");
 function parseJsonArg(args) {
@@ -108,6 +109,14 @@ function commandHelp(commandName) {
             '  Example:',
             '    mdocs command wiki.update --json \'{"category":"testing","id":"cli-help","content":"Updated learning.","lifecycle":"stable","sourceInitiatives":["add-auth"]}\''
         ],
+        'index.sync': [
+            'index.sync',
+            '  Payload: { registrations?: ({ type: "initiative", id } | { type: "wiki", ref } | { type: "overview", initiativeId })[] }',
+            '  Without registrations, regenerate harness-owned indexes and report external views as skipped.',
+            '  Registrations require directory-v2, external canonical-lowercase ownership, and compiledViewMutationMode: "targeted".',
+            '  Example:',
+            '    mdocs command index.sync --json \'{"registrations":[{"type":"initiative","id":"example"},{"type":"wiki","ref":"initiatives/example"},{"type":"overview","initiativeId":"example"}]}\''
+        ],
         'wiki.ingest': [
             'wiki.ingest',
             '  Payload: { operations: WikiIngestOp[], note?: string }',
@@ -139,7 +148,7 @@ function commandHelp(commandName) {
         '',
         ...examples['wiki.update'],
         '',
-        'Other commands: initiative.done, initiative.delete, initiative.archive, wiki.ingest, wiki.stub, wiki.delete, wiki.list, wiki.link, wiki.xref, lifecycle.graduate, validate, index.sync'
+        `Supported commands: ${names_1.SUPPORTED_COMMANDS.join(', ')}`
     ].join('\n');
 }
 async function runMdocsCli(args, projectDir = process.cwd()) {

@@ -21,7 +21,7 @@ export interface MdocsCommandContext {
 }
 export declare class MdocsCommandRegistry {
     private readonly context;
-    readonly supportedCommands: string[];
+    readonly supportedCommands: readonly ["initiative.create", "initiative.update", "initiative.done", "initiative.delete", "initiative.archive", "wiki.create", "wiki.update", "wiki.ingest", "wiki.stub", "wiki.delete", "wiki.list", "wiki.link", "wiki.xref", "workflow.advance", "workflow.reset", "lifecycle.graduate", "validate", "index.sync"];
     constructor(context: MdocsCommandContext);
     execute(command: string, args?: Record<string, any>): Promise<any>;
     private resetWorkflow;

@@ -44,6 +44,7 @@ export declare class WikiManager {
     private parseRelatedWiki;
     private referencedWikiRefs;
     update(category: string, id: string, entry: WikiEntry): string;
+    private writeUpdatedEntry;
     addRelatedInitiative(category: string, id: string, initiativeId: string): string;
     addRelatedInitiativeByRef(ref: string, initiativeId: string): string;
     /**

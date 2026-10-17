@@ -161,7 +161,8 @@ function detectMdocsContract(mdocsRoot, config = {}) {
         obsidianRefreshCommand: config.obsidianRefreshCommand ?? null,
         enforcementMode: resolveEnforcementMode(config.enforcementMode),
         idle: resolveIdleStrictness(config.idle),
-        initiativeRecordMode: config.initiativeRecordMode ?? 'full'
+        initiativeRecordMode: config.initiativeRecordMode ?? 'full',
+        compiledViewMutationMode: config.compiledViewMutationMode === 'targeted' ? 'targeted' : 'off'
     };
 }
 /**

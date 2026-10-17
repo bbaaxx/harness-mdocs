@@ -25,6 +25,8 @@ __exportStar(require("./contract"), exports);
 __exportStar(require("./initiative-store"), exports);
 __exportStar(require("./lifecycle"), exports);
 __exportStar(require("./commands/registry"), exports);
+__exportStar(require("./commands/names"), exports);
+__exportStar(require("./compiled-views"), exports);
 __exportStar(require("./managers/mdocs"), exports);
 __exportStar(require("./managers/initiative"), exports);
 __exportStar(require("./managers/wiki"), exports);

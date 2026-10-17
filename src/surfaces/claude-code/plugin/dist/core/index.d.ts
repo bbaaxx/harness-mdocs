@@ -7,6 +7,8 @@ export * from './contract';
 export * from './initiative-store';
 export * from './lifecycle';
 export * from './commands/registry';
+export * from './commands/names';
+export * from './compiled-views';
 export * from './managers/mdocs';
 export * from './managers/initiative';
 export * from './managers/wiki';
