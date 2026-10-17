@@ -1,40 +1,60 @@
 ---
 id: "harness-mdocs-2-2-0"
-title: "harness-mdocs 2.2.0 release candidate"
+title: "harness-mdocs 2.2.0"
 category: "release"
 created: "2026-10-17"
 updated: "2026-10-17"
 related_initiatives: ["release-harness-mdocs-2-2-0"]
 tags: ["release","2.2.0","candidate"]
-lifecycle: "draft"
+lifecycle: "stable"
 knowledge_type: "reference"
 source_initiatives: ["release-harness-mdocs-2-2-0"]
 ---
 
-# harness-mdocs 2.2.0 release candidate
+# harness-mdocs 2.2.0
 
-## Status
+## Published
 
-Prepared locally; NOT committed, pushed, tagged, or published. User confirmed minor version 2.2.0. Explicit release approval is still required.
+Released 2026-10-17 (UTC). npm harness-mdocs@2.2.0 is latest; registry publication time 2026-10-17T05:05:39.698Z. GitHub Release: https://github.com/bbaaxx/harness-mdocs/releases/tag/v2.2.0. Authored release notes match docs/release-2.2.0.md with tag-pinned documentation links.
 
-## Scope
+## Scope and compatibility
 
-Opt-in targeted compiled-view registration plus #8–#11 preservation, command-schema, Kimi launch, index-result fixes, test-only settlement-race hardening, and memory hygiene. See docs/release-2.2.0.md and docs/issue-8-acceptance.md. Dependencies, package exports, canonical 13-tool names, and production Run source are unchanged vs v2.1.0. Default external ownership remains read-only; production Run remains plan-only.
+Minor release adds opt-in targeted directory-v2 compiled-view registration, explicit creation follow-ups, and truthful index-sync skip results. Fixes #11 flat-file data loss/renames, #8 consumer wiki preservation, #9 permissive command names, and #10 Kimi MCP project-relative startup. External views stay read-only by default; targeted registration requires separate opt-in and explicit requests. No dependency, export, canonical 13-tool-name or production Run source changes vs v2.1.0. Production Run stays plan-only.
 
-## Versioned candidate evidence
+## Source, tag and workflows
 
-- package.json and both lockfile root versions: 2.2.0. All Claude/Kimi/marketplace manifests stamped 2.2.0.
-- npm run release:check passed on the versioned candidate: 77 suites / 1659 tests in normal and coverage runs, global coverage thresholds, typecheck, generated-asset/version checks, mdocs validation and npm pack dry-run.
-- Actual npm tarball: 620 files; metadata, manifests, CLI and both bundled MCP handshakes report 2.2.0. No dependencies installed into the extracted package for bundled-server smoke.
-- Smoke passed rich CRLF flat update preservation and stable legacy filename, invalid-command no mutation, external default read-only behavior, explicit targeted registration and idempotency, and both Claude/Kimi MCP servers (13 tools, canonical enum, correct consumer project).
-- Artifact: /private/var/folders/6p/bhp33vz103gcx_v02y26ch3m0000gn/T/opencode/mdocs-2.2.0-candidate-sTsDDw/harness-mdocs-2.2.0.tgz
-- SHA-256: 5faf8136bccdc5a464c72c5ab371ddea314843f8fea4df2e663aa17b9d6ac365
-- npm integrity: sha512-9og+bqtef1BxPkhSxbfJTk04VVXPGQAY+sTUWYsSws/jeFPZZ6ZK/PuZzEXN34JF955KbAcXIczNnJsKfhrmcA==
-- CLI fingerprint is 2.2.0 / ee041f0 because this is an uncommitted working-tree candidate. CI must rebuild from the approved release commit/tag; verify the published artifact fingerprint after release.
+- 089815f: source/docs/version changes, package 2.2.0.
+- 85a8464e0811d4eb7059edbd0bb5574a08d38b62: checked-in plugin bundles rebuilt from source 089815f; annotated tag v2.2.0 points here.
+- Release Check passed on the first attempt: https://github.com/bbaaxx/harness-mdocs/actions/runs/39004256519.
+- Publish passed on the first attempt: https://github.com/bbaaxx/harness-mdocs/actions/runs/39004522383. Both workflows ran the full release gate.
+- GitHub environment release had no additional protection rules; user explicitly approved commit/push/tag/publish.
 
-## Pending approval and acceptance
+## Verification
 
-GitHub/Linux CI still must pass after authorized push. Reporting-consumer placement/annotation confirmation and reinstall/reload on the affected Kimi host have not been performed; release notes recommend retaining them as issue-closure follow-ups, subject to release approval. Dedicated high-frequency typed tools (#9 P1) remain deferred. Do not mark this wiki stable or the initiative complete until publication and installed-artifact verification finish.
+Local versioned release:check passed 77 suites / 1659 tests in normal and coverage runs, coverage thresholds, typecheck, generated assets, version checks, packaging and clean mdocs validation. Both GitHub/Linux workflows also passed without reruns, including the previously flaky settlement test.
+
+Installed harness-mdocs@2.2.0 fresh from npm in an isolated scratch project with lifecycle scripts disabled. npm audit signatures verified 96 registry signatures and 12 attestations; the package exposes SLSA v1 provenance. Fetched tarball bytes matched registry SHA-1 and SHA-512 integrity. Registry tarball has 620 files.
+
+Published artifact CLI and both bundled Claude/Kimi MCP servers report { version: 2.2.0, gitSha: 85a8464 }. Smoke verified rich CRLF flat updates and unchanged legacy filename, invalid-command/no-mutation, default external no-write, explicit targeted registration/idempotency, 13 tools, canonical enum and correct-project lookup. Kimi test used the actual managed manifest and a custom home from an unrelated consumer cwd.
+
+- Registry tarball: https://registry.npmjs.org/harness-mdocs/-/harness-mdocs-2.2.0.tgz
+- SHA-256: b2b440346e2550ffc8c0a146b3d420e4a3ece41de76429fddac4901d490e7df6
+- npm integrity: sha512-aZ5XsmCzt024LpCAZgG8ZX60xHgwJrLPscRUEejl/iNygbjwyKYE7dew5FQxRygTRhC9JENU6WAj1amctlP+iQ==
+- Provenance: https://registry.npmjs.org/-/npm/v1/attestations/harness-mdocs@2.2.0
+- Transparency log: https://search.sigstore.dev/?logIndex=3289797422
+- Verification workspace: /private/var/folders/6p/bhp33vz103gcx_v02y26ch3m0000gn/T/opencode/mdocs-published-2.2.0-CKS0vv (registry-metadata.json, published-verification.json, installed package and tarball).
+
+## Process learnings
+
+Commit source/docs/version before rebuilding checked-in plugin bundles so their fingerprint identifies a real matching source commit. CI rebuilds the tagged release and npm artifacts report the release SHA. The pre-commit local candidate hash is not the final published hash.
+
+A successful npm publish can report package processing before registry metadata is visible: this release briefly returned 404 after acceptance. Wait for registry convergence; do not republish or change the tag. Verify latest, integrity, signatures/provenance and an installed registry artifact before declaring verification complete.
+
+The settlement regression freezes only the replacement deadline; intentional hung attempts still exercise real timeouts, while identity clocks/microtasks/setImmediate barriers remain real. Both CI jobs passed on first attempts after this test-only fix. Production authority runtime was not changed.
+
+## Remaining issue follow-ups
+
+Posted release/verification comments to #8, #9, #10 and #11; no issues were closed. Reporting-consumer curated placement/annotation confirmation and reinstall/reload on the affected Kimi host remain unverified and are not publication blockers under the approved plan. Dedicated typed tools from #9 P1 remain deferred. See docs/issue-8-acceptance.md. Publication is complete, not a claim of live consumer acceptance.
 
 ## Referenced By
 
