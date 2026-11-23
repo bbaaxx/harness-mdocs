@@ -2,6 +2,8 @@
 
 Surface-neutral initiative and wiki memory for AI coding harnesses.
 
+AI coding agents forget everything between sessions, and the harness you use today won't be the one you use next month. harness-mdocs gives OpenCode, Claude Code, Codex, pi and Kimi Code one shared memory of initiatives and wiki knowledge, so a new session or subagent picks up where the last one stopped. The memory is plain Markdown backed by validation, audit logging and enforced workflow hooks, so humans can review what agents remember and agents can't quietly drift from it.
+
 `harness-mdocs` packages the shared mdocs core plus adapters for host tools such as OpenCode, Codex, Claude Code, pi, and Kimi Code. The core owns durable initiative files, wiki entries, workflow state, validation, search, audit logging, and command behavior. Surfaces translate that core into the capabilities each host can actually provide.
 
 | Surface | Command access | Workflow enforcement | Audit | Subagent dispatch |
